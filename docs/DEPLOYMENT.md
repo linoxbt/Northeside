@@ -185,17 +185,32 @@ nobody. The adapter and attestation flow are built and tested (Mode B); wiring t
 one `PassProvider` implementation in `packages/core/src/identity.ts`. Do not claim live QIE Pass
 integration until a real verification has gone through on mainnet.
 
-## Weekly operations
+## Weekly operations (automated on Netlify)
 
-| When | Command |
+Netlify scheduled functions run the whole week with the operator and results keys stored as
+Netlify secrets. Every step is idempotent, re-checks the chain first, and alerts the operator.
+
+| Schedule | Function → route | What it does |
+| --- | --- | --- |
+| every minute | `cron-index-chain` → `index-chain` | mirrors contract events into Postgres |
+| daily | `cron-import-fixtures` → `import-fixtures` | imports the next matchday; flags kickoff changes |
+| every 5 min | `cron-lock-and-reveal` → `lock-and-reveal` | after lock, reveals and verifies every stored payload |
+| every 15 min | `cron-fetch-results` → `fetch-results` | compares both football providers after the last game |
+| every 10 min | `cron-weekly-ops` → background `weekly-ops` | runs the four on-chain steps below, in order, each with the full 60 s route limit |
+| | → `open-matchweeks` | creates each imported matchweek on-chain once its lock is within `OPEN_DAYS_BEFORE_LOCK` days (default 6) |
+| | → `publish-results` | when both providers agree (fresh check) and the chain allows it (last kickoff + `RESULTS_BUFFER_SECONDS`, default 3 h): closes reveals, scores, and proposes the results, reveals and scores roots |
+| | → `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks |
+| | → `post-reward-roots` | posts each active campaign's host payout root; hosts can claim 24 h later |
+
+Needs a person:
+
+| Situation | Action |
 | --- | --- |
-| 4-5 days before lock | `pnpm cli create-matchweek <id>` |
-| automatic after lock | reveal job (cron) verifies every payload |
-| after the last game (+3h) | `pnpm cli fetch-results <id>` then `pnpm cli publish-results <id>`: reveals close, scores are computed, and results, reveals and scores roots go on-chain together |
-| providers disagree | investigate; if needed `pnpm cli publish-results <id> --override results.json --reason "…"` |
-| 12 hours later | `pnpm cli finalize <id>` (confirms the proposed roots, stores ranks, posts reward roots; hosts can claim 24 hours after a root is posted) |
-| wrong reward root, nothing claimed yet | `replaceRoot` on `HostRewards` (operator key) restarts the 24-hour delay |
-| sponsor signs | `pnpm cli create-campaign …` then the sponsor funds (or `fund-campaign` with their key) |
-| emergency | `pnpm cli pause matchweeks` / `pnpm cli pause rewards` |
+| providers disagree | investigate; `pnpm cli publish-results <id> --override results.json --reason "…"` |
+| results challenged | automation stops for that matchweek; publish corrected results with the CLI |
+| wrong reward root, nothing claimed yet | `replaceRoot` on `HostRewards` (operator key), restarts the 24-hour delay |
+| sponsor signs | `pnpm cli create-campaign …`, then the sponsor funds |
+| stop all automated transactions | set `AUTOMATION_PAUSED=1` on Netlify and redeploy |
+| emergency | `pnpm cli pause matchweeks` / `pnpm cli pause rewards` (pauser = operator key) |
 
 `/api/v1/status` shows indexer lag, drip balance and the last job runs.
