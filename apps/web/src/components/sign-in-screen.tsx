@@ -80,6 +80,8 @@ function Live() {
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // With Privy on, email is the sign-in; external wallets stay one tap away for crypto-native players.
+  const [showWallets, setShowWallets] = useState(false);
 
   const signedIn = !!session.data?.user;
   useEffect(() => {
@@ -211,7 +213,13 @@ function Live() {
               </form>
             ) : null}
 
-            {bridge.privyEnabled && wallets.length > 0 ? (
+            {bridge.privyEnabled && wallets.length > 0 && !showWallets ? (
+              <button type="button" className="mt-6 w-full text-center text-[14px] text-white/55 hover:text-white" onClick={() => setShowWallets(true)}>
+                Use a crypto wallet instead
+              </button>
+            ) : null}
+
+            {bridge.privyEnabled && wallets.length > 0 && showWallets ? (
               <div className="my-7 flex items-center gap-4 text-[15px] text-white/45" aria-hidden>
                 <span className="h-px flex-1 bg-white/12" />
                 or
@@ -220,7 +228,7 @@ function Live() {
             ) : null}
 
             <div className="space-y-3">
-              {wallets.map((c, i) => (
+              {(bridge.privyEnabled && !showWallets ? [] : wallets).map((c, i) => (
                 <button
                   key={c.uid}
                   type="button"
