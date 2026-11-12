@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Board } from "@/components/board";
 import { JoinLeague } from "@/components/join-league";
-import { Card } from "@/components/ui";
+import { Container, Eyebrow } from "@/components/ui";
 import { getCtx } from "@/lib/server/ctx";
 import { leagueBySlug } from "@/lib/server/services/leagues";
 
@@ -28,19 +28,37 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
   if (!league) notFound();
   const rows = await leaderboard(getCtx(), { season: getCtx().season }, { leagueSlug: slug, limit: 100 });
   return (
-    <div className="space-y-4">
-      <Card>
-        <p className="text-sm text-muted">League hosted by {league.host}</p>
-        <h1 className="text-2xl font-extrabold">{league.name}</h1>
-        <p className="mt-1 text-sm text-muted">{league.members} players · free to play · predictions sealed on QIE</p>
-        <div className="mt-4">
+    <Container className="pb-24">
+      <div className="grid gap-10 pt-14 sm:pt-20 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
+        <div>
+          <Eyebrow className="mb-4">League · hosted by {league.host}</Eyebrow>
+          <h1 className="display text-[44px] sm:text-[64px]">{league.name}</h1>
+          <p className="mt-5 max-w-lg text-lg leading-7 text-muted">
+            {league.members} {league.members === 1 ? "player" : "players"} calling every Premier League score this season. Free to play, sealed on QIE before kickoff.
+          </p>
+          <dl className="mt-10 grid max-w-md grid-cols-3 border-t border-line pt-6">
+            {[
+              ["Players", String(league.members)],
+              ["Entry", "Free"],
+              ["Picks", "10 a week"],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <dt className="eyebrow">{k}</dt>
+                <dd className="mt-1 text-[22px] tracking-[-0.03em]">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <div className="lg:pt-6">
           <JoinLeague slug={league.slug} name={league.name} />
         </div>
-      </Card>
-      <Card className="p-0 sm:p-0">
-        <h2 className="px-4 pt-4 font-bold">Season table</h2>
-        <Board rows={rows} empty="No scores yet. The table fills in after the first matchweek is finalized." />
-      </Card>
-    </div>
+      </div>
+      <section className="mt-20">
+        <h2 className="display mb-6 text-[28px] sm:text-[34px]">Season table</h2>
+        <div className="overflow-hidden rounded-[var(--radius-card)] border border-line">
+          <Board rows={rows} empty="No scores yet. The table fills in after the first matchweek is finalized." />
+        </div>
+      </section>
+    </Container>
   );
 }

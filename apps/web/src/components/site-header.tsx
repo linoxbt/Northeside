@@ -1,0 +1,130 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ButtonLink, Chevron, Logo } from "./ui";
+import { api } from "@/lib/client/api";
+import { short } from "@/lib/client/env";
+import { useSession } from "@/lib/client/session";
+
+export const NAV = [
+  { href: "/play", label: "Play" },
+  { href: "/table", label: "Table" },
+  { href: "/leagues", label: "Leagues" },
+  { href: "/host", label: "Hosts" },
+  { href: "/sponsors", label: "Sponsors" },
+  { href: "/proof", label: "Proof" },
+];
+
+function AnnouncementBar() {
+  const mw = useQuery({
+    queryKey: ["mw-current"],
+    queryFn: () => api<{ matchweek: { id: number; status: string; lockTime: string } | null }>("/api/v1/matchweeks/current").then((r) => r.matchweek),
+    staleTime: 60_000,
+  });
+  const [closed, setClosed] = useState(false);
+  const m = mw.data;
+  if (closed || !m) return null;
+  const open = m.status === "open" && new Date(m.lockTime).getTime() > Date.now();
+  const when = new Date(m.lockTime).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="relative border-b border-line bg-white text-center text-[13px] tracking-[-0.01em]">
+      <p className="px-10 py-2.5">
+        {open ? (
+          <>
+            Matchweek {m.id} locks {when}.{" "}
+            <Link href="/play" className="inline-flex items-center gap-1 font-medium text-accent-deep">
+              Make your picks <Chevron />
+            </Link>
+          </>
+        ) : (
+          <>
+            Matchweek {m.id} is {m.status === "finalized" ? "final" : "in play"}.{" "}
+            <Link href={`/proof/${m.id}`} className="inline-flex items-center gap-1 font-medium text-accent-deep">
+              See the proof <Chevron />
+            </Link>
+          </>
+        )}
+      </p>
+      <button aria-label="Dismiss" onClick={() => setClosed(true)} className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center text-muted hover:text-ink">
+        ×
+      </button>
+    </div>
+  );
+}
+
+export function SiteHeader() {
+  const path = usePathname();
+  const session = useSession();
+  const user = session.data?.user;
+  const [menu, setMenu] = useState(false);
+  useEffect(() => setMenu(false), [path]);
+  useEffect(() => {
+    document.body.style.overflow = menu ? "hidden" : "";
+  }, [menu]);
+  const active = (href: string) => path === href || path.startsWith(`${href}/`) || (href === "/leagues" && path.startsWith("/l/"));
+  const account = user ? (user.qieId ?? user.displayName ?? short(session.data!.wallet!)) : null;
+
+  return (
+    <>
+      <AnnouncementBar />
+      <header className="sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-6 px-5 sm:px-8">
+          <Link href="/" aria-label="Northeside home" className="shrink-0">
+            <Logo />
+          </Link>
+          <nav aria-label="Main" className="mx-auto hidden items-center gap-1 lg:flex">
+            {NAV.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                aria-current={active(n.href) ? "page" : undefined}
+                className={`rounded-full px-3.5 py-2 text-[15px] tracking-[-0.01em] transition-colors ${active(n.href) ? "bg-subtle text-ink" : "text-ink-2 hover:text-ink"}`}
+              >
+                {n.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="ml-auto flex items-center gap-2 lg:ml-0">
+            {account ? (
+              <Link href="/me" className="hidden min-h-10 items-center gap-2 rounded-full border border-line px-3.5 text-[14px] sm:inline-flex">
+                <span className="size-2 rounded-full bg-accent" aria-hidden />
+                {account}
+              </Link>
+            ) : null}
+            <ButtonLink href="/play" variant="primary" className="hidden !min-h-10 !px-4 !text-[14px] sm:inline-flex" arrow>
+              {user ? "This week" : "Play now"}
+            </ButtonLink>
+            <button
+              className="inline-flex size-10 items-center justify-center rounded-full border border-line lg:hidden"
+              aria-label={menu ? "Close menu" : "Open menu"}
+              aria-expanded={menu}
+              onClick={() => setMenu((m) => !m)}
+            >
+              <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                {menu ? <path d="M5 5l10 10M15 5 5 15" strokeLinecap="round" /> : <path d="M3 6h14M3 14h14" strokeLinecap="round" />}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+      {menu ? (
+        <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-white lg:hidden">
+          <nav aria-label="Mobile" className="px-5 py-6">
+            {[...NAV, { href: "/how-it-works", label: "How it works" }, { href: "/stats", label: "Live stats" }, { href: "/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
+              <Link key={n.href} href={n.href} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
+                {n.label}
+                <Chevron className="size-4 text-muted" />
+              </Link>
+            ))}
+            <ButtonLink href="/play" variant="accent" className="mt-8 w-full" arrow>
+              Play this week
+            </ButtonLink>
+          </nav>
+        </div>
+      ) : null}
+    </>
+  );
+}

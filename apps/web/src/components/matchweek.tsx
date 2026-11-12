@@ -99,11 +99,11 @@ function Stepper({ value, onChange, disabled, label }: { value: number | null; o
         aria-label={`${label}: one less`}
         disabled={disabled || (value ?? 0) <= 0}
         onClick={() => onChange(Math.max(0, (value ?? 0) - 1))}
-        className="size-11 rounded-lg border border-line text-lg disabled:opacity-30"
+        className="size-11 rounded-full border border-line text-lg transition-colors hover:border-ink disabled:opacity-25"
       >
         −
       </button>
-      <output aria-live="polite" className={`w-8 text-center text-xl font-bold tabular-nums ${value === null ? "text-muted" : ""}`}>
+      <output aria-live="polite" className={`w-9 text-center text-[26px] tracking-[-0.04em] tabular-nums ${value === null ? "text-line-strong" : ""}`}>
         {value ?? "–"}
       </output>
       <button
@@ -111,7 +111,7 @@ function Stepper({ value, onChange, disabled, label }: { value: number | null; o
         aria-label={`${label}: one more`}
         disabled={disabled || (value ?? -1) >= 9}
         onClick={() => onChange(Math.min(9, value === null ? 0 : value + 1))}
-        className="size-11 rounded-lg border border-line text-lg disabled:opacity-30"
+        className="size-11 rounded-full border border-line text-lg transition-colors hover:border-ink disabled:opacity-25"
       >
         +
       </button>
@@ -193,11 +193,11 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   const results = mw.fixtures.every((f) => f.status !== "scheduled");
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-3 pb-2">
         <div>
-          <p className="text-sm text-muted">Premier League {mw.season}/{String((mw.season + 1) % 100).padStart(2, "0")}</p>
-          <h1 className="text-2xl font-extrabold">Matchweek {mw.id}</h1>
+          <p className="eyebrow mb-3">Premier League {mw.season}/{String((mw.season + 1) % 100).padStart(2, "0")}</p>
+          <h1 className="display text-[44px] sm:text-[56px]">Matchweek {mw.id}</h1>
         </div>
         {open ? (
           <Pill tone="warn">Locks in {countdown}</Pill>
@@ -210,11 +210,11 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
       {!user ? <SignInPanel /> : <AdultGate />}
 
-      <Card className="p-0 sm:p-0">
+      <Card className="overflow-hidden p-0 sm:p-0">
         <ol className="divide-y divide-line">
           {days.map((g) => (
             <li key={g.day}>
-              <h3 className="bg-panel-2 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted">{g.day}</h3>
+              <h3 className="eyebrow bg-subtle px-4 py-2.5 sm:px-5">{g.day}</h3>
               <ul className="divide-y divide-line">
                 {g.items.map((f) => {
                   const h = picks.home[f.index] ?? null;
@@ -224,11 +224,11 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       ? scoreFixture(h, a, { index: f.index, homeGoals: f.homeGoals ?? 0, awayGoals: f.awayGoals ?? 0, status: f.status === "void" ? "void" : "played" })
                       : null;
                   return (
-                    <li key={f.index} className="px-3 py-3 sm:px-4">
+                    <li key={f.index} className="px-4 py-4 sm:px-5">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className="min-w-0 flex-1 truncate font-semibold">{f.home}</p>
-                        <p className="shrink-0 text-xs text-muted">{fmtTime(f.kickoff, mounted)}</p>
-                        <p className="min-w-0 flex-1 truncate text-right font-semibold">{f.away}</p>
+                        <p className="min-w-0 flex-1 truncate text-[17px] tracking-[-0.02em]">{f.home}</p>
+                        <p className="shrink-0 font-mono text-[12px] text-muted">{fmtTime(f.kickoff, mounted)}</p>
+                        <p className="min-w-0 flex-1 truncate text-right text-[17px] tracking-[-0.02em]">{f.away}</p>
                       </div>
                       <div className="mt-2 flex items-center justify-between">
                         <Stepper label={`${f.home} goals`} value={h} disabled={!open || !user} onChange={(v) => update("home", f.index, v)} />
@@ -237,10 +237,10 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                         ) : f.status === "played" ? (
                           <p className="text-center text-sm">
                             FT {f.homeGoals}–{f.awayGoals}
-                            {scored ? <span className={`ml-2 font-bold ${scored.points ? "text-accent" : "text-muted"}`}>+{scored.points}</span> : null}
+                            {scored ? <span className={`ml-2 font-bold ${scored.points ? "text-accent-deep" : "text-muted"}`}>+{scored.points}</span> : null}
                           </p>
                         ) : (
-                          <span className="text-muted">vs</span>
+                          <span className="font-mono text-[12px] uppercase tracking-[0.08em] text-muted">vs</span>
                         )}
                         <Stepper label={`${f.away} goals`} value={a} disabled={!open || !user} onChange={(v) => update("away", f.index, v)} />
                       </div>
@@ -259,8 +259,15 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
       {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
 
-      <p className="text-center text-sm text-muted">
-        Exact score 5 points · correct result 2 · <a className="underline" href="/rules">rules</a> · <a className="underline" href={`/proof/${mw.id}`}>proof</a>
+      <p className="pt-2 text-center text-[14px] text-muted">
+        Exact score 5 points · right result 2 ·{" "}
+        <a className="underline underline-offset-4" href="/how-it-works">
+          how it works
+        </a>{" "}
+        ·{" "}
+        <a className="underline underline-offset-4" href={`/proof/${mw.id}`}>
+          proof
+        </a>
       </p>
     </div>
   );
@@ -355,13 +362,13 @@ function SealBar(props: {
 
   return (
     <div className="sticky bottom-3 z-10">
-      <Card className="flex items-center justify-between gap-3 shadow-2xl shadow-black/50">
-        <div className="text-sm">
-          <p className="font-semibold">{props.picked}/{props.total} picked</p>
+      <Card className="flex items-center justify-between gap-3 !rounded-[22px] border-ink/10 !py-3 !pl-5 !pr-3 shadow-[0_20px_50px_-20px_rgba(10,11,13,0.35)]">
+        <div className="min-w-0 text-[14px]">
+          <p className="font-medium tracking-[-0.01em]">{props.picked}/{props.total} picked</p>
           <p className="text-muted">{step ?? (props.resealing ? "You can re-seal until lock" : "Seal before the first kickoff")}</p>
           {error ? <p role="alert" className="text-bad">{error}</p> : null}
         </div>
-        <Button disabled={!props.complete || step !== null} onClick={() => void seal()}>
+        <Button variant="accent" className="shrink-0" disabled={!props.complete || step !== null} onClick={() => void seal()}>
           {props.resealing ? "Re-seal" : "Seal predictions"}
         </Button>
       </Card>
@@ -395,17 +402,17 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
   return (
     <Card className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="font-bold">Sealed receipt</h2>
+        <h2 className="text-[20px] tracking-[-0.02em]">Sealed receipt</h2>
         <Pill tone={p.txStatus === "confirmed" ? "good" : "warn"}>{p.txStatus === "confirmed" ? `Sealed · v${p.version}` : "Confirming…"}</Pill>
       </div>
       <dl className="grid gap-2 text-sm">
         <div>
-          <dt className="text-muted">Commitment</dt>
-          <dd className="mono text-xs">{p.commitment}</dd>
+          <dt className="eyebrow">Commitment</dt>
+          <dd className="mt-1 font-mono text-[12px] break-all text-ink-2">{p.commitment}</dd>
         </div>
         {p.txHash ? (
           <div>
-            <dt className="text-muted">Transaction</dt>
+            <dt className="eyebrow">Transaction</dt>
             <dd>
               <ExtLink href={txUrl(p.txHash)}>{short(p.txHash)} on the QIE explorer</ExtLink>
             </dd>
@@ -414,7 +421,7 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
         {finalized && p.points !== null ? (
           <div className="flex gap-6 pt-2 text-base">
             <span>
-              <b className="text-2xl">{p.points}</b> pts
+              <b className="text-[34px] font-normal tracking-[-0.04em]">{p.points}</b> pts
             </span>
             <span>Rank {p.rank}</span>
             <span>{p.exactScores} exact</span>
@@ -422,19 +429,19 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
         ) : null}
       </dl>
       <div className="flex flex-wrap gap-2">
-        <Button variant="ghost" onClick={download}>Export my sealed picks</Button>
+        <Button variant="secondary" onClick={download}>Export my sealed picks</Button>
         {finalized && wallet ? (
           <>
-            <a className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 font-semibold" href={`https://wa.me/?text=${encodeURIComponent(`I scored ${p.points} on Northeside matchweek ${mwId}. ${location.origin}`)}`} target="_blank" rel="noreferrer">
+            <a className="inline-flex min-h-11 items-center rounded-full border border-line px-5 text-[15px] font-medium" href={`https://wa.me/?text=${encodeURIComponent(`I scored ${p.points} on Northeside matchweek ${mwId}. ${location.origin}`)}`} target="_blank" rel="noreferrer">
               Share on WhatsApp
             </a>
-            <a className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 font-semibold" href={`/api/v1/og/result/${mwId}.${wallet}?format=story`} target="_blank" rel="noreferrer">
+            <a className="inline-flex min-h-11 items-center rounded-full border border-line px-5 text-[15px] font-medium" href={`/api/v1/og/result/${mwId}.${wallet}?format=story`} target="_blank" rel="noreferrer">
               Story card
             </a>
           </>
         ) : null}
       </div>
-      <p className="text-xs text-muted">Only the hash is on-chain. Your picks stay private until the first kickoff, then everyone's are revealed and checked against their hash.</p>
+      <p className="border-t border-line pt-4 text-[13px] leading-5 text-muted">Only the hash is on-chain. Your picks stay private until the first kickoff, then everyone's are revealed and checked against their hash.</p>
     </Card>
   );
 }

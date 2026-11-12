@@ -29,18 +29,18 @@ export function VerifyWidget({ onChain }: { onChain: Record<string, string> }) {
     }
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={5}
         placeholder="Paste a revealed payload or your exported sealed-picks JSON"
-        className="mono w-full rounded-xl border border-line bg-bg p-3 text-xs"
+        className="w-full rounded-xl border border-line-strong bg-white p-4 font-mono text-[12px] leading-5 outline-none focus:border-ink"
         aria-label="Payload JSON"
       />
-      <Button variant="ghost" onClick={run} disabled={!text.trim()}>Recompute in my browser</Button>
+      <Button variant="primary" onClick={run} disabled={!text.trim()}>Recompute in my browser</Button>
       {out ? (
-        <pre className={`mono whitespace-pre-wrap rounded-xl border p-3 text-xs ${out.ok ? "border-accent/50" : "border-bad/50"}`}>{out.lines.join("\n")}</pre>
+        <pre className={`whitespace-pre-wrap break-all rounded-xl border p-4 font-mono text-[12px] leading-5 ${out.ok ? "border-accent bg-accent/10" : "border-bad/40 bg-red-50"}`}>{out.lines.join("\n")}</pre>
       ) : null}
     </div>
   );

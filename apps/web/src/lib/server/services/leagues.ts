@@ -20,3 +20,22 @@ export async function leagueBySlug(slug: string) {
     members: Number(members),
   };
 }
+
+/** Public leagues for the directory, biggest first. */
+export async function leagueDirectory(limit = 48) {
+  const db = getCtx().db;
+  const rows = await db
+    .select({
+      slug: schema.leagues.slug,
+      name: schema.leagues.name,
+      hostName: sql<string | null>`coalesce(${schema.users.qieId}, ${schema.users.displayName})`,
+      members: sql<number>`(select count(*)::int from ${schema.leagueMembers} m where m.league_id = ${schema.leagues.id})`,
+      createdAt: schema.leagues.createdAt,
+    })
+    .from(schema.leagues)
+    .innerJoin(schema.users, eq(schema.users.id, schema.leagues.hostUserId))
+    .where(eq(schema.leagues.privacy, "public"))
+    .orderBy(sql`(select count(*) from league_members m where m.league_id = ${schema.leagues.id}) desc`, schema.leagues.createdAt)
+    .limit(limit);
+  return rows.map((r) => ({ ...r, members: Number(r.members) }));
+}
