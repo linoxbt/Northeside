@@ -70,7 +70,8 @@ async function waitFor(fn, what, ms = 60_000) {
 }
 
 function bg(cmd, args, opts) {
-  const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"], ...opts });
+  // detached: own process group, so cleanup also stops children (next start forks next-server)
+  const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"], detached: true, ...opts });
   let tail = "";
   p.stdout.on("data", (d) => (tail = (tail + d).slice(-4000)));
   p.stderr.on("data", (d) => (tail = (tail + d).slice(-4000)));
@@ -191,7 +192,20 @@ async function playerSeals(browser, keyIndex, name, picks) {
   return { ctx, page, account };
 }
 
+async function portFree(port) {
+  try {
+    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 async function main() {
+  // A leftover server would serve a stale build (Next renames its process to next-server).
+  for (const port of [3100, 8545, 4010]) {
+    if (!(await portFree(port))) throw new Error(`port ${port} is in use; stop the old process first`);
+  }
   // ---------------------------------------------------------------- chain
   log("starting anvil");
   bg("anvil", ["--port", "8545", "--hardfork", "shanghai", "--chain-id", "31337", "--silent"]);
@@ -410,6 +424,10 @@ main()
     }
   })
   .finally(() => {
-    for (const p of procs) p.kill("SIGTERM");
+    for (const p of procs) {
+      try {
+        process.kill(-p.pid, "SIGTERM");
+      } catch {}
+    }
     setTimeout(() => process.exit(), 500);
   });
