@@ -81,6 +81,15 @@ function bg(cmd, args, opts) {
 }
 
 /** Run the operator CLI without blocking the event loop (the mock provider lives in this process). */
+/** The automated weekly steps, exactly as Netlify's weekly-ops background function calls them. */
+async function cronJob(job) {
+  const res = await fetch(`${APP}/api/v1/cron/${job}`, { headers: { authorization: "Bearer e2e-cron-secret" } });
+  const body = await res.json();
+  log(`cron ${job} -> ${JSON.stringify(body).slice(0, 160)}`);
+  if (!res.ok) throw new Error(`cron ${job} failed: ${res.status}`);
+  return body.result;
+}
+
 function cli(env, ...args) {
   return new Promise((resolveCli, reject) => {
     const p = spawn("npx", ["tsx", join(ROOT, "ops/cli/src/index.ts"), ...args], { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -310,8 +319,9 @@ async function main() {
   ];
   await fetch(`${footballUrl}/__set`, { method: "POST", body: JSON.stringify({ matchday: 11, fixtures }) });
   await cli(env, "import-fixtures", "11");
-  const created = await cli(env, "create-matchweek", "11");
-  check(/^0x/.test(created.txHash ?? ""), "create-matchweek sent a transaction");
+  const opened = await cronJob("open-matchweeks");
+  check(opened[0]?.id === 11 && opened[0]?.status === "ok" && /^0x/.test(opened[0]?.detail?.txHash ?? ""), "automation opened matchweek 11 on-chain");
+  check((await cronJob("open-matchweeks")).length === 0, "opening is idempotent");
 
   // A host and their league (host signs in through the UI too)
   const browser = await chromium.launch();
@@ -369,14 +379,19 @@ async function main() {
   });
   const fr = await cli(env, "fetch-results", "11");
   check(fr.agreed === true, "both providers agree (including a postponed game)");
+  check((await cronJob("publish-results")).length === 0, "automation waits for the last kickoff + buffer before proposing");
   // On-chain, results open at the last kickoff (+26h) plus the 3h buffer.
   await rpc("evm_increaseTime", [30 * 3600]);
   await rpc("evm_mine");
-  await cli(env, "publish-results", "11");
+  const pub = await cronJob("publish-results");
+  check(pub[0]?.id === 11 && pub[0]?.status === "ok", "automation proposed results, reveals and scores");
+  check((await cronJob("finalize")).length === 0, "automation waits out the challenge window");
   await rpc("evm_increaseTime", [12 * 3600 + 60]);
   await rpc("evm_mine");
-  const fin = await cli(env, "finalize", "11");
-  check(fin.players === 2, "finalized with 2 scored players");
+  const finRun = await cronJob("finalize");
+  const fin = finRun[0]?.detail ?? {};
+  check(finRun[0]?.status === "ok" && fin.players === 2, "automation finalized with 2 scored players");
+  check(Array.isArray(await cronJob("post-reward-roots")), "reward-root step runs (no campaigns yet)");
   for (let i = 0; i < 4; i++) await rpc("evm_mine");
   await cli(env, "index");
 
