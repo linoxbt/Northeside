@@ -14,6 +14,22 @@ holds. Nothing in this repo sends a mainnet transaction on its own.
 | One `commit()` costs about 70k gas | forge gas report; 0.00008 QIEV3 at the 1.125 gwei seen on 2026-11-12 |
 | Full player loop in a browser | `apps/web/e2e/run.mjs` (see "Testing" in the README) |
 
+## Already configured on Netlify (site `northeside`)
+
+| Variable | Kind |
+| --- | --- |
+| `DATABASE_URL`, `DATA_ENCRYPTION_KEY`, `SESSION_SECRET`, `PERSON_PEPPER` | secret |
+| `CRON_SECRET` (scheduled functions call the cron routes with it) | secret |
+| `ATTESTER_PRIVATE_KEY` — address `0x7705339BF84F843240e9F25d403bFF4ad5746ba4` | secret |
+| `DRIP_PRIVATE_KEY` — address `0x6d4b7841Bce434Ac6abBC9194b4e39ea6c8D86bd` | secret |
+| `VAPID_PRIVATE_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (web push) | secret / public |
+| `DRIP_AMOUNT_WEI` = 0.0006 QIEV3, `DRIP_DAILY_CAP_WEI` = 0.18 QIEV3 | plain (re-measure gas, adjust) |
+| `NEXT_PUBLIC_CHAIN_ID` / `CHAIN_ID` = 1990, `NEXT_PUBLIC_QUSDC_ADDRESS`, `NEXT_PUBLIC_SITE_URL`, `SEASON` | plain |
+
+Use the attester address as `ATTESTER_ADDRESS` when deploying the contracts. Fund the drip address
+with QIEV3 (two days of the daily cap is enough). The site stays in preview mode until the three
+`NEXT_PUBLIC_*_ADDRESS` variables are set after the contract deploy.
+
 ## Needs you
 
 ### 1. Keys (generate offline, never paste into chats or tools)
