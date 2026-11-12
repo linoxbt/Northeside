@@ -159,4 +159,34 @@ contract IdentityAdapterTest is Base {
         id.attest(w1, bytes32(0));
         vm.stopPrank();
     }
+
+    /// @dev Audit L-5: a signed attestation can be cancelled before the player submits it.
+    function test_invalidateNonce_cancelsSignedAttestation() public {
+        uint64 deadline = uint64(block.timestamp + 1 hours);
+        bytes memory sig = _sig(ATTESTER_KEY, w1, PERSON, deadline);
+        vm.expectEmit(true, true, true, true, address(id));
+        emit IdentityAdapter.NonceInvalidated(w1, 1, attester);
+        vm.prank(attester);
+        id.invalidateNonce(w1);
+        vm.expectRevert();
+        vm.prank(w1);
+        id.submitAttestation(w1, PERSON, deadline, sig);
+        assertFalse(id.isVerified(w1), "not linked");
+
+        // admin can do it too; a fresh signature over the new nonce works
+        vm.prank(admin);
+        id.invalidateNonce(w2);
+        _submit(w2, PERSON);
+        assertTrue(id.isVerified(w2), "fresh signature links");
+    }
+
+    function test_invalidateNonce_onlyAttesterOrAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, w1, id.ATTESTER_ROLE()
+            )
+        );
+        vm.prank(w1);
+        id.invalidateNonce(w1);
+    }
 }

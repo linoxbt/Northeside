@@ -23,6 +23,8 @@ contract NorthesideMatchweeksTest is Base {
     uint32 internal constant ID = 11;
     bytes32 internal constant FIXTURES = keccak256("fixtures");
     bytes32 internal constant RULES = keccak256("scoring-rules-v1");
+    bytes32 internal constant REV = keccak256("rev");
+    bytes32 internal constant SCORES = keccak256("scores");
     uint64 internal lockTime;
 
     function setUp() public {
@@ -32,7 +34,7 @@ contract NorthesideMatchweeksTest is Base {
         mw = new NorthesideMatchweeks(admin, operator, results, pauser, challengers);
         lockTime = uint64(block.timestamp + 3 days);
         vm.prank(operator);
-        mw.createMatchweek(ID, FIXTURES, lockTime, 10, RULES);
+        mw.createMatchweek(ID, FIXTURES, lockTime, lockTime, 10, RULES);
     }
 
     // ------------------------------------------------------------ construction and roles
@@ -70,9 +72,11 @@ contract NorthesideMatchweeksTest is Base {
 
     function test_create_emits() public {
         vm.expectEmit(true, false, false, true, address(mw));
-        emit INorthesideMatchweeks.MatchweekCreated(12, FIXTURES, lockTime + 7 days, 10, RULES);
+        emit INorthesideMatchweeks.MatchweekCreated(
+            12, FIXTURES, lockTime + 7 days, lockTime + 7 days, 10, RULES
+        );
         vm.prank(operator);
-        mw.createMatchweek(12, FIXTURES, lockTime + 7 days, 10, RULES);
+        mw.createMatchweek(12, FIXTURES, lockTime + 7 days, lockTime + 7 days, 10, RULES);
     }
 
     function test_create_onlyOperator() public {
@@ -82,27 +86,27 @@ contract NorthesideMatchweeksTest is Base {
             )
         );
         vm.prank(alice);
-        mw.createMatchweek(12, FIXTURES, lockTime, 10, RULES);
+        mw.createMatchweek(12, FIXTURES, lockTime, lockTime, 10, RULES);
     }
 
     function test_create_rejectsDuplicateId() public {
         vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.MatchweekExists.selector, ID));
         vm.prank(operator);
-        mw.createMatchweek(ID, keccak256("other"), lockTime + 1, 10, RULES);
+        mw.createMatchweek(ID, keccak256("other"), lockTime + 1, lockTime + 1, 10, RULES);
     }
 
     function test_create_rejectsInvalidParams() public {
         vm.startPrank(operator);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, bytes32(0), lockTime, 10, RULES);
+        mw.createMatchweek(20, bytes32(0), lockTime, lockTime, 10, RULES);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, lockTime, 10, bytes32(0));
+        mw.createMatchweek(20, FIXTURES, lockTime, lockTime, 10, bytes32(0));
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, uint64(block.timestamp), 10, RULES);
+        mw.createMatchweek(20, FIXTURES, uint64(block.timestamp), uint64(block.timestamp), 10, RULES);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, lockTime, 0, RULES);
+        mw.createMatchweek(20, FIXTURES, lockTime, lockTime, 0, RULES);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, lockTime, 33, RULES);
+        mw.createMatchweek(20, FIXTURES, lockTime, lockTime, 33, RULES);
         vm.stopPrank();
     }
 
@@ -202,7 +206,7 @@ contract NorthesideMatchweeksTest is Base {
     function test_propose_beforeLockReverts() public {
         vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.NotLocked.selector, ID));
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("r"), "ipfs://evidence");
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://evidence");
     }
 
     function test_propose_onlyResultsRole() public {
@@ -213,16 +217,16 @@ contract NorthesideMatchweeksTest is Base {
             )
         );
         vm.prank(operator);
-        mw.proposeResults(ID, keccak256("r"), "ipfs://evidence");
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://evidence");
     }
 
     function test_propose_requiresRootAndEvidence() public {
         vm.warp(lockTime);
         vm.startPrank(results);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.proposeResults(ID, bytes32(0), "ipfs://evidence");
+        mw.proposeResults(ID, bytes32(0), REV, SCORES, "ipfs://evidence");
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.proposeResults(ID, keccak256("r"), "");
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "");
         vm.stopPrank();
     }
 
@@ -233,7 +237,7 @@ contract NorthesideMatchweeksTest is Base {
         // lock -> propose
         vm.warp(lockTime + 2 days);
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("wrong"), "ipfs://v1");
+        mw.proposeResults(ID, keccak256("wrong"), REV, SCORES, "ipfs://v1");
         INorthesideMatchweeks.Matchweek memory m = mw.matchweek(ID);
         assertEq(uint256(m.status), uint256(INorthesideMatchweeks.Status.ResultsProposed), "proposed");
         assertEq(m.disputeEnds, block.timestamp + 12 hours, "window");
@@ -241,7 +245,7 @@ contract NorthesideMatchweeksTest is Base {
         // finalize inside the window reverts
         vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.WindowOpen.selector, ID));
         vm.prank(results);
-        mw.finalize(ID, keccak256("rev"), keccak256("scores"));
+        mw.finalize(ID);
 
         // challenge -> Challenged; finalize now reverts on status
         vm.prank(challenger);
@@ -256,18 +260,18 @@ contract NorthesideMatchweeksTest is Base {
             )
         );
         vm.prank(results);
-        mw.finalize(ID, keccak256("rev"), keccak256("scores"));
+        mw.finalize(ID);
 
         // re-propose opens a fresh window
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("right"), "ipfs://v2");
+        mw.proposeResults(ID, keccak256("right"), REV, SCORES, "ipfs://v2");
         assertEq(mw.matchweek(ID).disputeEnds, block.timestamp + 12 hours, "fresh window");
 
         vm.warp(block.timestamp + 12 hours);
         vm.expectEmit(true, false, false, true, address(mw));
         emit INorthesideMatchweeks.Finalized(ID, keccak256("right"), keccak256("rev"), keccak256("scores"));
         vm.prank(results);
-        mw.finalize(ID, keccak256("rev"), keccak256("scores"));
+        mw.finalize(ID);
 
         m = mw.matchweek(ID);
         assertTrue(mw.isFinalized(ID), "final");
@@ -284,13 +288,13 @@ contract NorthesideMatchweeksTest is Base {
                 INorthesideMatchweeks.WrongStatus.selector, ID, INorthesideMatchweeks.Status.Finalized
             )
         );
-        mw.proposeResults(ID, keccak256("x"), "ipfs://x");
+        mw.proposeResults(ID, keccak256("x"), REV, SCORES, "ipfs://x");
         vm.expectRevert(
             abi.encodeWithSelector(
                 INorthesideMatchweeks.WrongStatus.selector, ID, INorthesideMatchweeks.Status.Finalized
             )
         );
-        mw.finalize(ID, keccak256("x"), keccak256("y"));
+        mw.finalize(ID);
         vm.stopPrank();
 
         vm.expectRevert(
@@ -313,7 +317,7 @@ contract NorthesideMatchweeksTest is Base {
     function test_challenge_afterWindowReverts() public {
         vm.warp(lockTime);
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("r"), "ipfs://e");
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.warp(block.timestamp + 12 hours);
         vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.WindowClosed.selector, ID));
         vm.prank(challenger);
@@ -323,7 +327,7 @@ contract NorthesideMatchweeksTest is Base {
     function test_challenge_onlyChallenger() public {
         vm.warp(lockTime);
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("r"), "ipfs://e");
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAccessControl.AccessControlUnauthorizedAccount.selector, alice, mw.CHALLENGER_ROLE()
@@ -333,14 +337,70 @@ contract NorthesideMatchweeksTest is Base {
         mw.challenge(ID, "ipfs://x");
     }
 
-    function test_finalize_requiresRoots() public {
+    function test_propose_requiresAllThreeRoots() public {
+        vm.warp(lockTime);
+        vm.startPrank(results);
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        mw.proposeResults(ID, keccak256("r"), bytes32(0), SCORES, "ipfs://e");
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        mw.proposeResults(ID, keccak256("r"), REV, bytes32(0), "ipfs://e");
+        vm.stopPrank();
+    }
+
+    /// @dev Audit M-2: reveals and scores are proposed with the results and sit through the window;
+    ///      finalize can only confirm them.
+    function test_finalize_confirmsProposedRootsOnly() public {
         vm.warp(lockTime);
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("r"), "ipfs://e");
-        vm.warp(block.timestamp + 12 hours);
-        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        mw.proposeResults(ID, keccak256("r1"), keccak256("rev1"), keccak256("scores1"), "ipfs://v1");
+        vm.prank(challenger);
+        mw.challenge(ID, "ipfs://bad-scores");
         vm.prank(results);
-        mw.finalize(ID, bytes32(0), keccak256("s"));
+        mw.proposeResults(ID, keccak256("r1"), keccak256("rev2"), keccak256("scores2"), "ipfs://v2");
+        vm.warp(block.timestamp + 12 hours);
+        vm.prank(results);
+        mw.finalize(ID);
+        INorthesideMatchweeks.Matchweek memory m = mw.matchweek(ID);
+        assertEq(m.revealsRoot, keccak256("rev2"), "reveals from the last proposal");
+        assertEq(m.scoresRoot, keccak256("scores2"), "scores from the last proposal");
+    }
+
+    /// @dev Audit L-1: no results before the last kickoff plus a buffer.
+    function test_propose_beforeResultsNotBeforeReverts() public {
+        uint64 last = lockTime + 2 days;
+        vm.prank(operator);
+        mw.createMatchweek(30, FIXTURES, lockTime, last, 10, RULES);
+        vm.warp(lockTime + 1 hours);
+        vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.TooEarly.selector, 30));
+        vm.prank(results);
+        mw.proposeResults(30, keccak256("r"), REV, SCORES, "ipfs://e");
+        vm.warp(last);
+        vm.prank(results);
+        mw.proposeResults(30, keccak256("r"), REV, SCORES, "ipfs://e");
+        assertEq(
+            uint256(mw.matchweek(30).status),
+            uint256(INorthesideMatchweeks.Status.ResultsProposed),
+            "proposed"
+        );
+    }
+
+    function test_create_rejectsResultsBeforeLock() public {
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        vm.prank(operator);
+        mw.createMatchweek(31, FIXTURES, lockTime, lockTime - 1, 10, RULES);
+    }
+
+    /// @dev Audit L-2: a dispute window needs at least one real challenger who is not the results key.
+    function test_constructor_requiresIndependentChallenger() public {
+        address[] memory none = new address[](0);
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        new NorthesideMatchweeks(admin, operator, results, pauser, none);
+        address[] memory bad = new address[](1);
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        new NorthesideMatchweeks(admin, operator, results, pauser, bad);
+        bad[0] = results;
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        new NorthesideMatchweeks(admin, operator, results, pauser, bad);
     }
 
     function test_pause_doesNotBlockResults() public {
@@ -390,10 +450,10 @@ contract NorthesideMatchweeksTest is Base {
     function _finalize() internal {
         vm.warp(lockTime);
         vm.prank(results);
-        mw.proposeResults(ID, keccak256("r"), "ipfs://e");
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.warp(block.timestamp + 12 hours);
         vm.prank(results);
-        mw.finalize(ID, keccak256("rev"), keccak256("scores"));
+        mw.finalize(ID);
     }
 }
 

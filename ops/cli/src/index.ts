@@ -151,7 +151,7 @@ async function main() {
     case "status": {
       const m = await ctx.publicClient.readContract({ address: ctx.deployment.matchweeks, abi: matchweeksAbi, functionName: "matchweek", args: [id()] });
       const names = ["None", "Open", "ResultsProposed", "Challenged", "Finalized"];
-      return out({ ...m, status: names[m.status], lockTime: new Date(Number(m.lockTime) * 1000).toISOString(), disputeEnds: m.disputeEnds ? new Date(Number(m.disputeEnds) * 1000).toISOString() : null });
+      return out({ ...m, status: names[m.status], lockTime: new Date(Number(m.lockTime) * 1000).toISOString(), resultsNotBefore: new Date(Number(m.resultsNotBefore) * 1000).toISOString(), disputeEnds: m.disputeEnds ? new Date(Number(m.disputeEnds) * 1000).toISOString() : null });
     }
     default:
       console.error(`Unknown command "${a.command}"\n`);

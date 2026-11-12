@@ -371,6 +371,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
 
       const [leaf] = await ctx.db.select().from(schema.rewardLeaves).where(eq(schema.rewardLeaves.matchweekId, 12));
       expect(leaf).toMatchObject({ countablePlayers: 2, amount: 2_000_000n });
+      await advance(24 * 3600); // HostRewards.CLAIM_DELAY: a new root sits a day before claims open
       const claimTx = await wallet(KEYS.host).writeContract({
         address: ctx.deployment.hostRewards,
         abi: hostRewardsAbi,

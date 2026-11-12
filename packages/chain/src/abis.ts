@@ -242,6 +242,11 @@ export const matchweeksAbi = [
         "internalType": "uint64"
       },
       {
+        "name": "resultsNotBefore",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
         "name": "fixtureCount",
         "type": "uint32",
         "internalType": "uint32"
@@ -263,16 +268,6 @@ export const matchweeksAbi = [
         "name": "id",
         "type": "uint32",
         "internalType": "uint32"
-      },
-      {
-        "name": "revealsRoot",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "scoresRoot",
-        "type": "bytes32",
-        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -409,6 +404,11 @@ export const matchweeksAbi = [
             "internalType": "uint64"
           },
           {
+            "name": "resultsNotBefore",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
             "name": "disputeEnds",
             "type": "uint64",
             "internalType": "uint64"
@@ -479,6 +479,16 @@ export const matchweeksAbi = [
       },
       {
         "name": "resultsRoot",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "revealsRoot",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "scoresRoot",
         "type": "bytes32",
         "internalType": "bytes32"
       },
@@ -672,6 +682,12 @@ export const matchweeksAbi = [
         "internalType": "uint64"
       },
       {
+        "name": "resultsNotBefore",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      },
+      {
         "name": "fixtureCount",
         "type": "uint32",
         "indexed": false,
@@ -736,6 +752,18 @@ export const matchweeksAbi = [
       },
       {
         "name": "resultsRoot",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "revealsRoot",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "scoresRoot",
         "type": "bytes32",
         "indexed": false,
         "internalType": "bytes32"
@@ -914,6 +942,17 @@ export const matchweeksAbi = [
   },
   {
     "type": "error",
+    "name": "TooEarly",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "UnknownMatchweek",
     "inputs": [
       {
@@ -1014,6 +1053,19 @@ export const hostRewardsAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "CLAIM_DELAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1225,6 +1277,11 @@ export const hostRewardsAbi = [
             "name": "refunded",
             "type": "uint128",
             "internalType": "uint128"
+          },
+          {
+            "name": "pauseBase",
+            "type": "uint64",
+            "internalType": "uint64"
           }
         ]
       }
@@ -1294,6 +1351,25 @@ export const hostRewardsAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimDeadline",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1583,6 +1659,32 @@ export const hostRewardsAbi = [
   },
   {
     "type": "function",
+    "name": "pausedAt",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pausedTotal",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "postRoot",
     "inputs": [
       {
@@ -1635,6 +1737,25 @@ export const hostRewardsAbi = [
   },
   {
     "type": "function",
+    "name": "refundRecipientOf",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "renounceRole",
     "inputs": [
       {
@@ -1646,6 +1767,39 @@ export const hostRewardsAbi = [
         "name": "callerConfirmation",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "replaceRoot",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "matchweekId",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "root",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "total",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "reportURI",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "outputs": [],
@@ -1695,6 +1849,30 @@ export const hostRewardsAbi = [
   },
   {
     "type": "function",
+    "name": "rootPostedAt",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "matchweekId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "setCaps",
     "inputs": [
       {
@@ -1706,6 +1884,24 @@ export const hostRewardsAbi = [
         "name": "maxTotalLiability_",
         "type": "uint128",
         "internalType": "uint128"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setRefundRecipient",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -1993,6 +2189,25 @@ export const hostRewardsAbi = [
   },
   {
     "type": "event",
+    "name": "RefundRecipientSet",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "recipient",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Refunded",
     "inputs": [
       {
@@ -2002,7 +2217,7 @@ export const hostRewardsAbi = [
         "internalType": "uint256"
       },
       {
-        "name": "sponsor",
+        "name": "recipient",
         "type": "address",
         "indexed": true,
         "internalType": "address"
@@ -2136,12 +2351,55 @@ export const hostRewardsAbi = [
   },
   {
     "type": "event",
+    "name": "RootReplaced",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "matchweekId",
+        "type": "uint32",
+        "indexed": true,
+        "internalType": "uint32"
+      },
+      {
+        "name": "oldRoot",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "root",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "total",
+        "type": "uint128",
+        "indexed": false,
+        "internalType": "uint128"
+      },
+      {
+        "name": "reportURI",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TreasuryUpdated",
     "inputs": [
       {
         "name": "treasury",
         "type": "address",
-        "indexed": false,
+        "indexed": true,
         "internalType": "address"
       }
     ],
@@ -2188,8 +2446,40 @@ export const hostRewardsAbi = [
   },
   {
     "type": "error",
+    "name": "AlreadyClaimedFrom",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "matchweekId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "CapExceeded",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ClaimNotOpen",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "matchweekId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2592,6 +2882,19 @@ export const identityAbi = [
   },
   {
     "type": "function",
+    "name": "invalidateNonce",
+    "inputs": [
+      {
+        "name": "wallet",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "isVerified",
     "inputs": [
       {
@@ -2779,6 +3082,31 @@ export const identityAbi = [
     "type": "event",
     "name": "EIP712DomainChanged",
     "inputs": [],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NonceInvalidated",
+    "inputs": [
+      {
+        "name": "wallet",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newNonce",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "by",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
     "anonymous": false
   },
   {

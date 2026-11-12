@@ -150,6 +150,8 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
         .set({
           status: "results_proposed",
           resultsRoot: String(a.resultsRoot),
+          revealsRoot: String(a.revealsRoot),
+          scoresRoot: String(a.scoresRoot),
           evidenceUri: String(a.evidenceURI),
           disputeEnds: new Date(num(a.disputeEnds) * 1000),
         })

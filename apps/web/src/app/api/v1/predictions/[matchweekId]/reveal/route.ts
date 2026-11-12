@@ -7,7 +7,9 @@ import { checkPayload, encryptPayload, getMatchweekRow, onChainCommitment } from
 
 /**
  * POST /api/v1/predictions/:matchweekId/reveal: if the backend never received a payload (e.g. it
- * was down when you sealed), upload your exported file after lock and before finalization.
+ * was down when you sealed), upload your exported file after lock and before results are proposed.
+ * The reveals root is proposed with the results and cannot change afterwards (audit M-2), unless
+ * the results are challenged and proposed again.
  */
 export const POST = route(async (req, { params }: { params: Promise<{ matchweekId: string }> }) => {
   const s = await requireSession();
@@ -15,7 +17,9 @@ export const POST = route(async (req, { params }: { params: Promise<{ matchweekI
   const id = Number((await params).matchweekId);
   const mw = await getMatchweekRow(id);
   if (new Date() < mw.lockTime) throw new HttpError(409, "not_locked", "Reveals open after lock");
-  if (mw.status === "finalized") throw new HttpError(409, "finalized", "This matchweek is already finalized");
+  if (mw.status !== "open" && mw.status !== "challenged") {
+    throw new HttpError(409, "reveals_closed", "Reveals closed when this matchweek's results were proposed");
+  }
   const ctx = getCtx();
   const [{ n } = { n: 0 }] = await ctx.db.select({ n: sql<number>`count(*)::int` }).from(schema.fixtures).where(eq(schema.fixtures.matchweekId, id));
   const payload = checkPayload(s, z.object({ payload: z.unknown() }).parse(await req.json()).payload, mw, Number(n));

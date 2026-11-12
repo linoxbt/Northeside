@@ -12,13 +12,17 @@ import {INorthesideMatchweeks} from "./interfaces/INorthesideMatchweeks.sol";
 /// @title HostRewards
 /// @notice Sponsors fund campaigns in QUSDC. After each finalized matchweek the operator posts one
 ///         Merkle root of host payouts (computed off-chain from verified, returning players), and
-///         hosts claim with a proof.
+///         after a 24-hour review delay hosts claim with a proof.
 /// @dev Money only leaves this contract three ways: a platform fee to the treasury at funding time,
-///      a host claim with a valid proof, or a refund to the campaign's sponsor. Nothing else moves
-///      escrowed funds, including the admin.
+///      a host claim with a valid proof against a posted root, or a refund to the campaign's refund
+///      recipient. Trust model, stated plainly: the OPERATOR role decides who is in a root, so a
+///      compromised operator key could post a root paying itself up to the remaining budget of each
+///      active campaign. Mitigations: the CLAIM_DELAY review window (pause or replace a bad root
+///      before anyone can claim), the admin can revoke the role, and launch caps bound exposure.
 ///
 ///      Accounting per campaign:  budget = gross - fee;  claimed <= allocated <= budget.
-///      Invariant over all campaigns: token.balanceOf(this) == sum(budget - claimed - refunded).
+///      Over all campaigns: token.balanceOf(this) >= sum(budget - claimed - refunded); equality
+///      unless someone sends tokens here directly (those are not recoverable).
 contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -29,12 +33,15 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     uint16 public constant MAX_FEE_BPS = 1_000;
     uint16 private constant BPS = 10_000;
     /// @notice After a campaign expires, hosts have this long to claim before the sponsor can sweep.
+    ///         Time spent paused after funding is added on top (see claimDeadline).
     uint64 public constant CLAIM_PERIOD = 30 days;
+    /// @notice A posted root can be claimed against only after this review delay.
+    uint64 public constant CLAIM_DELAY = 24 hours;
 
     enum CampaignStatus {
         None,
         Pending, // terms agreed, not funded
-        Active, // funded; roots can be posted until expiry, claims until expiry + CLAIM_PERIOD
+        Active, // funded; roots until expiry, claims until claimDeadline
         Closed, // swept back to the sponsor after the claim period
         Cancelled // never funded
     }
@@ -60,6 +67,8 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         uint128 allocated;
         uint128 claimed;
         uint128 refunded;
+        /// @dev pausedTotal at funding time; only pauses after funding extend this campaign's deadline.
+        uint64 pauseBase;
     }
 
     IERC20 public immutable token;
@@ -73,8 +82,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     uint128 public totalLiability;
     uint256 public campaignCount;
 
+    /// @notice Total seconds spent paused (closed pauses), and the start of the current pause.
+    uint64 public pausedTotal;
+    uint64 public pausedAt;
+
     mapping(uint256 campaignId => Campaign) private _campaigns;
+    mapping(uint256 campaignId => address) public refundRecipientOf;
     mapping(uint256 campaignId => mapping(uint32 matchweekId => bytes32)) public rootOf;
+    mapping(uint256 campaignId => mapping(uint32 matchweekId => uint64)) public rootPostedAt;
     mapping(uint256 campaignId => mapping(uint32 matchweekId => uint128)) public allocatedFor;
     mapping(uint256 campaignId => mapping(uint32 matchweekId => uint128)) public claimedFor;
     mapping(bytes32 leaf => bool) public leafClaimed;
@@ -87,6 +102,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     event RootPosted(
         uint256 indexed id, uint32 indexed matchweekId, bytes32 root, uint128 total, string reportURI
     );
+    event RootReplaced(
+        uint256 indexed id,
+        uint32 indexed matchweekId,
+        bytes32 oldRoot,
+        bytes32 root,
+        uint128 total,
+        string reportURI
+    );
     event Claimed(
         uint256 indexed id,
         uint32 indexed matchweekId,
@@ -94,8 +117,9 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         uint128 amount,
         uint32 countablePlayers
     );
-    event Refunded(uint256 indexed id, address indexed sponsor, uint128 amount, bool closed);
-    event TreasuryUpdated(address treasury);
+    event Refunded(uint256 indexed id, address indexed recipient, uint128 amount, bool closed);
+    event RefundRecipientSet(uint256 indexed id, address indexed recipient);
+    event TreasuryUpdated(address indexed treasury);
     event CapsUpdated(uint128 maxCampaignBudget, uint128 maxTotalLiability);
 
     error InvalidParams();
@@ -109,6 +133,8 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     error MatchweekNotFinalized(uint32 matchweekId);
     error RootExists(uint256 id, uint32 matchweekId);
     error NoRoot(uint256 id, uint32 matchweekId);
+    error AlreadyClaimedFrom(uint256 id, uint32 matchweekId);
+    error ClaimNotOpen(uint256 id, uint32 matchweekId);
     error OverBudget();
     error AlreadyClaimed();
     error InvalidProof();
@@ -180,12 +206,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         if (block.timestamp >= c.terms.expiry) revert Expired(id);
 
         uint128 budget = c.budget;
+        if (budget > maxCampaignBudget) revert CapExceeded();
         if (uint256(totalLiability) + budget > maxTotalLiability) revert CapExceeded();
 
         uint128 gross = c.terms.grossAmount;
         uint128 fee = gross - budget;
 
         c.status = CampaignStatus.Active;
+        c.pauseBase = pausedTotal;
         totalLiability += budget;
 
         uint256 before = token.balanceOf(address(this));
@@ -196,6 +224,16 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         emit CampaignFunded(id, msg.sender, gross, fee, budget);
     }
 
+    /// @notice Where refunds go. Defaults to the sponsor; the sponsor can point it elsewhere, e.g. if
+    ///         its own address can no longer receive the token.
+    function setRefundRecipient(uint256 id, address recipient) external {
+        Campaign storage c = _campaigns[id];
+        if (msg.sender != c.terms.sponsor) revert NotSponsor();
+        if (recipient == address(0)) revert InvalidParams();
+        refundRecipientOf[id] = recipient;
+        emit RefundRecipientSet(id, recipient);
+    }
+
     /// @notice Post the Merkle root of host payouts for one finalized matchweek.
     /// @param total Sum of every leaf amount in the tree; claims for this matchweek cannot exceed it.
     function postRoot(uint256 id, uint32 matchweekId, bytes32 root, uint128 total, string calldata reportURI)
@@ -203,21 +241,45 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         onlyRole(OPERATOR_ROLE)
     {
         Campaign storage c = _campaigns[id];
-        if (c.status != CampaignStatus.Active) revert WrongStatus(id, c.status);
-        if (block.timestamp >= c.terms.expiry) revert Expired(id);
-        if (matchweekId < c.terms.firstMatchweek || matchweekId > c.terms.lastMatchweek) {
-            revert MatchweekOutOfRange(matchweekId);
-        }
-        if (!matchweeks.isFinalized(matchweekId)) revert MatchweekNotFinalized(matchweekId);
+        _checkRootTarget(id, c, matchweekId);
         if (rootOf[id][matchweekId] != bytes32(0)) revert RootExists(id, matchweekId);
         if (root == bytes32(0) || total == 0 || bytes(reportURI).length == 0) revert InvalidParams();
         if (uint256(c.allocated) + total > c.budget) revert OverBudget();
 
         rootOf[id][matchweekId] = root;
+        rootPostedAt[id][matchweekId] = uint64(block.timestamp);
         allocatedFor[id][matchweekId] = total;
         c.allocated += total;
 
         emit RootPosted(id, matchweekId, root, total, reportURI);
+    }
+
+    /// @notice Correct a posted root while nothing has been claimed against it. Restarts the review
+    ///         delay. The old root's leaves can no longer be claimed.
+    function replaceRoot(
+        uint256 id,
+        uint32 matchweekId,
+        bytes32 root,
+        uint128 total,
+        string calldata reportURI
+    ) external onlyRole(OPERATOR_ROLE) {
+        Campaign storage c = _campaigns[id];
+        _checkRootTarget(id, c, matchweekId);
+        bytes32 oldRoot = rootOf[id][matchweekId];
+        if (oldRoot == bytes32(0)) revert NoRoot(id, matchweekId);
+        if (claimedFor[id][matchweekId] != 0) revert AlreadyClaimedFrom(id, matchweekId);
+        if (root == bytes32(0) || root == oldRoot || total == 0 || bytes(reportURI).length == 0) {
+            revert InvalidParams();
+        }
+        uint256 allocated = uint256(c.allocated) - allocatedFor[id][matchweekId] + total;
+        if (allocated > c.budget) revert OverBudget();
+
+        rootOf[id][matchweekId] = root;
+        rootPostedAt[id][matchweekId] = uint64(block.timestamp);
+        allocatedFor[id][matchweekId] = total;
+        c.allocated = uint128(allocated);
+
+        emit RootReplaced(id, matchweekId, oldRoot, root, total, reportURI);
     }
 
     /// @notice Pay a host their share for one matchweek. Anyone may submit; funds always go to `host`.
@@ -231,11 +293,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     ) external nonReentrant whenNotPaused {
         Campaign storage c = _campaigns[id];
         if (c.status != CampaignStatus.Active) revert WrongStatus(id, c.status);
-        if (block.timestamp >= uint256(c.terms.expiry) + CLAIM_PERIOD) revert ClaimPeriodOver(id);
+        if (block.timestamp >= claimDeadline(id)) revert ClaimPeriodOver(id);
         if (host == address(0) || amount == 0) revert InvalidParams();
 
         bytes32 root = rootOf[id][matchweekId];
         if (root == bytes32(0)) revert NoRoot(id, matchweekId);
+        if (block.timestamp < uint256(rootPostedAt[id][matchweekId]) + CLAIM_DELAY) {
+            revert ClaimNotOpen(id, matchweekId);
+        }
 
         bytes32 leaf = leafHash(id, matchweekId, host, amount, countablePlayers);
         if (leafClaimed[leaf]) revert AlreadyClaimed();
@@ -254,17 +319,17 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         emit Claimed(id, matchweekId, host, amount, countablePlayers);
     }
 
-    /// @notice Return money to the sponsor. Anyone may trigger it; funds always go to the sponsor.
-    ///         From expiry: the unallocated budget. From expiry + CLAIM_PERIOD: everything left, and
-    ///         the campaign closes.
-    /// @dev Deliberately not pausable, so a pauser cannot trap sponsor funds.
+    /// @notice Return money to the sponsor's refund recipient. Anyone may trigger it.
+    ///         From expiry: the unallocated budget. From claimDeadline: everything left, and the
+    ///         campaign closes.
+    /// @dev Not pausable, so a pauser cannot trap sponsor funds. A pause cannot make hosts lose their
+    ///      allocation either: time paused after funding pushes claimDeadline back.
     function refund(uint256 id) external nonReentrant returns (uint128 amount) {
         Campaign storage c = _campaigns[id];
         if (c.status != CampaignStatus.Active) revert WrongStatus(id, c.status);
-        uint256 expiry = c.terms.expiry;
-        if (block.timestamp < expiry) revert NotExpired(id);
+        if (block.timestamp < c.terms.expiry) revert NotExpired(id);
 
-        bool closing = block.timestamp >= expiry + CLAIM_PERIOD;
+        bool closing = block.timestamp >= claimDeadline(id);
         if (closing) {
             amount = c.budget - c.claimed - c.refunded;
             c.status = CampaignStatus.Closed;
@@ -277,10 +342,11 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         c.refunded += amount;
         totalLiability -= amount;
 
-        address sponsor = c.terms.sponsor;
-        if (amount > 0) token.safeTransfer(sponsor, amount);
+        address recipient = refundRecipientOf[id];
+        if (recipient == address(0)) recipient = c.terms.sponsor;
+        if (amount > 0) token.safeTransfer(recipient, amount);
 
-        emit Refunded(id, sponsor, amount, closing);
+        emit Refunded(id, recipient, amount, closing);
     }
 
     // ---------------------------------------------------------------- admin
@@ -304,19 +370,31 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         emit CapsUpdated(maxCampaignBudget_, maxTotalLiability_);
     }
 
-    /// @notice Stops funding and claims. Refunds keep working.
+    /// @notice Stops funding and claims. Refunds keep working; claim deadlines extend by the pause.
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
+        pausedAt = uint64(block.timestamp);
     }
 
     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
+        pausedTotal += uint64(block.timestamp) - pausedAt;
+        pausedAt = 0;
     }
 
     // ---------------------------------------------------------------- views
 
     function campaign(uint256 id) external view returns (Campaign memory) {
         return _campaigns[id];
+    }
+
+    /// @notice Last moment (exclusive) hosts can claim: expiry + CLAIM_PERIOD, plus any time the
+    ///         contract has spent paused since this campaign was funded (including a pause in progress).
+    function claimDeadline(uint256 id) public view returns (uint256) {
+        Campaign storage c = _campaigns[id];
+        uint256 paused_ = uint256(pausedTotal) - c.pauseBase;
+        if (paused()) paused_ += block.timestamp - pausedAt;
+        return uint256(c.terms.expiry) + CLAIM_PERIOD + paused_;
     }
 
     /// @notice Leaf of the host-rewards tree, matching OpenZeppelin StandardMerkleTree
@@ -336,5 +414,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     function _budgetOf(uint128 grossAmount, uint16 feeBps) private pure returns (uint128) {
         uint128 fee = uint128((uint256(grossAmount) * feeBps) / BPS);
         return grossAmount - fee;
+    }
+
+    function _checkRootTarget(uint256 id, Campaign storage c, uint32 matchweekId) private view {
+        if (c.status != CampaignStatus.Active) revert WrongStatus(id, c.status);
+        if (block.timestamp >= c.terms.expiry) revert Expired(id);
+        if (matchweekId < c.terms.firstMatchweek || matchweekId > c.terms.lastMatchweek) {
+            revert MatchweekOutOfRange(matchweekId);
+        }
+        if (!matchweeks.isFinalized(matchweekId)) revert MatchweekNotFinalized(matchweekId);
     }
 }

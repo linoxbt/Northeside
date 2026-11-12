@@ -37,9 +37,17 @@ contract Deploy {
         uint128 maxTotal;
     }
 
+    /// QUSDC on QIE mainnet, verified on-chain 2026-11-12 (symbol QUSDC, 6 decimals).
+    address internal constant MAINNET_QUSDC = 0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5;
+
     function run() external {
+        require(
+            block.chainid == 1990 || block.chainid == 1983 || block.chainid == 31337,
+            "unexpected chain: expected QIE mainnet (1990), QIE testnet (1983) or local (31337)"
+        );
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         Config memory c = _config();
+        if (block.chainid == 1990) require(c.qusdc == MAINNET_QUSDC, "QUSDC_ADDRESS is not mainnet QUSDC");
 
         vm.startBroadcast(deployerKey);
 
@@ -88,8 +96,17 @@ contract Deploy {
         c.qusdc = vm.envOr("QUSDC_ADDRESS", address(0));
         string memory challengers = vm.envOr("CHALLENGER_ADDRESSES", string(""));
         if (bytes(challengers).length > 0) c.challengers = vm.envAddress("CHALLENGER_ADDRESSES", ",");
-        c.maxCampaign = uint128(vm.envOr("MAX_CAMPAIGN_BUDGET", uint256(500e6)));
-        c.maxTotal = uint128(vm.envOr("MAX_TOTAL_LIABILITY", uint256(2_000e6)));
+        uint256 maxCampaign = vm.envOr("MAX_CAMPAIGN_BUDGET", uint256(500e6));
+        uint256 maxTotal = vm.envOr("MAX_TOTAL_LIABILITY", uint256(2_000e6));
+        require(
+            maxCampaign <= type(uint128).max && maxTotal <= type(uint128).max, "cap does not fit in uint128"
+        );
+        c.maxCampaign = uint128(maxCampaign);
+        c.maxTotal = uint128(maxTotal);
+        require(c.challengers.length > 0, "CHALLENGER_ADDRESSES is required");
+        for (uint256 i = 0; i < c.challengers.length; ++i) {
+            require(c.challengers[i] != address(0) && c.challengers[i] != c.results, "bad challenger");
+        }
         require(c.operator != c.results, "operator and results keys must differ");
         require(c.admin != c.operator && c.admin != c.results, "admin must be a separate cold key");
     }
