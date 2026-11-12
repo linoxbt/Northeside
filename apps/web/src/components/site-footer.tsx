@@ -33,8 +33,8 @@ function Status() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-white">
-      <div className="mx-auto grid max-w-[1280px] gap-12 px-5 py-16 sm:px-8 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
-        <div className="space-y-4">
+      <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-x-6 gap-y-10 px-5 py-16 sm:px-8 lg:grid-cols-[1.4fr_repeat(4,1fr)] lg:gap-12">
+        <div className="col-span-2 space-y-4 lg:col-span-1">
           <Logo />
           <p className="max-w-xs text-[15px] leading-6 text-muted">Football predictions, sealed onchain before kickoff. Free to play, built on QIE.</p>
           <Status />
