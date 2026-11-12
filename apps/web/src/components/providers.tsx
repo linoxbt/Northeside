@@ -1,6 +1,6 @@
 "use client";
 
-import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
+import { PrivyProvider, useLoginWithEmail, usePrivy, useWallets } from "@privy-io/react-auth";
 import { WagmiProvider as PrivyWagmiProvider, createConfig as createPrivyConfig } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
@@ -12,6 +12,9 @@ export interface AuthBridge {
   privyEnabled: boolean;
   ready: boolean;
   emailLogin(): void;
+  /** Inline email sign-in: send a one-time code, then submit it. */
+  sendEmailCode(email: string): Promise<void>;
+  loginWithEmailCode(code: string): Promise<void>;
   getAccessToken(): Promise<string | null>;
   isEmbedded(address?: string): boolean;
   logout(): Promise<void>;
@@ -22,6 +25,12 @@ const noop: AuthBridge = {
   privyEnabled: false,
   ready: true,
   emailLogin: () => {},
+  sendEmailCode: async () => {
+    throw new Error("Email sign-in is not available yet");
+  },
+  loginWithEmailCode: async () => {
+    throw new Error("Email sign-in is not available yet");
+  },
   getAccessToken: async () => null,
   isEmbedded: () => false,
   logout: async () => {},
@@ -34,18 +43,21 @@ export const useAuthBridge = () => useContext(AuthBridgeContext);
 function PrivyBridge({ children }: { children: ReactNode }) {
   const { ready, login, getAccessToken, logout, user } = usePrivy();
   const { wallets } = useWallets();
+  const { sendCode, loginWithCode } = useLoginWithEmail();
   const value = useMemo<AuthBridge>(
     () => ({
       privyEnabled: true,
       ready,
       emailLogin: () => login({ loginMethods: ["email"] }),
+      sendEmailCode: (email) => sendCode({ email }),
+      loginWithEmailCode: (code) => loginWithCode({ code }),
       getAccessToken: async () => (await getAccessToken()) ?? null,
       isEmbedded: (address) =>
         !!address && wallets.some((w) => w.walletClientType === "privy" && w.address.toLowerCase() === address.toLowerCase()),
       logout,
       email: user?.email?.address ?? null,
     }),
-    [ready, login, getAccessToken, logout, user, wallets],
+    [ready, login, getAccessToken, logout, user, wallets, sendCode, loginWithCode],
   );
   return <AuthBridgeContext.Provider value={value}>{children}</AuthBridgeContext.Provider>;
 }
