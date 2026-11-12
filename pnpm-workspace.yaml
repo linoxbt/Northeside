@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+  - contracts
+  - ops/*
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - "@foundry-rs/forge"
+  - "@foundry-rs/cast"
+  - "@foundry-rs/anvil"
