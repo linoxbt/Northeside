@@ -1,10 +1,13 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema";
 
 export * as schema from "./schema";
 export { FieldCrypto, safeEqual } from "./crypto";
 export type Db = PostgresJsDatabase<typeof schema>;
+/** Any Drizzle Postgres database over this schema (postgres-js in production, PGlite in tests). */
+export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 let cached: { url: string; db: Db; client: postgres.Sql } | undefined;
 
