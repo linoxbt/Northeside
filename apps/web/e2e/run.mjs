@@ -321,7 +321,7 @@ async function main() {
     await page.goto(`${APP}/host`);
     await signInWithQie(page);
     await page.getByRole("button", { name: "Create league" }).waitFor({ timeout: 30_000 });
-    await page.getByLabel("Name").fill("E2E League");
+    await page.getByLabel("Name", { exact: true }).fill("E2E League");
     await page.getByLabel(/Link:/).fill("e2e-league");
     await page.getByRole("button", { name: "Create league" }).click();
     await page.getByRole("link", { name: "/l/e2e-league" }).waitFor();
