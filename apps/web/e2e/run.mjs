@@ -161,13 +161,29 @@ async function walletContext(browser, keyIndex) {
   return { ctx, account };
 }
 
+/** Connect QIE Wallet and sign in. Auto sign-in may or may not fire; press "Sign in" if it remains. */
+async function signInWithQie(page) {
+  const panel = page.getByText("18+ only. Free to play");
+  const qie = page.getByRole("button", { name: "QIE Wallet" });
+  const sign = page.getByRole("button", { name: "Sign in", exact: true });
+  await panel.waitFor({ timeout: 30_000 });
+  if (await qie.isVisible().catch(() => false)) await qie.click({ timeout: 5_000 }).catch(() => {});
+  for (let i = 0; i < 60; i++) {
+    if (!(await panel.isVisible().catch(() => false))) return;
+    if (i % 6 === 5 && (await sign.isVisible().catch(() => false))) await sign.click({ timeout: 2_000 }).catch(() => {});
+    if (i % 6 === 5 && (await qie.isVisible().catch(() => false))) await qie.click({ timeout: 2_000 }).catch(() => {});
+    await sleep(500);
+  }
+  throw new Error("sign-in did not complete");
+}
+
 async function playerSeals(browser, keyIndex, name, picks) {
   const { ctx, account } = await walletContext(browser, keyIndex);
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${APP}/l/e2e-league`);
-  await page.getByRole("button", { name: "QIE Wallet" }).click();
+  await signInWithQie(page);
   await page.getByRole("button", { name: /^Join / }).waitFor({ timeout: 30_000 });
   await page.getByRole("button", { name: /^Join / }).click();
   await page.getByText("You are in").waitFor();
@@ -303,7 +319,7 @@ async function main() {
     const { ctx } = await walletContext(browser, 6);
     const page = await ctx.newPage();
     await page.goto(`${APP}/host`);
-    await page.getByRole("button", { name: "QIE Wallet" }).click();
+    await signInWithQie(page);
     await page.getByRole("button", { name: "Create league" }).waitFor({ timeout: 30_000 });
     await page.getByLabel("Name").fill("E2E League");
     await page.getByLabel(/Link:/).fill("e2e-league");
