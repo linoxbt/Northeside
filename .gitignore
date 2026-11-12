@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.vercel
+.turbo
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/31337/
+contracts/broadcast/*/1983/dry-run/
+contracts/broadcast/*/1990/dry-run/
+# playwright
+apps/web/test-results/
+apps/web/playwright-report/

@@ -1,0 +1,39 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+out = "out"
+libs = ["node_modules"]
+remappings = ["@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/"]
+solc_version = "0.8.28"
+# QIE mainnet (chain 1990) accepts PUSH0 but rejects TSTORE (probed 2026-11-12), so Shanghai, not Cancun.
+evm_version = "shanghai"
+optimizer = true
+optimizer_runs = 200
+bytecode_hash = "none"
+cbor_metadata = true
+
+fs_permissions = [{ access = "read-write", path = "./deployments" }, { access = "read", path = "./test/fixtures" }]
+
+[profile.default.fuzz]
+runs = 1000
+
+[profile.default.invariant]
+runs = 256
+depth = 64
+fail_on_revert = false
+
+[profile.ci.fuzz]
+runs = 5000
+
+[rpc_endpoints]
+qie = "${QIE_RPC_URL}"
+qie_testnet = "https://rpc1testnet.qie.digital/"
+qie_mainnet = "https://rpc1mainnet.qie.digital/"
+
+[fmt]
+line_length = 110
+
+[lint]
+# Lock times and dispute windows are hours long; validator timestamp drift (seconds) is irrelevant.
+exclude_lints = ["block-timestamp"]
