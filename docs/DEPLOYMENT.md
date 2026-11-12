@@ -44,6 +44,7 @@ variables are set on Netlify and the site runs in live mode.
 | `CRON_SECRET` (scheduled functions call the cron routes with it) | secret |
 | `ATTESTER_PRIVATE_KEY` — address `0x7705339BF84F843240e9F25d403bFF4ad5746ba4` | secret |
 | `DRIP_PRIVATE_KEY` — address `0x6d4b7841Bce434Ac6abBC9194b4e39ea6c8D86bd` | secret |
+| `NEXT_PUBLIC_PRIVY_APP_ID` / `PRIVY_APP_SECRET` (email sign-in; Privy app "Northeside", allowed domain northeside.netlify.app) | public / secret |
 | `VAPID_PRIVATE_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (web push) | secret / public |
 | `DRIP_AMOUNT_WEI` = 0.0006 QIEV3, `DRIP_DAILY_CAP_WEI` = 0.18 QIEV3 | plain (re-measure gas, adjust) |
 | `NEXT_PUBLIC_CHAIN_ID` / `CHAIN_ID` = 1990, `NEXT_PUBLIC_QUSDC_ADDRESS`, `NEXT_PUBLIC_SITE_URL`, `SEASON` | plain |
