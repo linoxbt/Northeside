@@ -14,6 +14,28 @@ holds. Nothing in this repo sends a mainnet transaction on its own.
 | One `commit()` costs about 70k gas | forge gas report; 0.00008 QIEV3 at the 1.125 gwei seen on 2026-11-12 |
 | Full player loop in a browser | `apps/web/e2e/run.mjs` (see "Testing" in the README) |
 
+## Mainnet deployment (2026-11-12)
+
+Audited first (`docs/AUDIT.md`). Deployed from `0x6e2E…6Bf4` (no role afterwards) at block
+11852159, source verified on the QIE explorer. Record: `contracts/deployments/1990.json`.
+
+| Contract | Address |
+| --- | --- |
+| `NorthesideMatchweeks` | `0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B` |
+| `HostRewards` | `0x8b2f938F40c6A6d62C79f82a1f2d8DB12b6D6246` |
+| `IdentityAdapter` | `0x7Bdef3854f9bC0B25271Cee756274fEb3d33eAA9` |
+| QUSDC (existing) | `0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5` |
+
+| Role | Address |
+| --- | --- |
+| Admin (`DEFAULT_ADMIN_ROLE` on all three), treasury, challenger | `0x747DF176962e1495355562Fe30b65F276f0B8404` (owner's wallet) |
+| Operator + pauser (`OPERATOR_PRIVATE_KEY` on Netlify) | `0x0dD4C52951E447b04C1f6C8Fe61E112D36859798` |
+| Results (`RESULTS_PRIVATE_KEY` on Netlify) | `0xADAabFbbfA07068F66EA96616469e6B6805C1c8b` |
+| Attester | `0x7705339BF84F843240e9F25d403bFF4ad5746ba4` |
+
+Launch caps: 500 QUSDC per campaign, 2,000 QUSDC total. The four `NEXT_PUBLIC_*` contract
+variables are set on Netlify and the site runs in live mode.
+
 ## Already configured on Netlify (site `northeside`)
 
 | Variable | Kind |
@@ -27,8 +49,8 @@ holds. Nothing in this repo sends a mainnet transaction on its own.
 | `NEXT_PUBLIC_CHAIN_ID` / `CHAIN_ID` = 1990, `NEXT_PUBLIC_QUSDC_ADDRESS`, `NEXT_PUBLIC_SITE_URL`, `SEASON` | plain |
 
 Use the attester address as `ATTESTER_ADDRESS` when deploying the contracts. Fund the drip address
-with QIEV3 (two days of the daily cap is enough). The site stays in preview mode until the three
-`NEXT_PUBLIC_*_ADDRESS` variables are set after the contract deploy.
+with QIEV3 (two days of the daily cap is enough). The `NEXT_PUBLIC_*` contract variables and the
+operator and results keys are set (see "Mainnet deployment").
 
 ## Needs you
 
