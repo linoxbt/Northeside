@@ -169,9 +169,10 @@ integration until a real verification has gone through on mainnet.
 | --- | --- |
 | 4-5 days before lock | `pnpm cli create-matchweek <id>` |
 | automatic after lock | reveal job (cron) verifies every payload |
-| after the last game | `pnpm cli fetch-results <id>` then `pnpm cli publish-results <id>` |
+| after the last game (+3h) | `pnpm cli fetch-results <id>` then `pnpm cli publish-results <id>`: reveals close, scores are computed, and results, reveals and scores roots go on-chain together |
 | providers disagree | investigate; if needed `pnpm cli publish-results <id> --override results.json --reason "…"` |
-| 12 hours later | `pnpm cli finalize <id>` (scores, finalizes, posts reward roots) |
+| 12 hours later | `pnpm cli finalize <id>` (confirms the proposed roots, stores ranks, posts reward roots; hosts can claim 24 hours after a root is posted) |
+| wrong reward root, nothing claimed yet | `replaceRoot` on `HostRewards` (operator key) restarts the 24-hour delay |
 | sponsor signs | `pnpm cli create-campaign …` then the sponsor funds (or `fund-campaign` with their key) |
 | emergency | `pnpm cli pause matchweeks` / `pnpm cli pause rewards` |
 

@@ -156,6 +156,7 @@ contract HostRewardsInvariantTest is HostRewardsFixture {
     function test_handler_everyPathLands() public {
         handler.createAndFund(100e6, 500);
         handler.postRoot(0, 10e6, 20e6, 5e6, false);
+        handler.warp(1 days); // CLAIM_DELAY review window
         handler.claim(0);
         handler.warp(3 days - 1);
         for (uint256 i = 0; i < 4; ++i) {

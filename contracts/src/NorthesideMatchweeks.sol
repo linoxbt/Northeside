@@ -14,8 +14,10 @@ import {CommitmentLib} from "./libraries/CommitmentLib.sol";
 ///      - commit only while Open and block.timestamp < lockTime; a new commit replaces the old one
 ///        and bumps the version (the event log keeps every version);
 ///      - fixturesRoot, lockTime and scoringRulesHash never change after creation;
-///      - proposeResults opens a fixed dispute window; a challenge sends the matchweek back until a
-///        fresh proposal; finalize is final;
+///      - results can be proposed only after resultsNotBefore (last kickoff plus a buffer);
+///      - results, reveals and scores roots are proposed together and are all open to challenge for
+///        the whole dispute window; a challenge sends the matchweek back until a fresh proposal;
+///        finalize takes no data and is final;
 ///      - the contract never holds funds.
 contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -49,12 +51,15 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
         if (admin == address(0) || operator == address(0) || resultsPublisher == address(0)) {
             revert InvalidParams();
         }
+        // A dispute window with nobody able to dispute is no safeguard (audit L-2).
+        if (challengers.length == 0) revert InvalidParams();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(OPERATOR_ROLE, operator);
         _grantRole(RESULTS_ROLE, resultsPublisher);
         _grantRole(PAUSER_ROLE, admin);
         if (pauser != address(0)) _grantRole(PAUSER_ROLE, pauser);
         for (uint256 i = 0; i < challengers.length; ++i) {
+            if (challengers[i] == address(0) || challengers[i] == resultsPublisher) revert InvalidParams();
             _grantRole(CHALLENGER_ROLE, challengers[i]);
         }
     }
@@ -66,23 +71,25 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
         uint32 id,
         bytes32 fixturesRoot,
         uint64 lockTime,
+        uint64 resultsNotBefore,
         uint32 fixtureCount,
         bytes32 scoringRulesHash
     ) external onlyRole(OPERATOR_ROLE) {
         if (_matchweeks[id].status != Status.None) revert MatchweekExists(id);
         if (
             fixturesRoot == bytes32(0) || scoringRulesHash == bytes32(0) || lockTime <= block.timestamp
-                || fixtureCount == 0 || fixtureCount > MAX_FIXTURES
+                || resultsNotBefore < lockTime || fixtureCount == 0 || fixtureCount > MAX_FIXTURES
         ) revert InvalidParams();
 
         Matchweek storage mw = _matchweeks[id];
         mw.fixturesRoot = fixturesRoot;
         mw.scoringRulesHash = scoringRulesHash;
         mw.lockTime = lockTime;
+        mw.resultsNotBefore = resultsNotBefore;
         mw.fixtureCount = fixtureCount;
         mw.status = Status.Open;
 
-        emit MatchweekCreated(id, fixturesRoot, lockTime, fixtureCount, scoringRulesHash);
+        emit MatchweekCreated(id, fixturesRoot, lockTime, resultsNotBefore, fixtureCount, scoringRulesHash);
     }
 
     // ---------------------------------------------------------------- players
@@ -110,21 +117,30 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
     // ---------------------------------------------------------------- results
 
     /// @inheritdoc INorthesideMatchweeks
-    function proposeResults(uint32 id, bytes32 resultsRoot, string calldata evidenceURI)
-        external
-        onlyRole(RESULTS_ROLE)
-    {
+    function proposeResults(
+        uint32 id,
+        bytes32 resultsRoot,
+        bytes32 revealsRoot,
+        bytes32 scoresRoot,
+        string calldata evidenceURI
+    ) external onlyRole(RESULTS_ROLE) {
         Matchweek storage mw = _matchweeks[id];
         if (mw.status != Status.Open && mw.status != Status.Challenged) revert WrongStatus(id, mw.status);
         if (block.timestamp < mw.lockTime) revert NotLocked(id);
-        if (resultsRoot == bytes32(0) || bytes(evidenceURI).length == 0) revert InvalidParams();
+        if (block.timestamp < mw.resultsNotBefore) revert TooEarly(id);
+        if (
+            resultsRoot == bytes32(0) || revealsRoot == bytes32(0) || scoresRoot == bytes32(0)
+                || bytes(evidenceURI).length == 0
+        ) revert InvalidParams();
 
         uint64 disputeEnds = uint64(block.timestamp) + DISPUTE_WINDOW;
         mw.resultsRoot = resultsRoot;
+        mw.revealsRoot = revealsRoot;
+        mw.scoresRoot = scoresRoot;
         mw.disputeEnds = disputeEnds;
         mw.status = Status.ResultsProposed;
 
-        emit ResultsProposed(id, resultsRoot, evidenceURI, disputeEnds);
+        emit ResultsProposed(id, resultsRoot, revealsRoot, scoresRoot, evidenceURI, disputeEnds);
     }
 
     /// @inheritdoc INorthesideMatchweeks
@@ -140,17 +156,15 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
     }
 
     /// @inheritdoc INorthesideMatchweeks
-    function finalize(uint32 id, bytes32 revealsRoot, bytes32 scoresRoot) external onlyRole(RESULTS_ROLE) {
+    /// @dev Takes no data: it can only confirm the roots that sat through the dispute window.
+    function finalize(uint32 id) external onlyRole(RESULTS_ROLE) {
         Matchweek storage mw = _matchweeks[id];
         if (mw.status != Status.ResultsProposed) revert WrongStatus(id, mw.status);
         if (block.timestamp < mw.disputeEnds) revert WindowOpen(id);
-        if (revealsRoot == bytes32(0) || scoresRoot == bytes32(0)) revert InvalidParams();
 
-        mw.revealsRoot = revealsRoot;
-        mw.scoresRoot = scoresRoot;
         mw.status = Status.Finalized;
 
-        emit Finalized(id, mw.resultsRoot, revealsRoot, scoresRoot);
+        emit Finalized(id, mw.resultsRoot, mw.revealsRoot, mw.scoresRoot);
     }
 
     // ---------------------------------------------------------------- emergency

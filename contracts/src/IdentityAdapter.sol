@@ -29,6 +29,7 @@ contract IdentityAdapter is AccessControl, EIP712 {
 
     event Verified(address indexed wallet, bytes32 indexed personHash, address indexed attester);
     event Revoked(address indexed wallet, bytes32 indexed personHash, address indexed by);
+    event NonceInvalidated(address indexed wallet, uint256 newNonce, address indexed by);
 
     error InvalidParams();
     error AttestationExpired();
@@ -78,6 +79,19 @@ contract IdentityAdapter is AccessControl, EIP712 {
         if (remaining == 0) --personCount;
 
         emit Revoked(wallet, personHash, msg.sender);
+    }
+
+    /// @notice Cancel any signed-but-unsubmitted attestation for `wallet` (audit L-5), e.g. when fraud
+    ///         is found after signing. Works whether or not the wallet is linked.
+    function invalidateNonce(address wallet) external {
+        if (!hasRole(ATTESTER_ROLE, msg.sender) && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert AccessControlUnauthorizedAccount(msg.sender, ATTESTER_ROLE);
+        }
+        uint256 nonce;
+        unchecked {
+            nonce = ++nonces[wallet];
+        }
+        emit NonceInvalidated(wallet, nonce, msg.sender);
     }
 
     function isVerified(address wallet) external view returns (bool) {

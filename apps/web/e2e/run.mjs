@@ -369,6 +369,9 @@ async function main() {
   });
   const fr = await cli(env, "fetch-results", "11");
   check(fr.agreed === true, "both providers agree (including a postponed game)");
+  // On-chain, results open at the last kickoff (+26h) plus the 3h buffer.
+  await rpc("evm_increaseTime", [30 * 3600]);
+  await rpc("evm_mine");
   await cli(env, "publish-results", "11");
   await rpc("evm_increaseTime", [12 * 3600 + 60]);
   await rpc("evm_mine");

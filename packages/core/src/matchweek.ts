@@ -117,6 +117,9 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
   if (rows.length === 0) throw new Error(`matchweek ${id} has no fixtures`);
   const tree = buildFixturesTree(fixtureLeaves(id, rows));
   const lockTime = BigInt(Math.min(...rows.map((r) => r.kickoff.getTime())) / 1000);
+  // No results can be proposed on-chain before the last kickoff plus a buffer (audit L-1).
+  const buffer = BigInt(process.env.RESULTS_BUFFER_SECONDS ?? 3 * 3600);
+  const resultsNotBefore = BigInt(Math.max(...rows.map((r) => r.kickoff.getTime())) / 1000) + buffer;
 
   const chain = await onChainMatchweek(ctx, id);
   let txHash: Hex | null = null;
@@ -134,7 +137,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
       address: ctx.deployment.matchweeks,
       abi: matchweeksAbi,
       functionName: "createMatchweek",
-      args: [id, tree.root, lockTime, rows.length, RULES_V1_HASH],
+      args: [id, tree.root, lockTime, resultsNotBefore, rows.length, RULES_V1_HASH],
     });
     txHash = await operator.writeContract(request);
     await confirm(ctx, txHash, `createMatchweek(${id})`);
@@ -152,7 +155,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
     })
     .where(eq(schema.matchweeks.id, id));
   await audit(ctx, "operator", "create-matchweek", { id, fixturesRoot: tree.root, lockTime, mwStatus: mw.status }, txHash ?? undefined);
-  return { id, fixturesRoot: tree.root, lockTime, txHash };
+  return { id, fixturesRoot: tree.root, lockTime, resultsNotBefore, txHash };
 }
 
 // ---------------------------------------------------------------- reveal
@@ -246,6 +249,25 @@ async function buildRevealsFromDb(ctx: CoreContext, id: number) {
   );
 }
 
+/**
+ * Score every valid reveal against `results` and build the reveals and scores trees. Both roots
+ * are proposed with the results and sit through the dispute window (audit M-2).
+ */
+async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResult[]) {
+  const reveals = await validReveals(ctx, id);
+  const scored = reveals.map(({ row, payload }) => ({
+    id: row.wallet,
+    predictionId: row.id,
+    player: getAddress(row.wallet),
+    ...scorePicks(payload, results),
+  }));
+  const scoresTree = buildScoresTree(
+    scored.map((s) => ({ player: s.player, matchweekId: id, points: s.points, exactScores: s.exactScores })),
+  );
+  const revealsTree = await buildRevealsFromDb(ctx, id);
+  return { scored, ranked: rank(scored), scoresTree, revealsTree };
+}
+
 // ---------------------------------------------------------------- results
 
 /** FR-32: fetch both providers and store the comparison. Publishing reads this snapshot. */
@@ -316,6 +338,14 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
       status: r.status === "played" ? RESULT_STATUS.played : RESULT_STATUS.void,
     })),
   );
+  // Reveals close when results are proposed: decrypt everything stored, then fix the scores.
+  await revealMatchweek(ctx, id);
+  const { scoresTree, revealsTree } = await scoreMatchweek(
+    ctx,
+    id,
+    results.map((r) => ({ index: r.index, homeGoals: r.homeGoals, awayGoals: r.awayGoals, status: r.status })),
+  );
+
   const evidence = evidenceDocument(id, check, results, override);
   // Hash and serve this exact text (jsonb would reorder keys and break the hash).
   const evidenceText = JSON.stringify(evidence, bigintReplacer);
@@ -323,16 +353,28 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
   const evidenceUri = `${ctx.siteUrl}/api/v1/proof/${id}/evidence#keccak256=${evidenceHash}`;
 
   const chain = await onChainMatchweek(ctx, id);
+  const nowSec = BigInt(Math.floor((await chainNow(ctx)).getTime() / 1000));
+  if (chain.status === ChainStatus.Open && nowSec < chain.resultsNotBefore) {
+    throw new Error(
+      `matchweek ${id}: results open on-chain at ${new Date(Number(chain.resultsNotBefore) * 1000).toISOString()} (last kickoff + buffer)`,
+    );
+  }
   let txHash: Hex | null = null;
-  if (chain.status === ChainStatus.ResultsProposed && chain.resultsRoot.toLowerCase() === tree.root.toLowerCase()) {
-    ctx.log.info("results already proposed with this root", { id });
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  if (
+    chain.status === ChainStatus.ResultsProposed &&
+    same(chain.resultsRoot, tree.root) &&
+    same(chain.revealsRoot, revealsTree.root) &&
+    same(chain.scoresRoot, scoresTree.root)
+  ) {
+    ctx.log.info("results already proposed with these roots", { id });
   } else {
     const { request } = await ctx.publicClient.simulateContract({
       account: signer.account,
       address: ctx.deployment.matchweeks,
       abi: matchweeksAbi,
       functionName: "proposeResults",
-      args: [id, tree.root, evidenceUri],
+      args: [id, tree.root, revealsTree.root, scoresTree.root, evidenceUri],
     });
     txHash = await signer.writeContract(request);
     await confirm(ctx, txHash, `proposeResults(${id})`);
@@ -352,26 +394,37 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
         status: "results_proposed",
         resultsRoot: tree.root,
         resultsTree: toJson({ tree: tree.dump(), evidenceText }),
+        revealsRoot: revealsTree.root,
+        revealsTree: toJson(revealsTree.dump()),
+        scoresRoot: scoresTree.root,
+        scoresTree: toJson(scoresTree.dump()),
         evidenceUri,
         overrideReason: override?.reason ?? null,
         disputeEnds: new Date(Number(after.disputeEnds) * 1000),
       })
       .where(eq(schema.matchweeks.id, id));
   });
-  await audit(ctx, "results", "publish-results", { id, resultsRoot: tree.root, evidenceHash, override: override?.reason }, txHash ?? undefined);
-  return { id, resultsRoot: tree.root, evidenceUri, txHash };
+  await audit(
+    ctx,
+    "results",
+    "publish-results",
+    { id, resultsRoot: tree.root, revealsRoot: revealsTree.root, scoresRoot: scoresTree.root, evidenceHash, override: override?.reason },
+    txHash ?? undefined,
+  );
+  return { id, resultsRoot: tree.root, revealsRoot: revealsTree.root, scoresRoot: scoresTree.root, evidenceUri, txHash };
 }
 
 // ---------------------------------------------------------------- finalize and score
 
-/** Score every valid reveal, finalize on-chain with the reveals and scores roots. */
+/**
+ * After the dispute window, confirm the proposed roots on-chain and store points and ranks. The
+ * scores are recomputed from the database and must match what was proposed; if they do not,
+ * publish the results again (which reproposes all three roots) instead of finalizing.
+ */
 export async function finalizeAndScore(ctx: CoreContext, id: number) {
   const signer = need(ctx.results, "RESULTS_PRIVATE_KEY");
   const chain = await onChainMatchweek(ctx, id);
   if (chain.status === ChainStatus.Challenged) throw new Error(`matchweek ${id} is challenged; publish corrected results first`);
-
-  // Make sure every stored payload has been revealed (idempotent).
-  await revealMatchweek(ctx, id);
 
   const fixtures = await getFixtures(ctx, id);
   if (fixtures.some((f) => f.status === "scheduled")) throw new Error(`matchweek ${id} has fixtures without results`);
@@ -381,27 +434,23 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
     awayGoals: f.awayGoals ?? 0,
     status: f.status === "void" ? "void" : "played",
   }));
+  const { scored, ranked, scoresTree, revealsTree } = await scoreMatchweek(ctx, id, results);
 
-  const reveals = await validReveals(ctx, id);
-  const scored = reveals.map(({ row, payload }) => ({
-    id: row.wallet,
-    predictionId: row.id,
-    player: getAddress(row.wallet),
-    ...scorePicks(payload, results),
-  }));
-  const ranked = rank(scored);
-  const scoresTree = buildScoresTree(
-    scored.map((s) => ({ player: s.player, matchweekId: id, points: s.points, exactScores: s.exactScores })),
-  );
-  const revealsTree = await buildRevealsFromDb(ctx, id);
+  if (chain.status !== ChainStatus.ResultsProposed && chain.status !== ChainStatus.Finalized) {
+    throw new Error(`matchweek ${id} has no proposed results`);
+  }
+  if (
+    chain.revealsRoot.toLowerCase() !== revealsTree.root.toLowerCase() ||
+    chain.scoresRoot.toLowerCase() !== scoresTree.root.toLowerCase()
+  ) {
+    throw new Error(
+      `matchweek ${id}: recomputed reveals/scores roots differ from the ones on-chain; ` +
+        (chain.status === ChainStatus.Finalized ? "the chain wins, investigate the database" : "publish the results again"),
+    );
+  }
 
   let txHash: Hex | null = null;
-  if (chain.status === ChainStatus.Finalized) {
-    if (chain.scoresRoot.toLowerCase() !== scoresTree.root.toLowerCase()) {
-      throw new Error(`matchweek ${id} is finalized on-chain with a different scores root`);
-    }
-  } else {
-    if (chain.status !== ChainStatus.ResultsProposed) throw new Error(`matchweek ${id} has no proposed results`);
+  if (chain.status === ChainStatus.ResultsProposed) {
     if (BigInt(Math.floor((await chainNow(ctx)).getTime() / 1000)) < chain.disputeEnds) {
       throw new Error(`matchweek ${id}: dispute window open until ${new Date(Number(chain.disputeEnds) * 1000).toISOString()}`);
     }
@@ -410,7 +459,7 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
       address: ctx.deployment.matchweeks,
       abi: matchweeksAbi,
       functionName: "finalize",
-      args: [id, revealsTree.root, scoresTree.root],
+      args: [id],
     });
     txHash = await signer.writeContract(request);
     await confirm(ctx, txHash, `finalize(${id})`);

@@ -54,9 +54,11 @@ if the backend is down; the browser keeps the payload and syncs it later.
 
 | Contract | What it enforces |
 | --- | --- |
-| `NorthesideMatchweeks` | commits only before lock; fixtures root, lock time and scoring-rules hash immutable; results → 12h challenge window → final; holds no funds |
-| `HostRewards` | sponsor escrow in QUSDC; fee at funding (≤10%); one Merkle root per campaign and finalized matchweek; claims can never exceed what was posted; refunds after expiry (not pausable); launch caps 500 / 2,000 QUSDC |
-| `IdentityAdapter` | EIP-712 attestations from the attester key, submitted from the player's own wallet; ≤3 wallets per person; per-wallet nonces |
+| `NorthesideMatchweeks` | commits only before lock; fixtures root, lock time and scoring-rules hash immutable; results, reveals and scores roots proposed together, no earlier than last kickoff + buffer → 12h challenge window → final; holds no funds |
+| `HostRewards` | sponsor escrow in QUSDC; fee at funding (≤10%); one Merkle root per campaign and finalized matchweek; claims open 24h after a root is posted and can never exceed it; refunds after expiry (not pausable, to a sponsor-chosen address); a pause extends the claim period; launch caps 500 / 2,000 QUSDC |
+| `IdentityAdapter` | EIP-712 attestations from the attester key, submitted from the player's own wallet; ≤3 wallets per person; per-wallet nonces that can be invalidated |
+
+Pre-mainnet audit and fixes: [docs/AUDIT.md](docs/AUDIT.md).
 
 PrizeVault (player prizes) is designed but not deployed: it waits for a promotional-competition permit.
 
@@ -87,7 +89,7 @@ packages/db         Drizzle schema, migrations (RLS on), field encryption
 packages/core       services shared by web jobs and the CLI: indexer, pipeline, rewards, drip, identity
 apps/web            Next.js app: pages, /api/v1, cron jobs, share cards, PWA
 ops/cli             operator CLI
-docs/               commitments, deployment runbook, security
+docs/               commitments, deployment runbook, security, contract audit
 ```
 
 ## Development

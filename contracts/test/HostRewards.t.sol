@@ -38,7 +38,9 @@ abstract contract HostRewardsFixture is Base {
 
     function setUp() public virtual {
         vm.warp(1_763_000_000);
-        mw = new NorthesideMatchweeks(admin, operator, resultsKey, pauser, new address[](0));
+        address[] memory challengers = new address[](1);
+        challengers[0] = makeAddr("challenger");
+        mw = new NorthesideMatchweeks(admin, operator, resultsKey, pauser, challengers);
         qusdc = new MockERC20();
         rewards = new HostRewards(
             admin, operator, pauser, IERC20(address(qusdc)), mw, treasury, CAP_CAMPAIGN, CAP_TOTAL
@@ -47,7 +49,14 @@ abstract contract HostRewardsFixture is Base {
         _createAndFinalize(11);
         _createAndFinalize(12);
         vm.prank(operator);
-        mw.createMatchweek(13, keccak256("f13"), uint64(block.timestamp + 1 days), 10, keccak256("rules"));
+        mw.createMatchweek(
+            13,
+            keccak256("f13"),
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 1 days),
+            10,
+            keccak256("rules")
+        );
 
         expiry = uint64(block.timestamp + 30 days);
         qusdc.mint(sponsor, 10_000 * ONE);
@@ -56,14 +65,21 @@ abstract contract HostRewardsFixture is Base {
     function _createAndFinalize(uint32 id) internal {
         vm.prank(operator);
         mw.createMatchweek(
-            id, keccak256(abi.encode("f", id)), uint64(block.timestamp + 1 hours), 10, keccak256("rules")
+            id,
+            keccak256(abi.encode("f", id)),
+            uint64(block.timestamp + 1 hours),
+            uint64(block.timestamp + 1 hours),
+            10,
+            keccak256("rules")
         );
         vm.warp(block.timestamp + 1 hours);
         vm.prank(resultsKey);
-        mw.proposeResults(id, keccak256(abi.encode("r", id)), "ipfs://e");
+        mw.proposeResults(
+            id, keccak256(abi.encode("r", id)), keccak256("rev"), keccak256("scores"), "ipfs://e"
+        );
         vm.warp(block.timestamp + 12 hours);
         vm.prank(resultsKey);
-        mw.finalize(id, keccak256("rev"), keccak256("scores"));
+        mw.finalize(id);
     }
 
     function _terms(uint128 gross, uint16 feeBps) internal view returns (HostRewards.Terms memory t) {
@@ -316,6 +332,7 @@ contract HostRewardsTest is HostRewardsFixture {
         vm.expectRevert(abi.encodeWithSelector(HostRewards.MatchweekNotFinalized.selector, 13));
         vm.prank(operator);
         rewards.postRoot(id, 13, t.root, t.total, "ipfs://report");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
     }
 
     function test_postRoot_requiresRange() public {
@@ -323,6 +340,7 @@ contract HostRewardsTest is HostRewardsFixture {
         vm.expectRevert(abi.encodeWithSelector(HostRewards.MatchweekOutOfRange.selector, 10));
         vm.prank(operator);
         rewards.postRoot(id, 10, keccak256("r"), ONE, "ipfs://report");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
     }
 
     function test_postRoot_oncePerMatchweek() public {
@@ -330,6 +348,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 5 * ONE, 5 * ONE);
         vm.startPrank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://report");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         vm.expectRevert(abi.encodeWithSelector(HostRewards.RootExists.selector, id, 11));
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://report");
         vm.stopPrank();
@@ -339,10 +358,12 @@ contract HostRewardsTest is HostRewardsFixture {
         uint256 id = _createFunded(100 * ONE, 0);
         vm.startPrank(operator);
         rewards.postRoot(id, 11, keccak256("a"), 60 * ONE, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         vm.expectRevert(HostRewards.OverBudget.selector);
         rewards.postRoot(id, 12, keccak256("b"), 41 * ONE, "ipfs://r");
         rewards.postRoot(id, 12, keccak256("b"), 40 * ONE, "ipfs://r"); // exactly the rest
         vm.stopPrank();
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         assertEq(rewards.campaign(id).allocated, 100 * ONE, "fully allocated");
     }
 
@@ -352,6 +373,7 @@ contract HostRewardsTest is HostRewardsFixture {
         vm.expectRevert(abi.encodeWithSelector(HostRewards.Expired.selector, id));
         vm.prank(operator);
         rewards.postRoot(id, 11, keccak256("a"), ONE, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
     }
 
     function test_postRoot_onlyOperator() public {
@@ -363,6 +385,7 @@ contract HostRewardsTest is HostRewardsFixture {
         );
         vm.prank(sponsor);
         rewards.postRoot(id, 11, keccak256("a"), ONE, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
     }
 
     // ------------------------------------------------------------ claim
@@ -372,6 +395,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://report");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
 
         // anyone may submit; money goes to the host
         vm.expectEmit(true, true, true, true, address(rewards));
@@ -397,6 +421,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://report");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         bytes32[] memory p = Merkle.proof(t.leaves, 0);
 
         vm.expectRevert(HostRewards.InvalidProof.selector);
@@ -418,8 +443,10 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id1, 11, 7 * ONE, 3 * ONE);
         vm.startPrank(operator);
         rewards.postRoot(id1, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         rewards.postRoot(id2, 11, t.root, t.total, "ipfs://r"); // same root reused on purpose
         vm.stopPrank();
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         // campaign id is inside the leaf, so campaign 1's leaf does not verify for campaign 2
         vm.expectRevert(HostRewards.InvalidProof.selector);
         rewards.claim(id2, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
@@ -431,6 +458,7 @@ contract HostRewardsTest is HostRewardsFixture {
         // operator posts a total lower than the leaves add up to (a bug or a bad key)
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, 8 * ONE, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
         vm.expectRevert(HostRewards.OverBudget.selector);
         rewards.claim(id, 11, hostB, 3 * ONE, 10, Merkle.proof(t.leaves, 1));
@@ -441,6 +469,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         vm.prank(pauser);
         rewards.pause();
         vm.expectRevert(Pausable.EnforcedPause.selector);
@@ -452,6 +481,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         vm.warp(uint256(expiry) + rewards.CLAIM_PERIOD());
         vm.expectRevert(abi.encodeWithSelector(HostRewards.ClaimPeriodOver.selector, id));
         rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
@@ -475,6 +505,7 @@ contract HostRewardsTest is HostRewardsFixture {
         leaves[1] = r2.leafHash(id, 11, hostB, 3 * ONE, 10);
         vm.prank(operator);
         r2.postRoot(id, 11, Merkle.root(leaves), 10 * ONE, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
 
         bytes32[] memory proofB = Merkle.proof(leaves, 1);
         evil.arm(
@@ -498,6 +529,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
 
         uint256 sponsorBefore = qusdc.balanceOf(sponsor);
@@ -528,6 +560,7 @@ contract HostRewardsTest is HostRewardsFixture {
         Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
         vm.prank(operator);
         rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + 1 days); // CLAIM_DELAY review window
         vm.warp(uint256(expiry) + rewards.CLAIM_PERIOD());
         assertEq(rewards.refund(id), 100 * ONE, "everything unclaimed returns");
         vm.expectRevert(
@@ -542,6 +575,164 @@ contract HostRewardsTest is HostRewardsFixture {
         rewards.pause();
         vm.warp(expiry);
         assertEq(rewards.refund(id), 100 * ONE, "pauser cannot trap sponsor funds");
+    }
+
+    // ------------------------------------------------------------ audit fixes
+
+    /// @dev Informational: a posted root sits for CLAIM_DELAY before anyone can claim against it.
+    function test_claim_waitsForReviewDelay() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + rewards.CLAIM_DELAY() - 1);
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.ClaimNotOpen.selector, id, 11));
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
+        vm.warp(block.timestamp + 1);
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
+        assertEq(qusdc.balanceOf(hostA), 7 * ONE, "paid once open");
+    }
+
+    /// @dev Audit M-1: a pause cannot run out a host's claim period and hand the money back.
+    function test_pause_extendsClaimDeadline() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        uint256 deadline = rewards.claimDeadline(id);
+        assertEq(deadline, uint256(expiry) + rewards.CLAIM_PERIOD(), "base deadline");
+
+        // pause just before expiry and keep it paused past the original deadline
+        uint256 pausedFrom = uint256(expiry) - 1 hours;
+        vm.warp(pausedFrom);
+        vm.prank(pauser);
+        rewards.pause();
+        vm.warp(deadline + 10 days);
+        uint256 pausedFor = block.timestamp - pausedFrom;
+        assertEq(rewards.claimDeadline(id), deadline + pausedFor, "deadline grows by the whole pause");
+
+        // a refund now may only return unallocated money: the 10 QUSDC for hosts stays put
+        assertEq(rewards.refund(id), 90 * ONE, "only unallocated refunded");
+        assertEq(
+            uint256(rewards.campaign(id).status), uint256(HostRewards.CampaignStatus.Active), "still open"
+        );
+
+        vm.prank(pauser);
+        rewards.unpause();
+        uint256 extended = rewards.claimDeadline(id);
+        assertEq(extended, deadline + pausedFor, "extension kept after unpause");
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
+        assertEq(qusdc.balanceOf(hostA), 7 * ONE, "host still paid after the pause");
+
+        vm.warp(extended);
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.ClaimPeriodOver.selector, id));
+        rewards.claim(id, 11, hostB, 3 * ONE, 10, Merkle.proof(t.leaves, 1));
+        assertEq(rewards.refund(id), 3 * ONE, "unclaimed returns at the extended deadline");
+    }
+
+    /// @dev A campaign funded after a pause only gets pause time that happens after its funding.
+    function test_pause_beforeFundingDoesNotExtend() public {
+        vm.prank(pauser);
+        rewards.pause();
+        vm.warp(block.timestamp + 5 days);
+        vm.prank(pauser);
+        rewards.unpause();
+        uint256 id = _createFunded(100 * ONE, 0);
+        assertEq(
+            rewards.claimDeadline(id), uint256(expiry) + rewards.CLAIM_PERIOD(), "no inherited extension"
+        );
+    }
+
+    /// @dev Audit L-3: a wrong root can be corrected before anything is claimed from it.
+    function test_replaceRoot_beforeClaims() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory bad = _twoHostTree(id, 11, 70 * ONE, 3 * ONE);
+        Tree memory good = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, bad.root, bad.total, "ipfs://bad");
+        assertEq(rewards.campaign(id).allocated, 73 * ONE, "bad allocation");
+
+        vm.warp(block.timestamp + 12 hours);
+        vm.expectEmit(true, true, true, true, address(rewards));
+        emit HostRewards.RootReplaced(id, 11, bad.root, good.root, good.total, "ipfs://good");
+        vm.prank(operator);
+        rewards.replaceRoot(id, 11, good.root, good.total, "ipfs://good");
+        assertEq(rewards.campaign(id).allocated, 10 * ONE, "allocation corrected");
+        assertEq(rewards.allocatedFor(id, 11), 10 * ONE, "matchweek allocation corrected");
+
+        // the review delay restarts
+        vm.warp(block.timestamp + 12 hours);
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.ClaimNotOpen.selector, id, 11));
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(good.leaves, 0));
+        vm.warp(block.timestamp + 12 hours);
+
+        // the old leaf is dead, the new one pays
+        vm.expectRevert(HostRewards.InvalidProof.selector);
+        rewards.claim(id, 11, hostA, 70 * ONE, 25, Merkle.proof(bad.leaves, 0));
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(good.leaves, 0));
+        assertEq(qusdc.balanceOf(hostA), 7 * ONE, "paid from the corrected root");
+    }
+
+    function test_replaceRoot_blockedAfterAClaim() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        Tree memory other = _twoHostTree(id, 11, 6 * ONE, 4 * ONE);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + 1 days);
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.AlreadyClaimedFrom.selector, id, 11));
+        vm.prank(operator);
+        rewards.replaceRoot(id, 11, other.root, other.total, "ipfs://other");
+    }
+
+    function test_replaceRoot_guards() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        Tree memory other = _twoHostTree(id, 11, 6 * ONE, 4 * ONE);
+        vm.startPrank(operator);
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.NoRoot.selector, id, 11));
+        rewards.replaceRoot(id, 11, other.root, other.total, "ipfs://other");
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.expectRevert(HostRewards.InvalidParams.selector);
+        rewards.replaceRoot(id, 11, t.root, t.total, "ipfs://same");
+        vm.expectRevert(HostRewards.OverBudget.selector);
+        rewards.replaceRoot(id, 11, other.root, 101 * ONE, "ipfs://other");
+        vm.stopPrank();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, rewards.OPERATOR_ROLE()
+            )
+        );
+        vm.prank(stranger);
+        rewards.replaceRoot(id, 11, other.root, other.total, "ipfs://other");
+    }
+
+    /// @dev Audit L-4: the sponsor can redirect refunds, nobody else can.
+    function test_setRefundRecipient() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        address safe = makeAddr("sponsorSafe");
+        vm.expectRevert(HostRewards.NotSponsor.selector);
+        vm.prank(stranger);
+        rewards.setRefundRecipient(id, stranger);
+        vm.expectRevert(HostRewards.NotSponsor.selector);
+        vm.prank(operator);
+        rewards.setRefundRecipient(id, operator);
+        vm.expectRevert(HostRewards.InvalidParams.selector);
+        vm.prank(sponsor);
+        rewards.setRefundRecipient(id, address(0));
+
+        vm.expectEmit(true, true, true, true, address(rewards));
+        emit HostRewards.RefundRecipientSet(id, safe);
+        vm.prank(sponsor);
+        rewards.setRefundRecipient(id, safe);
+
+        uint256 sponsorBefore = qusdc.balanceOf(sponsor);
+        vm.warp(expiry);
+        vm.prank(stranger);
+        rewards.refund(id);
+        assertEq(qusdc.balanceOf(safe), 100 * ONE, "refund to the chosen recipient");
+        assertEq(qusdc.balanceOf(sponsor), sponsorBefore, "not to the sponsor");
     }
 
     // ------------------------------------------------------------ admin
