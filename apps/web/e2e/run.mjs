@@ -439,7 +439,9 @@ async function main() {
     if (r.url().endsWith(".js")) jsBytes += Number(r.headers()["content-length"] ?? (await r.body().catch(() => Buffer.alloc(0))).length);
   });
   await p2.goto(`${APP}/play`, { waitUntil: "networkidle" });
-  log(`player route JS transferred: ${(jsBytes / 1024).toFixed(0)} KB`);
+  check(new URL(p2.url()).pathname === "/sign-in" && new URL(p2.url()).searchParams.get("next") === "/play", "signed-out Play redirects to sign-in and back");
+  check(await p2.getByRole("button", { name: /Continue with/ }).first().isVisible(), "sign-in page offers the wallet");
+  log(`sign-in route JS transferred: ${(jsBytes / 1024).toFixed(0)} KB`);
 
   await browser.close();
   log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`);
