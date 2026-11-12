@@ -16,6 +16,7 @@ contract HostRewardsHandler {
     address[3] internal hosts;
 
     uint256[] public campaignIds;
+
     // pending claims: (campaign, matchweek, host index, amount, players, leaves)
     struct Pending {
         uint256 id;
@@ -141,7 +142,9 @@ contract HostRewardsInvariantTest is HostRewardsFixture {
         uint256 n = rewards.campaignCount();
         for (uint256 id = 1; id <= n; ++id) {
             HostRewards.Campaign memory c = rewards.campaign(id);
-            if (c.status == HostRewards.CampaignStatus.Active || c.status == HostRewards.CampaignStatus.Closed) {
+            if (
+                c.status == HostRewards.CampaignStatus.Active || c.status == HostRewards.CampaignStatus.Closed
+            ) {
                 owed += c.budget - c.claimed - c.refunded;
             }
         }

@@ -81,12 +81,18 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
 
     event CampaignCreated(uint256 indexed id, address indexed sponsor, Terms terms, uint128 budget);
     event CampaignCancelled(uint256 indexed id);
-    event CampaignFunded(uint256 indexed id, address indexed sponsor, uint128 gross, uint128 fee, uint128 budget);
+    event CampaignFunded(
+        uint256 indexed id, address indexed sponsor, uint128 gross, uint128 fee, uint128 budget
+    );
     event RootPosted(
         uint256 indexed id, uint32 indexed matchweekId, bytes32 root, uint128 total, string reportURI
     );
     event Claimed(
-        uint256 indexed id, uint32 indexed matchweekId, address indexed host, uint128 amount, uint32 countablePlayers
+        uint256 indexed id,
+        uint32 indexed matchweekId,
+        address indexed host,
+        uint128 amount,
+        uint32 countablePlayers
     );
     event Refunded(uint256 indexed id, address indexed sponsor, uint128 amount, bool closed);
     event TreasuryUpdated(address treasury);
@@ -286,8 +292,13 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     }
 
     /// @notice Raise or lower the launch caps (e.g. after an independent review).
-    function setCaps(uint128 maxCampaignBudget_, uint128 maxTotalLiability_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (maxCampaignBudget_ == 0 || maxTotalLiability_ < maxCampaignBudget_) revert InvalidParams();
+    function setCaps(uint128 maxCampaignBudget_, uint128 maxTotalLiability_)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (maxCampaignBudget_ == 0 || maxTotalLiability_ < maxCampaignBudget_) {
+            revert InvalidParams();
+        }
         maxCampaignBudget = maxCampaignBudget_;
         maxTotalLiability = maxTotalLiability_;
         emit CapsUpdated(maxCampaignBudget_, maxTotalLiability_);

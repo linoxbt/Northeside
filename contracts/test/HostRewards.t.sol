@@ -55,7 +55,9 @@ abstract contract HostRewardsFixture is Base {
 
     function _createAndFinalize(uint32 id) internal {
         vm.prank(operator);
-        mw.createMatchweek(id, keccak256(abi.encode("f", id)), uint64(block.timestamp + 1 hours), 10, keccak256("rules"));
+        mw.createMatchweek(
+            id, keccak256(abi.encode("f", id)), uint64(block.timestamp + 1 hours), 10, keccak256("rules")
+        );
         vm.warp(block.timestamp + 1 hours);
         vm.prank(resultsKey);
         mw.proposeResults(id, keccak256(abi.encode("r", id)), "ipfs://e");
@@ -94,11 +96,13 @@ abstract contract HostRewardsFixture is Base {
         uint128 total;
     }
 
-    function _tree(uint256 id, uint32 mwId, address[] memory hosts, uint128[] memory amounts, uint32[] memory players)
-        internal
-        view
-        returns (Tree memory t)
-    {
+    function _tree(
+        uint256 id,
+        uint32 mwId,
+        address[] memory hosts,
+        uint128[] memory amounts,
+        uint32[] memory players
+    ) internal view returns (Tree memory t) {
         t.leaves = new bytes32[](hosts.length);
         for (uint256 i = 0; i < hosts.length; ++i) {
             t.leaves[i] = rewards.leafHash(id, mwId, hosts[i], amounts[i], players[i]);
@@ -128,9 +132,13 @@ contract HostRewardsTest is HostRewardsFixture {
         vm.expectRevert(HostRewards.InvalidParams.selector);
         new HostRewards(admin, operator, pauser, IERC20(address(0)), mw, treasury, CAP_CAMPAIGN, CAP_TOTAL);
         vm.expectRevert(HostRewards.InvalidParams.selector);
-        new HostRewards(admin, operator, pauser, IERC20(address(qusdc)), mw, address(0), CAP_CAMPAIGN, CAP_TOTAL);
+        new HostRewards(
+            admin, operator, pauser, IERC20(address(qusdc)), mw, address(0), CAP_CAMPAIGN, CAP_TOTAL
+        );
         vm.expectRevert(HostRewards.InvalidParams.selector);
-        new HostRewards(admin, operator, pauser, IERC20(address(qusdc)), mw, treasury, CAP_TOTAL, CAP_CAMPAIGN);
+        new HostRewards(
+            admin, operator, pauser, IERC20(address(qusdc)), mw, treasury, CAP_TOTAL, CAP_CAMPAIGN
+        );
     }
 
     // ------------------------------------------------------------ createCampaign
@@ -196,11 +204,15 @@ contract HostRewardsTest is HostRewardsFixture {
         uint256 id = rewards.createCampaign(_terms(100 * ONE, 0));
         vm.prank(operator);
         rewards.cancelCampaign(id);
-        assertEq(uint256(rewards.campaign(id).status), uint256(HostRewards.CampaignStatus.Cancelled), "cancelled");
+        assertEq(
+            uint256(rewards.campaign(id).status), uint256(HostRewards.CampaignStatus.Cancelled), "cancelled"
+        );
 
         uint256 funded = _createFunded(100 * ONE, 0);
         vm.expectRevert(
-            abi.encodeWithSelector(HostRewards.WrongStatus.selector, funded, HostRewards.CampaignStatus.Active)
+            abi.encodeWithSelector(
+                HostRewards.WrongStatus.selector, funded, HostRewards.CampaignStatus.Active
+            )
         );
         vm.prank(operator);
         rewards.cancelCampaign(funded);
@@ -274,8 +286,9 @@ contract HostRewardsTest is HostRewardsFixture {
 
     function test_fund_rejectsFeeOnTransferToken() public {
         FeeOnTransferERC20 feeToken = new FeeOnTransferERC20();
-        HostRewards r2 =
-            new HostRewards(admin, operator, pauser, IERC20(address(feeToken)), mw, treasury, CAP_CAMPAIGN, CAP_TOTAL);
+        HostRewards r2 = new HostRewards(
+            admin, operator, pauser, IERC20(address(feeToken)), mw, treasury, CAP_CAMPAIGN, CAP_TOTAL
+        );
         feeToken.mint(sponsor, 1_000 * ONE);
         vm.prank(operator);
         uint256 id = r2.createCampaign(_terms(100 * ONE, 0));
@@ -446,8 +459,9 @@ contract HostRewardsTest is HostRewardsFixture {
 
     function test_claim_reentrancyBlocked() public {
         ReentrantERC20 evil = new ReentrantERC20();
-        HostRewards r2 =
-            new HostRewards(admin, operator, pauser, IERC20(address(evil)), mw, treasury, CAP_CAMPAIGN, CAP_TOTAL);
+        HostRewards r2 = new HostRewards(
+            admin, operator, pauser, IERC20(address(evil)), mw, treasury, CAP_CAMPAIGN, CAP_TOTAL
+        );
         evil.mint(sponsor, 1_000 * ONE);
         vm.prank(operator);
         uint256 id = r2.createCampaign(_terms(100 * ONE, 0));
@@ -535,7 +549,9 @@ contract HostRewardsTest is HostRewardsFixture {
     function test_setCaps_onlyAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, operator, rewards.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                operator,
+                rewards.DEFAULT_ADMIN_ROLE()
             )
         );
         vm.prank(operator);
@@ -549,7 +565,9 @@ contract HostRewardsTest is HostRewardsFixture {
     function test_setTreasury_onlyAdmin() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, operator, rewards.DEFAULT_ADMIN_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                operator,
+                rewards.DEFAULT_ADMIN_ROLE()
             )
         );
         vm.prank(operator);

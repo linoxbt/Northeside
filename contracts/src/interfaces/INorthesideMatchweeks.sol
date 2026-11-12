@@ -28,7 +28,11 @@ interface INorthesideMatchweeks {
     }
 
     event MatchweekCreated(
-        uint32 indexed id, bytes32 fixturesRoot, uint64 lockTime, uint32 fixtureCount, bytes32 scoringRulesHash
+        uint32 indexed id,
+        bytes32 fixturesRoot,
+        uint64 lockTime,
+        uint32 fixtureCount,
+        bytes32 scoringRulesHash
     );
     event Committed(uint32 indexed id, address indexed player, bytes32 commitment, uint32 version);
     event ResultsProposed(uint32 indexed id, bytes32 resultsRoot, string evidenceURI, uint64 disputeEnds);
@@ -58,7 +62,10 @@ interface INorthesideMatchweeks {
     function finalize(uint32 id, bytes32 revealsRoot, bytes32 scoresRoot) external;
 
     function matchweek(uint32 id) external view returns (Matchweek memory);
-    function commitmentOf(uint32 id, address player) external view returns (bytes32 commitment, uint32 version);
+    function commitmentOf(uint32 id, address player)
+        external
+        view
+        returns (bytes32 commitment, uint32 version);
     function isLocked(uint32 id) external view returns (bool);
     function isFinalized(uint32 id) external view returns (bool);
     function computeCommitment(address player, uint32 id, bytes32 predictionsHash, bytes32 salt)
