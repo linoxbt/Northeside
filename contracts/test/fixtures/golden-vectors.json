@@ -1,0 +1,24 @@
+{
+  "description": "Golden vectors shared by forge tests (test/Commitment.t.sol) and Vitest (packages/commitments). Generated with cast; any change to the canonical encoding must update both sides.",
+  "commitment": {
+    "chainId": 1990,
+    "matchweeksContract": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "player": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "matchweekId": 11,
+    "fixturesRoot": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "home": [2, 1, 0, 3, 1, 2, 0, 1, 2, 1],
+    "away": [1, 1, 0, 2, 0, 2, 1, 0, 3, 0],
+    "salt": "0x4242424242424242424242424242424242424242424242424242424242424242",
+    "predictionsHash": "0xfa61aa58ff916dea0a1f8867c21c48358c74b4fc9020bb3ff00c25cac70fd692",
+    "commitment": "0x0639aa0bd046ece58f43455acb28452abf44f14924186ea05ae33f28f577bc44",
+    "commitmentTestnet": "0x21271ce9ed3be7a319a96b60fa37c84538fb16b109dc6665d3abdc6a95bf546b"
+  },
+  "hostRewardLeaf": {
+    "campaignId": 1,
+    "matchweekId": 11,
+    "host": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "amount": "2500000",
+    "countablePlayers": 25,
+    "leaf": "0x7fe9820cce734a58dc4617c73ed67f4a053295972f019755c929f240f0bd288f"
+  }
+}
