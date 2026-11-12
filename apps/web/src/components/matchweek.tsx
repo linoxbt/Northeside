@@ -215,26 +215,25 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       ? scoreFixture(h, a, { index: f.index, homeGoals: f.homeGoals ?? 0, awayGoals: f.awayGoals ?? 0, status: f.status === "void" ? "void" : "played" })
                       : null;
                   return (
-                    <li key={f.index} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-3 sm:px-4">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{f.home}</p>
-                        <p className="text-xs text-muted">{fmtTime(f.kickoff)}</p>
+                    <li key={f.index} className="px-3 py-3 sm:px-4">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="min-w-0 flex-1 truncate font-semibold">{f.home}</p>
+                        <p className="shrink-0 text-xs text-muted">{fmtTime(f.kickoff)}</p>
+                        <p className="min-w-0 flex-1 truncate text-right font-semibold">{f.away}</p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="mt-2 flex items-center justify-between">
                         <Stepper label={`${f.home} goals`} value={h} disabled={!open || !user} onChange={(v) => update("home", f.index, v)} />
-                        <span className="text-muted">:</span>
-                        <Stepper label={`${f.away} goals`} value={a} disabled={!open || !user} onChange={(v) => update("away", f.index, v)} />
-                      </div>
-                      <div className="min-w-0 text-right">
-                        <p className="truncate font-semibold">{f.away}</p>
                         {f.status === "void" ? (
                           <Pill tone="warn">Void</Pill>
                         ) : f.status === "played" ? (
-                          <p className="text-xs">
+                          <p className="text-center text-sm">
                             FT {f.homeGoals}–{f.awayGoals}
                             {scored ? <span className={`ml-2 font-bold ${scored.points ? "text-accent" : "text-muted"}`}>+{scored.points}</span> : null}
                           </p>
-                        ) : null}
+                        ) : (
+                          <span className="text-muted">vs</span>
+                        )}
+                        <Stepper label={`${f.away} goals`} value={a} disabled={!open || !user} onChange={(v) => update("away", f.index, v)} />
                       </div>
                     </li>
                   );
