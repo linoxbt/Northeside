@@ -22,13 +22,15 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
 import { FieldCrypto, schema, type Database } from "@northeside/db";
 import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from "@northeside/football";
 import {
   createCampaign,
+  DripRefused,
+  requestDrip,
   finalizeAndScore,
   fetchResults,
   fundCampaign,
@@ -398,7 +400,41 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     },
     120_000,
   );
+  it("gas drip: once per email, wallet and device; empty wallets only; daily cap", async () => {
+    const dctx = { ...ctx, drip: wallet(KEYS.deployer) };
+    const cfg = { amountWei: parseEther("0.01"), dailyCapWei: parseEther("0.025") };
+    const fresh = async (verified = true) => {
+      const k = generatePrivateKey();
+      const [u] = await ctx.db.insert(schema.users).values({ emailVerified: verified }).returning();
+      await ctx.db.insert(schema.wallets).values({ address: acct(k).address.toLowerCase(), userId: u!.id, kind: "embedded" });
+      return { userId: u!.id, wallet: acct(k).address };
+    };
+
+    const a = await fresh();
+    const r = await requestDrip(dctx, cfg, { ...a, deviceId: "device-a", emailVerified: true });
+    expect(r.status).toBe("confirmed");
+    expect(await pub.getBalance({ address: a.wallet })).toBe(cfg.amountWei);
+    // idempotent for the same wallet
+    expect((await requestDrip(dctx, cfg, { ...a, deviceId: "device-a", emailVerified: true })).status).toBe("already");
+
+    const b = await fresh();
+    await expect(requestDrip(dctx, cfg, { ...b, deviceId: "device-a", emailVerified: true })).rejects.toMatchObject({ code: "already_dripped" });
+    const c = await fresh(false);
+    await expect(requestDrip(dctx, cfg, { ...c, deviceId: "device-c", emailVerified: false })).rejects.toMatchObject({ code: "email_unverified" });
+    // a wallet that already holds gas is refused
+    const g = await fresh();
+    await pub.waitForTransactionReceipt({ hash: await wallet(KEYS.deployer).sendTransaction({ to: g.wallet, value: 1n }) });
+    await expect(requestDrip(dctx, cfg, { ...g, deviceId: "device-g", emailVerified: true })).rejects.toMatchObject({ code: "has_balance" });
+    // someone else's wallet is refused
+    const other = await fresh();
+    await expect(requestDrip(dctx, cfg, { userId: a.userId, wallet: other.wallet, deviceId: "device-o", emailVerified: true })).rejects.toBeInstanceOf(DripRefused);
+    await expect(requestDrip(dctx, cfg, { userId: a.userId, wallet: other.wallet, deviceId: "device-o", emailVerified: true })).rejects.toMatchObject({ code: "not_your_wallet" });
+
+    const d = await fresh();
+    await requestDrip(dctx, cfg, { ...d, deviceId: "device-d", emailVerified: true });
+    const e = await fresh();
+    // 0.01 + 0.01 spent; a third would pass the 0.025 cap
+    await expect(requestDrip(dctx, cfg, { ...e, deviceId: "device-e", emailVerified: true })).rejects.toMatchObject({ code: "daily_cap" });
+  }, 60_000);
 });
 
-// keep parseEther referenced for future gas-drip assertions
-void parseEther;
