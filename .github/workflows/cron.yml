@@ -1,0 +1,30 @@
+# Fallback scheduler for Vercel plans without per-minute crons. Off unless the repository
+# variable ENABLE_CRON_FALLBACK is "true". Needs secrets APP_URL and CRON_SECRET.
+name: Cron fallback
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    if: vars.ENABLE_CRON_FALLBACK == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Run jobs
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          for job in index-chain lock-and-reveal notify drip-health; do
+            curl -fsS -m 100 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/v1/cron/$job" > /dev/null || echo "::warning::$job failed"
+          done
+          minute=$(date -u +%M)
+          if [ $((10#$minute % 15)) -lt 5 ]; then
+            curl -fsS -m 100 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/v1/cron/fetch-results" > /dev/null || echo "::warning::fetch-results failed"
+          fi
+          if [ "$(date -u +%H%M)" \< "0605" ] && [ "$(date -u +%H)" = "06" ]; then
+            curl -fsS -m 100 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/v1/cron/import-fixtures" > /dev/null || true
+          fi
