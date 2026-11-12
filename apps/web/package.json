@@ -1,0 +1,45 @@
+{
+  "name": "@northeside/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "e2e": "playwright test --trace off"
+  },
+  "dependencies": {
+    "@northeside/chain": "workspace:*",
+    "@northeside/commitments": "workspace:*",
+    "@northeside/core": "workspace:*",
+    "@northeside/db": "workspace:*",
+    "@northeside/merkle": "workspace:*",
+    "@northeside/scoring": "workspace:*",
+    "@northeside/football": "workspace:*",
+    "@privy-io/react-auth": "3.51.3",
+    "@privy-io/server-auth": "1.32.5",
+    "@privy-io/wagmi": "4.0.20",
+    "@tanstack/react-query": "5.107.1",
+    "drizzle-orm": "0.45.4",
+    "jose": "6.2.17",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1",
+    "viem": "2.57.19",
+    "wagmi": "3.7.11",
+    "web-push": "4.0.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/web-push": "3.6.4",
+    "tailwindcss": "4.3.5"
+  }
+}

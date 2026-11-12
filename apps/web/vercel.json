@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/v1/cron/index-chain", "schedule": "* * * * *" },
+    { "path": "/api/v1/cron/lock-and-reveal", "schedule": "*/5 * * * *" },
+    { "path": "/api/v1/cron/fetch-results", "schedule": "*/15 * * * *" },
+    { "path": "/api/v1/cron/notify", "schedule": "*/15 * * * *" },
+    { "path": "/api/v1/cron/drip-health", "schedule": "*/10 * * * *" },
+    { "path": "/api/v1/cron/import-fixtures", "schedule": "0 6 * * *" }
+  ]
+}
