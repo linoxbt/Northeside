@@ -403,3 +403,18 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
   response: jsonb("response"),
   createdAt: createdAt(),
 });
+
+/** One row per reminder actually sent, so the notify job never sends the same one twice. */
+export const notificationsSent = pgTable(
+  "notifications_sent",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["lock_24h", "lock_2h", "results"] }).notNull(),
+    matchweekId: integer("matchweek_id").notNull(),
+    channel: text("channel").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.kind, t.matchweekId] })],
+);
