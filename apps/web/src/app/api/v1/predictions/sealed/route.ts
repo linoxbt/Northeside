@@ -2,6 +2,7 @@ import { schema } from "@northeside/db";
 import { eq, sql } from "drizzle-orm";
 import type { Hex } from "viem";
 import { z } from "zod";
+import { sealedPayloadSchema } from "@northeside/commitments";
 import { HttpError, idempotent, json, limitWrites, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { checkPayload, encryptPayload, getMatchweekRow, onChainCommitment } from "@/lib/server/services/predictions";
@@ -18,7 +19,9 @@ export const POST = route(async (req) => {
   const input = body.parse(await req.json());
   const result = await idempotent(req.headers.get("idempotency-key"), s.userId, "sealed", async () => {
     const ctx = getCtx();
-    const mw = await getMatchweekRow(Number((input.payload as { matchweekId?: number })?.matchweekId));
+    // Validate the shape first so a malformed body is a 400, not a database error.
+    const shaped = sealedPayloadSchema.parse(input.payload);
+    const mw = await getMatchweekRow(shaped.matchweekId);
     const [{ n } = { n: 0 }] = await ctx.db
       .select({ n: sql<number>`count(*)::int` })
       .from(schema.fixtures)

@@ -20,8 +20,9 @@ export function SignInPanel({ title = "Sign in to play" }: { title?: string }) {
   const [connectError, setConnectError] = useState<string | null>(null);
 
   // Never branch on isMetaMask: QIE Wallet sets it for compatibility. Match on rdns instead.
+  // EIP-6963 wallets are also type "injected"; hide only wagmi's generic fallback when a named one exists.
   const wallets = connectors
-    .filter((c) => c.type !== "injected" || connectors.length === 1)
+    .filter((c) => c.id !== "injected" || connectors.length === 1)
     .sort((a, b) => (a.id === "me.qiewallet" ? -1 : b.id === "me.qiewallet" ? 1 : 0));
 
   useEffect(() => {

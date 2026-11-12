@@ -102,6 +102,9 @@ importers:
       '@types/web-push':
         specifier: 3.6.4
         version: 3.6.4
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
       tailwindcss:
         specifier: 4.3.5
         version: 4.3.5
