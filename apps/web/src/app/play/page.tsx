@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { MatchweekView } from "@/components/matchweek";
 import { ButtonLink, Container, PageHeader } from "@/components/ui";
+import { safely } from "@/lib/server/configured";
 import { getById, getCurrent } from "@/lib/server/services/matchweeks";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const metadata: Metadata = { title: "Play this week", description: "Call 
 
 export default async function PlayPage({ searchParams }: { searchParams: Promise<{ mw?: string }> }) {
   const { mw: mwParam } = await searchParams;
-  const mw = mwParam && /^\d+$/.test(mwParam) ? await getById(Number(mwParam)) : await getCurrent();
+  const mw = await safely(() => (mwParam && /^\d+$/.test(mwParam) ? getById(Number(mwParam)) : getCurrent()), null);
   return (
     <Container className="pb-24">
       {mw ? (

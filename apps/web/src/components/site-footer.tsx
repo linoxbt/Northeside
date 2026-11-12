@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Logo } from "./ui";
 import { api } from "@/lib/client/api";
+import { isPreview } from "@/lib/client/env";
 
 const COLUMNS: { title: string; links: [string, string][] }[] = [
   { title: "Play", links: [["/play", "This week"], ["/table", "Table"], ["/leagues", "Leagues"], ["/how-it-works", "How it works"]] },
@@ -18,7 +19,16 @@ function Status() {
     queryFn: () => api<{ lagBlocks: string | number | null }>("/api/v1/status"),
     staleTime: 60_000,
     retry: 0,
+    enabled: !isPreview,
   });
+  if (isPreview) {
+    return (
+      <Link href="/how-it-works" className="inline-flex items-center gap-2 text-[14px] text-accent-deep">
+        <span className="size-2 animate-pulse-dot rounded-full bg-accent" aria-hidden />
+        Launching on QIE mainnet
+      </Link>
+    );
+  }
   const lag = s.data?.lagBlocks == null ? null : Number(s.data.lagBlocks);
   const ok = s.isSuccess && lag !== null && lag < 200;
   const label = s.isLoading ? "Checking status" : ok ? "All systems operational" : s.isError ? "Status unavailable" : "Catching up with the chain";

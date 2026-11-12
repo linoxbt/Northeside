@@ -5,13 +5,14 @@ import { Board } from "@/components/board";
 import { JoinLeague } from "@/components/join-league";
 import { Container, Eyebrow } from "@/components/ui";
 import { getCtx } from "@/lib/server/ctx";
+import { safely } from "@/lib/server/configured";
 import { leagueBySlug } from "@/lib/server/services/leagues";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const league = await leagueBySlug(slug);
+  const league = await safely(() => leagueBySlug(slug), null);
   if (!league) return { title: "League not found" };
   const image = `/api/v1/og/league/${league.slug}`;
   return {
@@ -24,9 +25,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function LeaguePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const league = await leagueBySlug(slug);
+  const league = await safely(() => leagueBySlug(slug), null);
   if (!league) notFound();
-  const rows = await leaderboard(getCtx(), { season: getCtx().season }, { leagueSlug: slug, limit: 100 });
+  const rows = await safely(() => leaderboard(getCtx(), { season: getCtx().season }, { leagueSlug: slug, limit: 100 }), []);
   return (
     <Container className="pb-24">
       <div className="grid gap-10 pt-14 sm:pt-20 lg:grid-cols-[1.1fr_1fr] lg:gap-16">

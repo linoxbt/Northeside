@@ -11,6 +11,6 @@ export const GET = route(async (req, { params }: { params: Promise<{ job: string
   const fn = JOBS[job];
   if (!fn) throw new HttpError(404, "unknown_job", "Unknown job");
   const started = Date.now();
-  const result = await fn();
+  const result = await fn(new URL(req.url).searchParams);
   return json({ job, ms: Date.now() - started, result });
 });

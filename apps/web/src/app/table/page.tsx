@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Board } from "@/components/board";
 import { Container, PageHeader } from "@/components/ui";
+import { safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
@@ -20,15 +21,22 @@ function Tab({ href, active, children }: { href: string; active: boolean; childr
 
 export default async function TablePage({ searchParams }: { searchParams: Promise<{ mw?: string; verified?: string }> }) {
   const q = await searchParams;
-  const ctx = getCtx();
-  const finals = await ctx.db.select({ id: schema.matchweeks.id }).from(schema.matchweeks).where(eq(schema.matchweeks.status, "finalized")).orderBy(desc(schema.matchweeks.id));
+  const season = Number(process.env.SEASON ?? 2026);
   const mw = q.mw && /^\d+$/.test(q.mw) ? Number(q.mw) : null;
   const verifiedOnly = q.verified === "1";
-  const rows = await leaderboard(ctx, mw ? { matchweekId: mw } : { season: ctx.season }, { verifiedOnly });
+  const { finals, rows } = await safely(
+    async () => {
+      const ctx = getCtx();
+      const finals = await ctx.db.select({ id: schema.matchweeks.id }).from(schema.matchweeks).where(eq(schema.matchweeks.status, "finalized")).orderBy(desc(schema.matchweeks.id));
+      const rows = await leaderboard(ctx, mw ? { matchweekId: mw } : { season: ctx.season }, { verifiedOnly });
+      return { finals, rows };
+    },
+    { finals: [] as { id: number }[], rows: [] as Awaited<ReturnType<typeof leaderboard>> },
+  );
   const link = (m: number | null, v: boolean) => `/table?${new URLSearchParams({ ...(m ? { mw: String(m) } : {}), ...(v ? { verified: "1" } : {}) })}`;
   return (
     <Container className="pb-24">
-      <PageHeader eyebrow={`Premier League ${ctx.season}/${String((ctx.season + 1) % 100).padStart(2, "0")}`} title={mw ? `Matchweek ${mw} table` : "Season table"} lede="Five points for an exact score, two for the right result. Ties share a rank; there are no random tie-breaks." />
+      <PageHeader eyebrow={`Premier League ${season}/${String((season + 1) % 100).padStart(2, "0")}`} title={mw ? `Matchweek ${mw} table` : "Season table"} lede="Five points for an exact score, two for the right result. Ties share a rank; there are no random tie-breaks." />
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Tab href={link(null, verifiedOnly)} active={!mw}>Season</Tab>
         {finals.map((f) => (

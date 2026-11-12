@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { Container, ExtLink, PageHeader, Pill } from "@/components/ui";
 import { VerifyWidget } from "@/components/verify-widget";
+import { safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
@@ -38,9 +39,9 @@ function Block({ title, children, right }: { title: string; children: ReactNode;
 export default async function ProofPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
-  const ctx = getCtx();
-  const data = await proofData(ctx, id);
+  const data = await safely(() => proofData(getCtx(), id), null);
   if (!data) notFound();
+  const ctx = getCtx();
   const m = data.matchweek;
   const onChain = Object.fromEntries(data.commitments.map((c) => [c.player.toLowerCase(), c.commitment]));
   const verified = data.reveals.filter((r) => r.valid).length;

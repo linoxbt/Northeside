@@ -31,13 +31,14 @@ export const JOBS = {
     });
   },
 
-  /** Every minute: poll for ~50 s at 15 s intervals. */
-  "index-chain": async () => {
+  /** Every minute: poll at 15 s intervals for `loops` passes (4 on Vercel; 1 on Netlify's 30 s scheduled functions). */
+  "index-chain": async (params?: URLSearchParams) => {
     const ctx = getCtx();
+    const loops = Math.min(4, Math.max(1, Number(params?.get("loops") ?? 4) || 4));
     const runs = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < loops; i++) {
       runs.push(await indexChain(ctx));
-      if (i < 3) await sleep(15_000);
+      if (i < loops - 1) await sleep(15_000);
     }
     return runs;
   },
@@ -82,6 +83,6 @@ export const JOBS = {
     if (!ctx.drip) return { skipped: "drip not configured" };
     return dripHealth(ctx, dripConfigFromEnv());
   },
-} as const;
+} as const satisfies Record<string, (params?: URLSearchParams) => Promise<unknown>>;
 
 export type JobName = keyof typeof JOBS;
