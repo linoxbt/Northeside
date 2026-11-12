@@ -10,6 +10,7 @@ import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { chain, publicEnv, txUrl } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
+import { useMounted } from "@/lib/client/use-mounted";
 
 interface HostData {
   matchweekId: number | null;
@@ -30,6 +31,7 @@ export function HostDashboard() {
   const publicClient = usePublicClient({ chainId: chain.id });
   const { writeContractAsync } = useWriteContract();
   const [claiming, setClaiming] = useState<string | null>(null);
+  const mounted = useMounted();
 
   if (!session.data?.user) {
     return (
@@ -87,7 +89,7 @@ export function HostDashboard() {
           <input value={name} maxLength={40} onChange={(e) => { setName(e.target.value); if (!slug) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32)); }} className="mt-1 min-h-11 w-full rounded-xl border border-line bg-bg px-3" />
         </label>
         <label className="block text-sm">
-          <span className="text-muted">Link: {typeof window !== "undefined" ? location.host : ""}/l/{slug || "your-name"}</span>
+          <span className="text-muted">Link: {mounted ? location.host : ""}/l/{slug || "your-name"}</span>
           <input value={slug} maxLength={32} onChange={(e) => setSlug(e.target.value.toLowerCase())} className="mt-1 min-h-11 w-full rounded-xl border border-line bg-bg px-3" />
         </label>
         <Button disabled={name.trim().length < 3 || slug.length < 3} onClick={() => void create()}>Create league</Button>
