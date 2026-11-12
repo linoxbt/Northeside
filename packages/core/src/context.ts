@@ -24,8 +24,9 @@ export interface Logger {
   error(msg: string, data?: Record<string, unknown>): void;
 }
 
+/** Structured logs go to stderr so stdout stays clean for CLI output (and for piping it). */
 export const consoleLogger: Logger = {
-  info: (msg, data) => console.log(JSON.stringify({ level: "info", msg, ...data }, bigintReplacer)),
+  info: (msg, data) => console.error(JSON.stringify({ level: "info", msg, ...data }, bigintReplacer)),
   warn: (msg, data) => console.warn(JSON.stringify({ level: "warn", msg, ...data }, bigintReplacer)),
   error: (msg, data) => console.error(JSON.stringify({ level: "error", msg, ...data }, bigintReplacer)),
 };
@@ -111,8 +112,8 @@ export function createContextFromEnv(env: Env = process.env, overrides: Partial<
     football:
       env.FOOTBALL_DATA_API_KEY && env.API_FOOTBALL_KEY
         ? {
-            primary: new FootballDataClient({ apiKey: env.FOOTBALL_DATA_API_KEY }),
-            secondary: new ApiFootballClient({ apiKey: env.API_FOOTBALL_KEY }),
+            primary: new FootballDataClient({ apiKey: env.FOOTBALL_DATA_API_KEY, baseUrl: env.FOOTBALL_DATA_BASE_URL }),
+            secondary: new ApiFootballClient({ apiKey: env.API_FOOTBALL_KEY, baseUrl: env.API_FOOTBALL_BASE_URL }),
           }
         : undefined,
     season: Number(env.SEASON ?? 2026),

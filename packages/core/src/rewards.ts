@@ -260,8 +260,9 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
     payouts: result.payouts,
     countablePersons: uniquePersons,
   };
-  const reportJson = JSON.parse(JSON.stringify(report, bigintReplacer));
-  const reportHash = keccak256(toBytes(JSON.stringify(reportJson)));
+  // Hash and serve the exact text: jsonb reorders keys, so the hash must not depend on a re-serialization.
+  const reportText = JSON.stringify(report, bigintReplacer);
+  const reportHash = keccak256(toBytes(reportText));
   const reportUri = `${ctx.siteUrl}/api/v1/rewards/report/${campaignId}/${matchweekId}#keccak256=${reportHash}`;
 
   const { request } = await ctx.publicClient.simulateContract({
@@ -281,7 +282,7 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
       root: tree.root,
       total: result.total,
       reportUri,
-      tree: toJson({ tree: tree.dump(), report: reportJson }),
+      tree: toJson({ tree: tree.dump(), reportText }),
       txHash: tx,
     });
     await db.insert(schema.rewardLeaves).values(

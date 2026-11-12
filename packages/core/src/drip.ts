@@ -23,11 +23,11 @@ export function dripConfigFromEnv(env: Record<string, string | undefined> = proc
 }
 
 async function spentLast24h(ctx: CoreContext) {
-  const since = new Date(ctx.now().getTime() - 24 * 3600_000);
+  // The window uses the database clock, the same clock that stamped created_at.
   const [row] = await ctx.db
     .select({ total: sql<string>`coalesce(sum(${schema.drips.amountWei}), 0)` })
     .from(schema.drips)
-    .where(and(gte(schema.drips.createdAt, since), ne(schema.drips.status, "failed")));
+    .where(and(gte(schema.drips.createdAt, sql`now() - interval '24 hours'`), ne(schema.drips.status, "failed")));
   return BigInt(row?.total ?? 0);
 }
 

@@ -19,6 +19,12 @@ import { audit, confirm } from "./ops";
 /** On-chain Status enum in NorthesideMatchweeks. */
 export const ChainStatus = { None: 0, Open: 1, ResultsProposed: 2, Challenged: 3, Finalized: 4 } as const;
 
+/** Latest block time. Lock and dispute checks follow the chain, which is what the contract enforces. */
+export async function chainNow(ctx: CoreContext): Promise<Date> {
+  const block = await ctx.publicClient.getBlock({ blockTag: "latest" });
+  return new Date(Number(block.timestamp) * 1000);
+}
+
 export function payloadAad(wallet: string, matchweekId: number) {
   return `${wallet.toLowerCase()}:${matchweekId}`;
 }
@@ -119,8 +125,9 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
       throw new Error(`matchweek ${id} exists on-chain with a different fixtures root; use a new id`);
     }
   } else {
-    if (Number(lockTime) * 1000 <= ctx.now().getTime() + 60 * 60_000) {
-      throw new Error(`matchweek ${id} locks in under an hour; too late to open it`);
+    const minLead = Number(process.env.MIN_LEAD_SECONDS ?? 3600);
+    if (Number(lockTime) * 1000 <= ctx.now().getTime() + minLead * 1000) {
+      throw new Error(`matchweek ${id} locks in under ${minLead / 60} minutes; too late to open it`);
     }
     const { request } = await ctx.publicClient.simulateContract({
       account: operator.account,
@@ -153,7 +160,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
 /** FR-14: after lock, decrypt every stored payload and check it against the on-chain commitment. */
 export async function revealMatchweek(ctx: CoreContext, id: number) {
   const mw = await getMatchweek(ctx, id);
-  if (ctx.now() < mw.lockTime) throw new Error(`matchweek ${id} is not locked yet`);
+  if ((await chainNow(ctx)) < mw.lockTime) throw new Error(`matchweek ${id} is not locked yet`);
 
   const pending = await ctx.db
     .select()
@@ -310,7 +317,9 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
     })),
   );
   const evidence = evidenceDocument(id, check, results, override);
-  const evidenceHash = keccak256(toBytes(JSON.stringify(evidence)));
+  // Hash and serve this exact text (jsonb would reorder keys and break the hash).
+  const evidenceText = JSON.stringify(evidence, bigintReplacer);
+  const evidenceHash = keccak256(toBytes(evidenceText));
   const evidenceUri = `${ctx.siteUrl}/api/v1/proof/${id}/evidence#keccak256=${evidenceHash}`;
 
   const chain = await onChainMatchweek(ctx, id);
@@ -342,7 +351,7 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
       .set({
         status: "results_proposed",
         resultsRoot: tree.root,
-        resultsTree: toJson({ tree: tree.dump(), evidence }),
+        resultsTree: toJson({ tree: tree.dump(), evidenceText }),
         evidenceUri,
         overrideReason: override?.reason ?? null,
         disputeEnds: new Date(Number(after.disputeEnds) * 1000),
@@ -393,7 +402,7 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
     }
   } else {
     if (chain.status !== ChainStatus.ResultsProposed) throw new Error(`matchweek ${id} has no proposed results`);
-    if (BigInt(Math.floor(ctx.now().getTime() / 1000)) < chain.disputeEnds) {
+    if (BigInt(Math.floor((await chainNow(ctx)).getTime() / 1000)) < chain.disputeEnds) {
       throw new Error(`matchweek ${id}: dispute window open until ${new Date(Number(chain.disputeEnds) * 1000).toISOString()}`);
     }
     const { request } = await ctx.publicClient.simulateContract({
