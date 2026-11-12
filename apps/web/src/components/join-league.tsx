@@ -7,6 +7,7 @@ import { SignInPanel } from "./sign-in";
 import { Button } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
+import { useMounted } from "@/lib/client/use-mounted";
 
 /** Stores the invite for attribution (FR-19), then joins once signed in. */
 export function JoinLeague({ slug, name }: { slug: string; name: string }) {
@@ -22,7 +23,8 @@ export function JoinLeague({ slug, name }: { slug: string; name: string }) {
     track("share_link_opened", { league_slug: slug });
   }, [slug]);
 
-  const share = typeof window !== "undefined" ? `${location.origin}/l/${slug}` : `/l/${slug}`;
+  const mounted = useMounted();
+  const share = mounted ? `${location.origin}/l/${slug}` : `/l/${slug}`;
   const text = `Predict the Premier League with me in ${name} on Northeside. Free, sealed on-chain before kickoff.`;
 
   if (!session.data?.user) return <SignInPanel title={`Join ${name}`} />;

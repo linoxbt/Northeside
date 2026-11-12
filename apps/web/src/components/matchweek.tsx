@@ -12,6 +12,7 @@ import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, deviceId, track } from "@/lib/client/api";
 import { chain, publicEnv, short, txUrl } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
+import { useMounted } from "@/lib/client/use-mounted";
 
 export interface MatchweekDTO {
   id: number;
@@ -65,12 +66,15 @@ function readLocalSeal(mw: number, wallet?: string): LocalSeal | null {
   }
 }
 
-function useCountdown(target: string) {
-  const [now, setNow] = useState(() => Date.now());
+/** Null before mount; after that, live. `serverOpen` decides the first paint so SSR and hydration agree. */
+function useCountdown(target: string, serverOpen: boolean) {
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+  if (now === null) return serverOpen ? "…" : null;
   const ms = new Date(target).getTime() - now;
   if (ms <= 0) return null;
   const d = Math.floor(ms / 86_400_000);
@@ -80,8 +84,12 @@ function useCountdown(target: string) {
   return d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${s}s`;
 }
 
-const fmtDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+// Before mount: a fixed WAT rendering (the default audience) so SSR and hydration match; after mount: the player's own zone.
+const WAT = { timeZone: "Africa/Lagos" } as const;
+const fmtDay = (iso: string, local: boolean) =>
+  new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", ...(local ? {} : WAT) });
+const fmtTime = (iso: string, local: boolean) =>
+  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(local ? {} : WAT) });
 
 function Stepper({ value, onChange, disabled, label }: { value: number | null; onChange(v: number): void; disabled: boolean; label: string }) {
   return (
@@ -117,7 +125,8 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   const wallet = session.data?.wallet;
   const qc = useQueryClient();
   const n = mw.fixtures.length;
-  const countdown = useCountdown(mw.lockTime);
+  const mounted = useMounted();
+  const countdown = useCountdown(mw.lockTime, mw.status === "open" && !mw.locked);
   const open = mw.status === "open" && countdown !== null;
 
   const mine = useQuery({
@@ -172,13 +181,13 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   const days = useMemo(() => {
     const groups: { day: string; items: MatchweekDTO["fixtures"] }[] = [];
     for (const f of mw.fixtures) {
-      const day = fmtDay(f.kickoff);
+      const day = fmtDay(f.kickoff, mounted);
       const g = groups.at(-1);
       if (g?.day === day) g.items.push(f);
       else groups.push({ day, items: [f] });
     }
     return groups;
-  }, [mw.fixtures]);
+  }, [mw.fixtures, mounted]);
 
   const finalized = mw.status === "finalized";
   const results = mw.fixtures.every((f) => f.status !== "scheduled");
@@ -218,7 +227,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                     <li key={f.index} className="px-3 py-3 sm:px-4">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="min-w-0 flex-1 truncate font-semibold">{f.home}</p>
-                        <p className="shrink-0 text-xs text-muted">{fmtTime(f.kickoff)}</p>
+                        <p className="shrink-0 text-xs text-muted">{fmtTime(f.kickoff, mounted)}</p>
                         <p className="min-w-0 flex-1 truncate text-right font-semibold">{f.away}</p>
                       </div>
                       <div className="mt-2 flex items-center justify-between">
