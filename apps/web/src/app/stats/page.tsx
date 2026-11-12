@@ -1,15 +1,26 @@
 import { stats } from "@northeside/core";
 import type { Metadata } from "next";
 import { Container, ExtLink, PageHeader } from "@/components/ui";
+import { backendConfigured, safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Live stats", description: "Northeside traction computed live from QIE events." };
 
 export default async function StatsPage() {
-  const ctx = getCtx();
-  const s = await stats(ctx);
-  const explorer = ctx.chain.blockExplorers?.default.url ?? "";
+  const s = await safely(() => stats(getCtx()), {
+    activatedWallets: 0,
+    weekly: [] as { matchweekId: number; activePlayers: number; returningRate: number | null }[],
+    verifiedPersons: 0,
+    transactions: { commits: 0, claims: 0, drips: 0, operator: 0 },
+    activeHosts: 0,
+    sponsors: 0,
+    qusdcSettled: 0n,
+    revenue: 0n,
+  });
+  const live = backendConfigured();
+  const explorer = "https://mainnet.qie.digital";
+  const contracts = live ? getCtx().deployment : null;
   const latest = s.weekly.at(-1);
   const maxPlayers = Math.max(1, ...s.weekly.map((w) => w.activePlayers));
   const tiles: [string, string, string][] = [
@@ -76,11 +87,15 @@ export default async function StatsPage() {
           <p className="mt-6 text-[15px] leading-6 text-ink-2">
             Platform fees from outside sponsors: <span className="font-mono">{(Number(s.revenue) / 1e6).toFixed(2)} QUSDC</span>, taken onchain at funding.
           </p>
-          <ul className="mt-5 space-y-2 text-[15px]">
-            <li><ExtLink href={`${explorer}/address/${ctx.deployment.matchweeks}`}>NorthesideMatchweeks</ExtLink></li>
-            <li><ExtLink href={`${explorer}/address/${ctx.deployment.hostRewards}`}>HostRewards</ExtLink></li>
-            <li><ExtLink href={`${explorer}/address/${ctx.deployment.identity}`}>IdentityAdapter</ExtLink></li>
-          </ul>
+          {contracts ? (
+            <ul className="mt-5 space-y-2 text-[15px]">
+              <li><ExtLink href={`${explorer}/address/${contracts.matchweeks}`}>NorthesideMatchweeks</ExtLink></li>
+              <li><ExtLink href={`${explorer}/address/${contracts.hostRewards}`}>HostRewards</ExtLink></li>
+              <li><ExtLink href={`${explorer}/address/${contracts.identity}`}>IdentityAdapter</ExtLink></li>
+            </ul>
+          ) : (
+            <p className="mt-5 text-[15px] text-muted">Contract links appear here once Northeside launches on QIE mainnet.</p>
+          )}
         </div>
       </section>
     </Container>

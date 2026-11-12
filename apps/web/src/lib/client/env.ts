@@ -15,6 +15,9 @@ export const publicEnv = {
   posthogKey: process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "",
 };
 
+/** Preview mode: the site is live before the contracts are, so play actions show "launching soon". */
+export const isPreview = !publicEnv.matchweeks;
+
 export const chain = chainById(publicEnv.chainId);
 export const transport = () => qieTransport(chain);
 

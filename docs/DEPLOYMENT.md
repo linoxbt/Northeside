@@ -83,7 +83,26 @@ If the explorer rejects it, upload Standard JSON input through its web page
    `commit()`. If Privy misbehaves on chain 1990, unset `NEXT_PUBLIC_PRIVY_APP_ID`: the app falls
    back to EIP-6963 wallets (QIE Wallet first) with no code change.
 
-### 7. Vercel
+### 7. Hosting
+
+The site runs on **Netlify** today: project `northeside` (https://northeside.netlify.app), in
+preview mode until the backend variables below are set. `apps/web/netlify.toml` configures the
+build; scheduled functions in `apps/web/netlify/functions` call the cron routes once
+`CRON_SECRET` is set (Netlify scheduled functions stop at 30 s, so the indexer runs one pass a
+minute there).
+
+To connect Git deploys: in Netlify, link the GitHub repo, leave the base directory empty and set
+the package directory to `apps/web`. To deploy by hand from a machine with the Netlify CLI:
+
+```bash
+netlify build --context production --filter @northeside/web
+netlify deploy --prod --no-build --filter @northeside/web --dir apps/web/.netlify/static
+```
+
+Preview mode ends when `DATABASE_URL`, `DATA_ENCRYPTION_KEY`, `SESSION_SECRET` and the three
+`NEXT_PUBLIC_*_ADDRESS` variables are set (then redeploy: public values are inlined at build time).
+
+#### Vercel (alternative)
 
 1. Import the repo, root directory `apps/web`, framework Next.js. Install command
    `pnpm install --frozen-lockfile` at the repo root (Vercel detects the pnpm workspace).

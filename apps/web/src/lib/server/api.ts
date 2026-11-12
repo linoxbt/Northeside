@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { backendConfigured } from "./configured";
 import { getCtx } from "./ctx";
 import { getSession, type Session } from "./session";
 
@@ -36,6 +37,9 @@ export function route<C>(fn: Handler<C>): Handler<C> {
       if (e instanceof HttpError) return json({ error: e.code, message: e.message }, { status: e.status });
       if (e instanceof ZodError) {
         return json({ error: "invalid_request", message: e.issues[0]?.message ?? "invalid request", issues: e.issues }, { status: 400 });
+      }
+      if (!backendConfigured()) {
+        return json({ error: "launching_soon", message: "Northeside is launching on QIE mainnet; this API opens at launch." }, { status: 503 });
       }
       getCtx().log.error("unhandled API error", { url: req.url, error: e instanceof Error ? e.stack : String(e) });
       return json({ error: "internal", message: "Something went wrong" }, { status: 500 });

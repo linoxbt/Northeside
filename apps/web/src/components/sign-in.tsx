@@ -5,12 +5,30 @@ import { useAccount, useConnect } from "wagmi";
 import { useAuthBridge } from "./providers";
 import { Button, Card } from "./ui";
 import { api } from "@/lib/client/api";
-import { chain, short } from "@/lib/client/env";
+import { chain, isPreview, short } from "@/lib/client/env";
 import { useSession, useSignIn } from "@/lib/client/session";
 import { useQueryClient } from "@tanstack/react-query";
 
 /** Email (Privy embedded wallet) or an EIP-6963 wallet, preferring QIE Wallet by rdns. */
 export function SignInPanel({ title = "Sign in to play" }: { title?: string }) {
+  if (isPreview) return <LaunchingSoon title={title} />;
+  return <SignInPanelLive title={title} />;
+}
+
+function LaunchingSoon({ title }: { title: string }) {
+  return (
+    <Card className="space-y-4 p-6 sm:p-7">
+      <p className="eyebrow">Preview</p>
+      <h2 className="text-[22px] tracking-[-0.03em]">{title.replace(/^Sign in to/, "Soon you can")}</h2>
+      <p className="text-[15px] leading-6 text-muted">Northeside is launching on QIE mainnet. Sign-in and sealing open with the first live matchweek.</p>
+      <a href="/how-it-works" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong px-5 text-[15px] font-medium hover:bg-subtle">
+        See how it works
+      </a>
+    </Card>
+  );
+}
+
+function SignInPanelLive({ title }: { title: string }) {
   const bridge = useAuthBridge();
   const { connectors, connectAsync, isPending } = useConnect();
   const { isConnected, address } = useAccount();

@@ -22,3 +22,4 @@ apps/web/playwright-report/
 apps/web/next-env.d.ts
 *.tsbuildinfo
 contracts/deployments/31337.json
+.netlify

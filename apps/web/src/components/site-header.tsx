@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ButtonLink, Chevron, Logo } from "./ui";
 import { api } from "@/lib/client/api";
-import { short } from "@/lib/client/env";
+import { isPreview, short } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
 
 export const NAV = [
@@ -22,11 +22,25 @@ function AnnouncementBar() {
   const mw = useQuery({
     queryKey: ["mw-current"],
     queryFn: () => api<{ matchweek: { id: number; status: string; lockTime: string } | null }>("/api/v1/matchweeks/current").then((r) => r.matchweek),
+    enabled: !isPreview,
     staleTime: 60_000,
   });
   const [closed, setClosed] = useState(false);
   const m = mw.data;
-  if (closed || !m) return null;
+  if (closed) return null;
+  if (isPreview) {
+    return (
+      <div className="border-b border-line bg-white text-center text-[13px] tracking-[-0.01em]">
+        <p className="px-10 py-2.5">
+          Northeside is launching on QIE mainnet.{" "}
+          <Link href="/how-it-works" className="inline-flex items-center gap-1 font-medium text-accent-deep">
+            See how it works <Chevron />
+          </Link>
+        </p>
+      </div>
+    );
+  }
+  if (!m) return null;
   const open = m.status === "open" && new Date(m.lockTime).getTime() > Date.now();
   const when = new Date(m.lockTime).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
   return (
