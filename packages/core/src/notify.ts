@@ -1,6 +1,6 @@
 import { schema } from "@northeside/db";
 import { and, eq, gt, inArray, isNull, lte, notInArray, or } from "drizzle-orm";
-import webpush from "web-push";
+import { sendNotification, setVapidDetails, type PushSubscription } from "web-push";
 import type { CoreContext } from "./context";
 
 type Env = Record<string, string | undefined>;
@@ -34,8 +34,9 @@ export async function sendEmail(env: Env, to: string, m: Message) {
 
 export async function sendWebPush(env: Env, subscription: unknown, m: Message) {
   if (!env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return false;
-  webpush.setVapidDetails(env.EMAIL_FROM?.match(/<(.+)>/)?.[1] ? `mailto:${env.EMAIL_FROM.match(/<(.+)>/)![1]}` : "mailto:ops@northeside.app", env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
-  await webpush.sendNotification(subscription as webpush.PushSubscription, JSON.stringify(m));
+  const contact = env.EMAIL_FROM?.match(/<(.+)>/)?.[1] ?? "ops@northeside.app";
+  setVapidDetails(`mailto:${contact}`, env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+  await sendNotification(subscription as PushSubscription, JSON.stringify(m));
   return true;
 }
 
