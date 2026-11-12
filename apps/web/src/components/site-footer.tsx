@@ -10,7 +10,7 @@ const COLUMNS: { title: string; links: [string, string][] }[] = [
   { title: "Play", links: [["/play", "This week"], ["/table", "Table"], ["/leagues", "Leagues"], ["/how-it-works", "How it works"]] },
   { title: "Partners", links: [["/host", "Host a league"], ["/sponsors", "Sponsors"], ["/legal/host-terms", "Host terms"], ["/legal/sponsor-terms", "Sponsor terms"]] },
   { title: "Trust", links: [["/proof", "Proof"], ["/stats", "Live stats"], ["/how-it-works#sealing", "How sealing works"], ["mailto:security@northeside.app", "Security"]] },
-  { title: "Legal", links: [["/legal/terms", "Terms of use"], ["/legal/privacy", "Privacy notice"]] },
+  { title: "Legal", links: [["/legal/terms", "Terms of use"], ["/legal/privacy", "Privacy notice"], ["/legal/cookies", "Cookie policy"]] },
 ];
 
 function Status() {

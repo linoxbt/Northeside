@@ -107,6 +107,10 @@ export function SiteHeader() {
                 <span className="size-2 rounded-full bg-accent" aria-hidden />
                 {account}
               </Link>
+            ) : !isPreview && !session.isLoading ? (
+              <Link href={`/sign-in?next=${encodeURIComponent(path)}`} className="hidden min-h-10 items-center rounded-full px-3.5 text-[14px] text-ink-2 hover:bg-subtle sm:inline-flex">
+                Sign in
+              </Link>
             ) : null}
             <ButtonLink href="/play" variant="primary" className="hidden !min-h-10 !px-4 !text-[14px] sm:inline-flex" arrow>
               {user ? "This week" : "Play now"}
@@ -127,7 +131,7 @@ export function SiteHeader() {
       {menu ? (
         <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-white lg:hidden">
           <nav aria-label="Mobile" className="px-5 py-6">
-            {[...NAV, { href: "/how-it-works", label: "How it works" }, { href: "/stats", label: "Live stats" }, { href: "/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
+            {[...NAV, { href: "/how-it-works", label: "How it works" }, { href: "/stats", label: "Live stats" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
               <Link key={n.href} href={n.href} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
                 {n.label}
                 <Chevron className="size-4 text-muted" />
