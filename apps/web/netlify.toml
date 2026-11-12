@@ -1,0 +1,13 @@
+# Netlify: Next.js app in a pnpm monorepo. In the Netlify UI, leave the base directory empty and
+# set the package directory to apps/web. Paths below are relative to the base directory (the repo
+# root), as Netlify's monorepo support resolves them. The Next.js runtime is detected automatically.
+[build]
+  command = "pnpm run build"
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[functions]
+  directory = "apps/web/netlify/functions"
