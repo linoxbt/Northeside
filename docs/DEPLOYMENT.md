@@ -69,6 +69,18 @@ If the explorer rejects it, upload Standard JSON input through its web page
 
 ### 5. Database (Supabase)
 
+**Done:** project `northeside` (ref `lwjcuimxhcttezjwyncc`, eu-west-2 London, free plan) with all
+migrations applied and RLS on all 22 tables. Netlify holds `DATABASE_URL` (transaction pooler,
+port 6543), `DATA_ENCRYPTION_KEY`, `SESSION_SECRET` and `PERSON_PEPPER` as secret variables. The
+database password is not stored anywhere else; reset it in the Supabase dashboard if you need
+direct access, then update `DATABASE_URL` on Netlify. Never rotate `PERSON_PEPPER` after launch.
+`CRON_SECRET` is deliberately unset until the contracts exist, so scheduled jobs stay idle.
+
+Where raw Postgres connections are blocked, apply future migrations over HTTPS with
+`python3 packages/db/scripts/apply-via-management-api.py lwjcuimxhcttezjwyncc` (from `packages/db`).
+
+For a fresh setup:
+
 1. Create a project (EU or closest region to Lagos).
 2. Use the **transaction pooler** connection string (port 6543) as `DATABASE_URL`.
 3. Apply migrations: `DATABASE_URL=… pnpm --filter @northeside/db migrate`.
