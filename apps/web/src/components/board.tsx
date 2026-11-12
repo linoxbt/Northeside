@@ -11,27 +11,27 @@ export interface BoardRowDTO {
 }
 
 export function Board({ rows, empty = "No scores yet. Tables fill in once a matchweek is finalized." }: { rows: BoardRowDTO[]; empty?: string }) {
-  if (rows.length === 0) return <p className="p-4 text-sm text-muted">{empty}</p>;
+  if (rows.length === 0) return <p className="bg-white px-6 py-16 text-center text-[15px] text-muted">{empty}</p>;
   return (
-    <table className="w-full text-sm">
-      <thead className="text-left text-xs uppercase text-muted">
-        <tr>
-          <th className="px-4 py-2 font-semibold">#</th>
-          <th className="py-2 font-semibold">Player</th>
-          <th className="py-2 text-right font-semibold">Exact</th>
-          <th className="px-4 py-2 text-right font-semibold">Pts</th>
+    <table className="w-full bg-white text-[15px]">
+      <thead>
+        <tr className="border-b border-line">
+          <th scope="col" className="eyebrow w-16 px-5 py-3 text-left font-normal">#</th>
+          <th scope="col" className="eyebrow py-3 text-left font-normal">Player</th>
+          <th scope="col" className="eyebrow py-3 text-right font-normal">Exact</th>
+          <th scope="col" className="eyebrow px-5 py-3 text-right font-normal">Pts</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-line">
         {rows.map((r, i) => (
-          <tr key={`${r.rank}-${r.name}-${i}`}>
-            <td className="px-4 py-2.5 tabular-nums text-muted">{r.rank}</td>
-            <td className="py-2.5">
-              <span className="font-semibold">{r.name}</span> {r.verified ? <VerifiedBadge /> : null}
-              {r.qieId && !r.qieIdResolved ? <span className="ml-1 text-xs text-muted">(self-reported)</span> : null}
+          <tr key={`${r.rank}-${r.name}-${i}`} className="transition-colors hover:bg-subtle">
+            <td className="px-5 py-3.5 font-mono text-[13px] text-muted">{String(r.rank).padStart(2, "0")}</td>
+            <td className="py-3.5">
+              <span className="tracking-[-0.01em]">{r.name}</span> {r.verified ? <VerifiedBadge /> : null}
+              {r.qieId && !r.qieIdResolved ? <span className="ml-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">self-reported</span> : null}
             </td>
-            <td className="py-2.5 text-right tabular-nums">{r.exactScores}</td>
-            <td className="px-4 py-2.5 text-right font-bold tabular-nums">{r.points}</td>
+            <td className="py-3.5 text-right font-mono text-[14px] text-ink-2">{r.exactScores}</td>
+            <td className="px-5 py-3.5 text-right text-[17px] tracking-[-0.02em]">{r.points}</td>
           </tr>
         ))}
       </tbody>

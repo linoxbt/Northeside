@@ -89,17 +89,17 @@ export function Profile() {
     <div className="space-y-4">
       <Card className="space-y-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-extrabold">Your profile</h1>
+          <h1 className="display text-[36px] sm:text-[44px]">Your profile</h1>
           {session.data?.verified ? <Pill tone="good">✓ Verified human</Pill> : <Pill>Not verified</Pill>}
         </div>
-        <p className="text-sm text-muted">Signed in as {short(session.data!.wallet!)}</p>
+        <p className="text-[15px] leading-6 text-muted">Signed in as {short(session.data!.wallet!)}</p>
         <label className="block text-sm">
-          <span className="text-muted">Display name</span>
-          <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-line bg-bg px-3" />
+          <span className="text-[14px] text-muted">Display name</span>
+          <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
         <label className="block text-sm">
-          <span className="text-muted">QIE ID (e.g. lino.qie), shown as self-reported until it can be checked</span>
-          <input value={qieId} maxLength={40} onChange={(e) => setQieId(e.target.value.toLowerCase())} className="mt-1 min-h-11 w-full rounded-xl border border-line bg-bg px-3" />
+          <span className="text-[14px] text-muted">QIE ID (e.g. lino.qie), shown as self-reported until it can be checked</span>
+          <input value={qieId} maxLength={40} onChange={(e) => setQieId(e.target.value.toLowerCase())} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
         <Button
           onClick={() =>
@@ -114,16 +114,16 @@ export function Profile() {
       </Card>
 
       <Card className="space-y-2">
-        <h2 className="font-bold">Get verified with QIE Pass</h2>
-        <p className="text-sm text-muted">A verified badge shows you are one real person. It is what sponsors pay your host for. Northeside stores only an encrypted reference, never your documents.</p>
+        <h2 className="text-[20px] tracking-[-0.02em]">Get verified with QIE Pass</h2>
+        <p className="text-[15px] leading-6 text-muted">A verified badge shows you are one real person. It is what sponsors pay your host for. Northeside stores only an encrypted reference, never your documents.</p>
         {session.data?.verified ? null : (
           <Button variant="ghost" onClick={() => { track("verification_started"); location.href = "/api/v1/identity/start"; }}>Get verified</Button>
         )}
       </Card>
 
       <Card className="space-y-2">
-        <h2 className="font-bold">Reminders</h2>
-        <p className="text-sm text-muted">24 hours and 2 hours before each lock, and when results are in.</p>
+        <h2 className="text-[20px] tracking-[-0.02em]">Reminders</h2>
+        <p className="text-[15px] leading-6 text-muted">24 hours and 2 hours before each lock, and when results are in.</p>
         <div className="flex flex-wrap gap-2">
           {publicEnv.telegramBot ? (
             <Button variant="ghost" onClick={() => void run(async () => { const { url } = await api<{ url: string }>("/api/v1/telegram/link"); window.open(url, "_blank"); }, "Open Telegram and press Start")}>Telegram</Button>
@@ -137,8 +137,8 @@ export function Profile() {
       </Card>
 
       <Card className="space-y-2">
-        <h2 className="font-bold">Your data</h2>
-        <p className="text-sm text-muted">Export your sealed picks from each matchweek page. Deleting your account removes your email, name and identity reference. On-chain commitments stay, unlinked from you.</p>
+        <h2 className="text-[20px] tracking-[-0.02em]">Your data</h2>
+        <p className="text-[15px] leading-6 text-muted">Export your sealed picks from each matchweek page. Deleting your account removes your email, name and identity reference. On-chain commitments stay, unlinked from you.</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={() => void signOut()}>Sign out</Button>
           <Button
@@ -155,7 +155,7 @@ export function Profile() {
           </Button>
         </div>
       </Card>
-      {msg ? <p role="status" className="text-sm text-accent">{msg}</p> : null}
+      {msg ? <p role="status" className="text-sm text-accent-deep">{msg}</p> : null}
       {err ? <p role="alert" className="text-sm text-bad">{err}</p> : null}
     </div>
   );

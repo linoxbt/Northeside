@@ -42,10 +42,10 @@ export async function sendWebPush(env: Env, subscription: unknown, m: Message) {
 
 function message(kind: Kind, mwId: number, siteUrl: string): Message {
   if (kind === "results") {
-    return { title: `Matchweek ${mwId} results are in`, body: "See your points and where you rank.", url: `${siteUrl}/?mw=${mwId}` };
+    return { title: `Matchweek ${mwId} results are in`, body: "See your points and where you rank.", url: `${siteUrl}/play?mw=${mwId}` };
   }
   const when = kind === "lock_24h" ? "24 hours" : "2 hours";
-  return { title: `Matchweek ${mwId} locks in ${when}`, body: "Seal your predictions before the first kickoff.", url: `${siteUrl}/` };
+  return { title: `Matchweek ${mwId} locks in ${when}`, body: "Seal your predictions before the first kickoff.", url: `${siteUrl}/play` };
 }
 
 async function deliver(ctx: CoreContext, env: Env, userId: string, kind: Kind, mwId: number) {

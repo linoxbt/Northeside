@@ -45,11 +45,14 @@ export function SignInPanel({ title = "Sign in to play" }: { title?: string }) {
   }
 
   return (
-    <Card className="space-y-4">
-      <h2 className="text-lg font-bold">{title}</h2>
+    <Card className="space-y-5 p-6 sm:p-7">
+      <div>
+        <h2 className="text-[22px] tracking-[-0.03em]">{title}</h2>
+        <p className="mt-1 text-[15px] text-muted">Use your email, or connect a wallet. QIE Wallet works best.</p>
+      </div>
       {isConnected && address ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted">Connected as {short(address)}. Sign a message to prove it is you. It is free.</p>
+          <p className="text-[15px] text-muted">Connected as <span className="font-mono text-ink">{short(address)}</span>. Sign a message to prove it is you. It is free and sends no transaction.</p>
           <Button onClick={() => void signIn()} disabled={pending} className="w-full">
             {pending ? "Waiting for signature…" : "Sign in"}
           </Button>
@@ -68,19 +71,20 @@ export function SignInPanel({ title = "Sign in to play" }: { title?: string }) {
             </Button>
           ) : null}
           {wallets.map((c) => (
-            <Button key={c.uid} variant={bridge.privyEnabled ? "ghost" : "primary"} className="w-full" disabled={isPending} onClick={() => void connect(c)}>
-              {c.id === "me.qiewallet" ? "QIE Wallet" : c.name === "Injected" ? "Browser wallet" : c.name}
+            <Button key={c.uid} variant={bridge.privyEnabled || c.id !== "me.qiewallet" ? "secondary" : "primary"} className="w-full !justify-between" disabled={isPending} onClick={() => void connect(c)}>
+              <span>{c.id === "me.qiewallet" ? "QIE Wallet" : c.name === "Injected" ? "Browser wallet" : c.name}</span>
+              {c.icon ? <img src={c.icon} alt="" className="size-5 rounded" /> : <span aria-hidden className="size-5" />}
             </Button>
           ))}
           {wallets.length === 0 && !bridge.privyEnabled ? (
             <p className="text-sm text-muted">
-              No wallet found. Install <a className="text-accent underline" href="https://www.qie.digital/" target="_blank" rel="noreferrer">QIE Wallet</a> and reload.
+              No wallet found. Install <a className="text-accent-deep underline" href="https://www.qie.digital/" target="_blank" rel="noreferrer">QIE Wallet</a> and reload.
             </p>
           ) : null}
         </div>
       )}
       {error || connectError ? <p role="alert" className="text-sm text-bad">{error ?? connectError}</p> : null}
-      <p className="text-xs text-muted">18+ only. Free to play: no purchase, no stakes, no prizes.</p>
+      <p className="border-t border-line pt-4 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">18+ only. Free to play: no purchase, no stakes, no prizes.</p>
     </Card>
   );
 }
@@ -94,15 +98,15 @@ export function AdultGate() {
   const [err, setErr] = useState<string | null>(null);
   if (!session.data?.user || session.data.user.adultConfirmed) return null;
   return (
-    <Card className="space-y-3 border-warn/40">
-      <h2 className="text-lg font-bold">One more step</h2>
+    <Card className="space-y-4 border-ink">
+      <h2 className="text-[22px] tracking-[-0.03em]">One more step</h2>
       <label className="block text-sm">
-        <span className="text-muted">Display name (optional)</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} className="mt-1 min-h-11 w-full rounded-xl border border-line bg-bg px-3" />
+        <span className="text-[14px] text-muted">Display name (optional)</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
       </label>
       <label className="flex min-h-11 items-center gap-3 text-sm">
         <input type="checkbox" className="size-5" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-        I am 18 or older and accept the <a href="/legal/terms" className="text-accent underline">terms</a> and <a href="/legal/privacy" className="text-accent underline">privacy notice</a>.
+        I am 18 or older and accept the <a href="/legal/terms" className="text-accent-deep underline">terms</a> and <a href="/legal/privacy" className="text-accent-deep underline">privacy notice</a>.
       </label>
       <Button
         disabled={!checked}

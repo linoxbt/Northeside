@@ -20,6 +20,12 @@ const config: NextConfig = {
     "@northeside/scoring",
   ],
   serverExternalPackages: ["postgres", "web-push", "@electric-sql/pglite"],
+  async redirects() {
+    return [
+      { source: "/leaderboard", destination: "/table", permanent: true },
+      { source: "/rules", destination: "/how-it-works", permanent: true },
+    ];
+  },
   async headers() {
     // Telegram opens the app inside its in-app browser and Mini App webview, so no X-Frame-Options DENY.
     return [{ source: "/:path*", headers: securityHeaders }];

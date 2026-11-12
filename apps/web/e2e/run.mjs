@@ -187,9 +187,9 @@ async function playerSeals(browser, keyIndex, name, picks) {
   await page.getByRole("button", { name: /^Join / }).waitFor({ timeout: 30_000 });
   await page.getByRole("button", { name: /^Join / }).click();
   await page.getByText("You are in").waitFor();
-  await page.goto(APP);
+  await page.goto(`${APP}/play`);
   await page.getByText("One more step").waitFor({ timeout: 30_000 });
-  await page.getByRole("textbox").first().fill(name);
+  await page.getByLabel("Display name (optional)").fill(name);
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByText("One more step").waitFor({ state: "detached" });
@@ -379,7 +379,7 @@ async function main() {
 
   // ---------------------------------------------------------------- read side, through the UI
   const page = ada.page;
-  await page.goto(`${APP}/leaderboard?mw=11`);
+  await page.goto(`${APP}/table?mw=11`);
   const rows = await page.locator("tbody tr").allInnerTexts();
   log("leaderboard", rows);
   // Ada: 2-1 exact (5) + 1-1 vs 0-2 wrong (0) + void = 5. Bo: 1-0 outcome (2) + 0-2 exact (5) = 7.
@@ -396,7 +396,7 @@ async function main() {
   check(await page.getByText("Match: these picks are exactly what was sealed before lock.").isVisible(), "in-browser verifier recomputes the commitment");
   await page.screenshot({ path: join(OUT, "proof.png"), fullPage: true });
 
-  await page.goto(APP + "/?mw=11");
+  await page.goto(APP + "/play?mw=11");
   await page.getByText("Sealed receipt").waitFor();
   check(await page.getByText(/^5$/).first().isVisible().catch(() => false), "receipt shows Ada's 5 points");
   await page.screenshot({ path: join(OUT, "results.png"), fullPage: true });
@@ -420,7 +420,7 @@ async function main() {
   p2.on("response", async (r) => {
     if (r.url().endsWith(".js")) jsBytes += Number(r.headers()["content-length"] ?? (await r.body().catch(() => Buffer.alloc(0))).length);
   });
-  await p2.goto(APP, { waitUntil: "networkidle" });
+  await p2.goto(`${APP}/play`, { waitUntil: "networkidle" });
   log(`player route JS transferred: ${(jsBytes / 1024).toFixed(0)} KB`);
 
   await browser.close();
