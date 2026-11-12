@@ -24,7 +24,11 @@ contract IdentityAdapterTest is Base {
         id = new IdentityAdapter(admin, attester);
     }
 
-    function _sig(uint256 key, address wallet, bytes32 person, uint64 deadline) internal view returns (bytes memory) {
+    function _sig(uint256 key, address wallet, bytes32 person, uint64 deadline)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes32 digest = id.attestationDigest(wallet, person, id.nonces(wallet), deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
         return abi.encodePacked(r, s, v);
@@ -120,7 +124,9 @@ contract IdentityAdapterTest is Base {
     function test_revoke_onlyAttesterOrAdmin() public {
         _submit(w1, PERSON);
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, w2, id.ATTESTER_ROLE())
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, w2, id.ATTESTER_ROLE()
+            )
         );
         vm.prank(w2);
         id.revoke(w1);
@@ -137,7 +143,9 @@ contract IdentityAdapterTest is Base {
         id.attest(w1, PERSON);
         assertTrue(id.isVerified(w1), "verified");
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, w1, id.ATTESTER_ROLE())
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, w1, id.ATTESTER_ROLE()
+            )
         );
         vm.prank(w1);
         id.attest(w2, PERSON);

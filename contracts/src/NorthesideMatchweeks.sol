@@ -172,7 +172,11 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
     }
 
     /// @inheritdoc INorthesideMatchweeks
-    function commitmentOf(uint32 id, address player) external view returns (bytes32 commitment, uint32 version) {
+    function commitmentOf(uint32 id, address player)
+        external
+        view
+        returns (bytes32 commitment, uint32 version)
+    {
         Commit storage c = _commits[id][player];
         return (c.commitment, c.version);
     }

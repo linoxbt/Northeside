@@ -48,7 +48,8 @@ contract IdentityAdapter is AccessControl, EIP712 {
         external
     {
         if (block.timestamp > deadline) revert AttestationExpired();
-        bytes32 structHash = keccak256(abi.encode(ATTESTATION_TYPEHASH, wallet, personHash, nonces[wallet], deadline));
+        bytes32 structHash =
+            keccak256(abi.encode(ATTESTATION_TYPEHASH, wallet, personHash, nonces[wallet], deadline));
         address signer = ECDSA.recover(_hashTypedDataV4(structHash), signature);
         if (!hasRole(ATTESTER_ROLE, signer)) revert InvalidAttester(signer);
         _link(wallet, personHash, signer);
@@ -89,7 +90,9 @@ contract IdentityAdapter is AccessControl, EIP712 {
         view
         returns (bytes32)
     {
-        return _hashTypedDataV4(keccak256(abi.encode(ATTESTATION_TYPEHASH, wallet, personHash, nonce, deadline)));
+        return _hashTypedDataV4(
+            keccak256(abi.encode(ATTESTATION_TYPEHASH, wallet, personHash, nonce, deadline))
+        );
     }
 
     function domainSeparator() external view returns (bytes32) {

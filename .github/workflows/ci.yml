@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: v1.7.1 }
+      - run: forge fmt --check
+      - run: forge build --sizes
+      - run: forge test -vv
+        env: { FOUNDRY_PROFILE: ci }
+      - uses: crytic/slither-action@v0.4.1
+        with:
+          target: contracts
+          slither-args: --filter-paths "node_modules|test|script" --exclude timestamp
+          fail-on: medium
+
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r typecheck
+      - run: pnpm test
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @northeside/web lint
+      - run: pnpm --filter @northeside/web build
+        env:
+          NEXT_PUBLIC_CHAIN_ID: "1990"
+          NEXT_PUBLIC_MATCHWEEKS_ADDRESS: "0x0000000000000000000000000000000000000001"
+          NEXT_PUBLIC_HOST_REWARDS_ADDRESS: "0x0000000000000000000000000000000000000002"
+          NEXT_PUBLIC_IDENTITY_ADDRESS: "0x0000000000000000000000000000000000000003"
+          NEXT_PUBLIC_QUSDC_ADDRESS: "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5"

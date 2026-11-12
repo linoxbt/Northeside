@@ -144,7 +144,9 @@ contract NorthesideMatchweeksTest is Base {
 
     function test_commit_revertsOnUnknownMatchweek() public {
         vm.expectRevert(
-            abi.encodeWithSelector(INorthesideMatchweeks.WrongStatus.selector, 99, INorthesideMatchweeks.Status.None)
+            abi.encodeWithSelector(
+                INorthesideMatchweeks.WrongStatus.selector, 99, INorthesideMatchweeks.Status.None
+            )
         );
         vm.prank(alice);
         mw.commit(99, keccak256("x"));
@@ -171,7 +173,9 @@ contract NorthesideMatchweeksTest is Base {
 
     function test_pause_onlyPauser() public {
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, alice, mw.PAUSER_ROLE())
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, alice, mw.PAUSER_ROLE()
+            )
         );
         vm.prank(alice);
         mw.pause();
@@ -204,7 +208,9 @@ contract NorthesideMatchweeksTest is Base {
     function test_propose_onlyResultsRole() public {
         vm.warp(lockTime);
         vm.expectRevert(
-            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, operator, mw.RESULTS_ROLE())
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, operator, mw.RESULTS_ROLE()
+            )
         );
         vm.prank(operator);
         mw.proposeResults(ID, keccak256("r"), "ipfs://evidence");
@@ -240,7 +246,9 @@ contract NorthesideMatchweeksTest is Base {
         // challenge -> Challenged; finalize now reverts on status
         vm.prank(challenger);
         mw.challenge(ID, "ipfs://why");
-        assertEq(uint256(mw.matchweek(ID).status), uint256(INorthesideMatchweeks.Status.Challenged), "challenged");
+        assertEq(
+            uint256(mw.matchweek(ID).status), uint256(INorthesideMatchweeks.Status.Challenged), "challenged"
+        );
         vm.warp(block.timestamp + 13 hours);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -346,7 +354,9 @@ contract NorthesideMatchweeksTest is Base {
 
     /// @dev Spec 12.2: random predictions and salts recompute to the same commitment on-chain and
     ///      off-chain. Off-chain parity is checked against golden vectors (CommitmentTest + Vitest).
-    function testFuzz_verifyReveal(uint8[10] memory h, uint8[10] memory a, bytes32 salt, bytes32 otherSalt) public {
+    function testFuzz_verifyReveal(uint8[10] memory h, uint8[10] memory a, bytes32 salt, bytes32 otherSalt)
+        public
+    {
         vm.assume(salt != otherSalt);
         uint8[] memory home = new uint8[](10);
         uint8[] memory away = new uint8[](10);
@@ -363,7 +373,9 @@ contract NorthesideMatchweeksTest is Base {
         assertFalse(mw.verifyReveal(alice, ID, ph, otherSalt), "wrong salt");
         assertFalse(mw.verifyReveal(bob, ID, ph, salt), "wrong player");
         home[0] = home[0] == 9 ? 0 : home[0] + 1;
-        assertFalse(mw.verifyReveal(alice, ID, CommitmentLib.predictionsHash(home, away), salt), "tampered picks");
+        assertFalse(
+            mw.verifyReveal(alice, ID, CommitmentLib.predictionsHash(home, away), salt), "tampered picks"
+        );
     }
 
     function test_verifyReveal_falseWithoutCommit() public view {
