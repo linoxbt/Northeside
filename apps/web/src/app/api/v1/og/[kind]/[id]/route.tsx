@@ -33,6 +33,20 @@ function Frame({ story, children }: { story: boolean; children: React.ReactNode 
   );
 }
 
+/**
+ * ImageResponse renders lazily while streaming; a render error there escapes every handler and can
+ * crash the server. Render fully here so failures become a 500 for this request only.
+ */
+async function rendered(img: ImageResponse): Promise<Response> {
+  try {
+    const body = await img.arrayBuffer();
+    return new Response(body, { status: img.status, headers: img.headers });
+  } catch (e) {
+    console.error(JSON.stringify({ level: "error", msg: "share card render failed", error: String(e) }));
+    return new Response("render failed", { status: 500 });
+  }
+}
+
 /** GET /api/v1/og/league/:slug and /api/v1/og/result/:matchweek.:wallet  (?format=story for 1080x1920). */
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string; id: string }> }) {
   const { kind, id } = await params;
@@ -42,7 +56,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
 
   if (kind === "league") {
     const league = await leagueBySlug(id).catch(() => null);
-    return new ImageResponse(
+    return rendered(new ImageResponse(
       (
         <Frame story={story}>
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -55,7 +69,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         </Frame>
       ),
       { ...size, headers: { "cache-control": "public, max-age=600" } },
-    );
+    ));
   }
 
   if (kind === "result") {
@@ -63,16 +77,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     const mw = Number(mwRaw);
     const rows = Number.isInteger(mw) && wallet ? await leaderboard(getCtx(), { matchweekId: mw }).catch(() => []) : [];
     const me = rows.find((r) => r.wallet.toLowerCase() === wallet?.toLowerCase());
-    return new ImageResponse(
+    return rendered(new ImageResponse(
       (
         <Frame story={story}>
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <div style={{ fontSize: story ? 40 : 30, color: C.muted }}>Matchweek {mwRaw}</div>
+            <div style={{ fontSize: story ? 40 : 30, color: C.muted }}>{`Matchweek ${mwRaw}`}</div>
             <div style={{ fontSize: big, fontWeight: 800 }}>{me ? `${me.points} points` : "Sealed and scored"}</div>
             {me ? (
               <div style={{ display: "flex", gap: 32, fontSize: story ? 44 : 34 }}>
-                <span>Rank {me.rank} of {rows.length}</span>
-                <span style={{ color: C.accent }}>{me.exactScores} exact</span>
+                <span>{`Rank ${me.rank} of ${rows.length}`}</span>
+                <span style={{ color: C.accent }}>{`${me.exactScores} exact`}</span>
               </div>
             ) : null}
             <div style={{ fontSize: story ? 40 : 30, color: C.muted }}>{me?.name ?? ""}</div>
@@ -80,7 +94,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         </Frame>
       ),
       { ...size, headers: { "cache-control": "public, max-age=300" } },
-    );
+    ));
   }
 
   return new Response("not found", { status: 404 });
