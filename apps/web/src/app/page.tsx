@@ -65,7 +65,7 @@ export default async function Landing() {
       <section aria-label="Built on QIE" className="border-y border-line">
         <Container wide className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 py-7">
           <Eyebrow>Built on QIE</Eyebrow>
-          {["QIE Mainnet", "QIE Wallet", "QIE Pass", "QIE ID", "QUSDC"].map((n) => (
+          {["QIE Mainnet", "QIE Wallet", "QIE Pass (coming)", "QIE ID", "QUSDC"].map((n) => (
             <span key={n} className="inline-flex items-center gap-2 text-[17px] tracking-[-0.02em] text-ink-2">
               <span className="size-2 rounded-[2px] bg-ink" aria-hidden />
               {n}

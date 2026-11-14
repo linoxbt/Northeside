@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LEGAL } from "@/lib/legal";
+import { analyticsAvailable, loadAnalytics, readConsent, setConsent } from "@/lib/client/consent";
 
 const KEY = "ns_cookie_notice";
 const VERSION = "1";
@@ -11,13 +12,27 @@ const VERSION = "1";
 export function CookieNotice() {
   const [open, setOpen] = useState(false);
 
+  const [askAnalytics, setAskAnalytics] = useState(false);
   useEffect(() => {
     try {
-      setOpen(localStorage.getItem(KEY) !== VERSION);
+      const seen = localStorage.getItem(KEY) === VERSION;
+      // With analytics configured, also ask once for consent (nothing loads without it).
+      const ask = analyticsAvailable() && readConsent() === null;
+      setAskAnalytics(ask);
+      setOpen(!seen || ask);
+      void loadAnalytics();
     } catch {
       setOpen(false); // storage blocked: nothing for us to store either
     }
   }, []);
+
+  const close = (choice?: "granted" | "denied") => {
+    try {
+      localStorage.setItem(KEY, VERSION);
+    } catch {}
+    if (choice) setConsent(choice);
+    setOpen(false);
+  };
 
   if (!open) return null;
 
@@ -41,18 +56,29 @@ export function CookieNotice() {
         </Link>
         .
       </p>
-      <button
-        type="button"
-        onClick={() => {
-          try {
-            localStorage.setItem(KEY, VERSION);
-          } catch {}
-          setOpen(false);
-        }}
-        className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-white text-[16px] font-medium text-[#0a0b0d] transition-colors hover:bg-white/90"
-      >
-        Got it
-      </button>
+      {askAnalytics ? (
+        <>
+          <p className="mt-3 text-[15px] leading-7 text-white/70">
+            May we also use privacy-friendly product analytics (PostHog, EU) to see which parts of Northeside work? It stays off unless you agree.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <button type="button" onClick={() => close("granted")} className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-white text-[16px] font-medium text-[#0a0b0d] hover:bg-white/90">
+              Accept analytics
+            </button>
+            <button type="button" onClick={() => close("denied")} className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-white/25 text-[16px] font-medium text-white hover:bg-white/10">
+              Only necessary
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => close()}
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-white text-[16px] font-medium text-[#0a0b0d] transition-colors hover:bg-white/90"
+        >
+          Got it
+        </button>
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ export const publicEnv = {
   vapidKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
   telegramBot: process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "",
   posthogKey: process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "",
+  posthogHost: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com",
 };
 
 /** Preview mode: the site is live before the contracts are, so play actions show "launching soon". */
