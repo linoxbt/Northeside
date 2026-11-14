@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { prefetchFor } from "@/lib/routes";
 import { useQuery } from "@tanstack/react-query";
 import { Logo } from "./ui";
 import { api } from "@/lib/client/api";
 import { isPreview } from "@/lib/client/env";
+import { contactHref } from "@/lib/contact";
 
 const COLUMNS: { title: string; links: [string, string][] }[] = [
   { title: "Play", links: [["/play", "This week"], ["/table", "Table"], ["/leagues", "Leagues"], ["/how-it-works", "How it works"]] },
   { title: "Partners", links: [["/host", "Host a league"], ["/sponsors", "Sponsors"], ["/legal/host-terms", "Host terms"], ["/legal/sponsor-terms", "Sponsor terms"]] },
-  { title: "Trust", links: [["/proof", "Proof"], ["/stats", "Live stats"], ["/how-it-works#sealing", "How sealing works"], ["mailto:security@northeside.app", "Security"]] },
+  { title: "Trust", links: [["/proof", "Proof"], ["/stats", "Live stats"], ["/how-it-works#sealing", "How sealing works"], [contactHref("Northeside security report", "security"), "Security"]] },
   { title: "Legal", links: [["/legal/terms", "Terms of use"], ["/legal/privacy", "Privacy notice"], ["/legal/cookies", "Cookie policy"]] },
 ];
 
@@ -55,7 +57,7 @@ export function SiteFooter() {
             <ul className="space-y-3">
               {c.links.map(([href, label]) => (
                 <li key={href}>
-                  <Link href={href} className="text-[14px] text-muted transition-colors hover:text-ink">
+                  <Link href={href} prefetch={prefetchFor(href)} className="inline-flex min-h-11 items-center text-[14px] text-muted transition-colors hover:text-ink">
                     {label}
                   </Link>
                 </li>

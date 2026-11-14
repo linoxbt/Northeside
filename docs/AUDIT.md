@@ -39,7 +39,8 @@ This is an internal review, not a paid third-party audit, so the launch caps sta
   not a balance, so the usual risk does not apply.
 - **Trusted operator/results keys**: they can post wrong roots. The controls are:
   - separate keys for each role;
-  - the dispute window and independent challengers;
+  - the dispute window and challengers (v1 on mainnet has one challenger, the admin wallet; the
+    v1.1 deploy script requires challengers independent of the admin, see below);
   - `CLAIM_DELAY` and `replaceRoot` for host payouts;
   - launch caps (500 QUSDC per campaign, 2,000 QUSDC in total);
   - pause, with refunds that cannot be paused;
@@ -47,8 +48,9 @@ This is an internal review, not a paid third-party audit, so the launch caps sta
 
 ## Evidence
 
-- `forge test`: 90 tests pass. They are unit, fuzz and invariant tests (a 256-run, depth-50
-  handler on `HostRewards`). Each finding above has a test named for it.
+- `forge test`: 90 tests passed for v1 (now 103, see the second review). They are unit, fuzz and
+  invariant tests (a 256-run, depth-64 handler on `HostRewards`). Each finding above has a test
+  named for it, except L-6, whose deploy-script test was added in the second review.
 - `forge coverage` (src): 98.97% of lines, 97.12% of statements, 86.84% of branches.
 - Slither: 14 results. All are `timestamp` or `incorrect-equality`, both covered above.
 - Deployed bytecode contains no TLOAD, TSTORE, MCOPY, BLOBHASH or BLOBBASEFEE. QIE mainnet
@@ -56,3 +58,28 @@ This is an internal review, not a paid third-party audit, so the launch caps sta
 - The off-chain pipeline (`packages/core`) and the browser e2e run against the new ABI. Scores
   are computed and proposed together with the results. Reveals close at proposal. Host claims
   wait out `CLAIM_DELAY`.
+
+---
+
+# Second review (14 November 2026)
+
+A second, independent four-part review (contracts, backend, frontend, operations) found no
+Critical or High contract issues and these contract-level items, now fixed in the source (v1.1):
+
+| ID | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| S3 (M-1 of the review) | Medium | A bad root posted within 24 h of a campaign's expiry could not be replaced (replaceRoot reverted after expiry), so it became claimable. Proven with a PoC. | `replaceRoot` works after expiry until the claim deadline; new admin-only `voidRoot` releases an unclaimed root's allocation. Off-chain, the operator never posts a root within 26 h of expiry. |
+| L-1 | Low | The pauser could undo an admin's pause; on mainnet the pauser is the operator key. | `unpause` is admin-only on both contracts. The deploy script refuses pauser == operator. |
+| L-2 | Low | NatSpec overstated that a pauser cannot trap funds. | Corrected: the unallocated refund always works; the final sweep waits for unpause. |
+| L-3 | Low | A posted `total` below the leaf sum would strand the last hosts. | Off-chain guard: leaves must sum to the total before posting. |
+| L-4 | Info | QUSDC address hard-coded in the deploy script. | Read from `contracts/config/known-tokens.json`. |
+| G11 | Test gap | No deploy-script test; invariant handler never paused/replaced/voided; no shared EIP-712 vector. | Added: `test/Deploy.t.sol`, invariant handler fuzzes pause/unpause/replaceRoot/voidRoot with varied expiries, golden attestation digest checked by forge and vitest. |
+
+Evidence: `forge test` 103 passing; Slither 15 results, all `timestamp` / `incorrect-equality`;
+no Cancun opcodes in v1.1 bytecode.
+
+**Deployment status:** mainnet runs **v1** (addresses in `docs/DEPLOYMENT.md`). v1.1 is ready to
+deploy; until it is, the v1 mitigations are operational: the operator never posts within 26 h of
+expiry (enforced in code), and on a key compromise the admin first revokes the operator's
+`PAUSER_ROLE`/`OPERATOR_ROLE`, then pauses. No campaign exists on v1 yet, so moving to v1.1 needs
+no migration.

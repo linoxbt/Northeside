@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { formatUnits, type Hex } from "viem";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
-import { txError } from "./matchweek";
+import { txError } from "@/lib/client/tx-errors";
 import { AdultGate, PanelSkeleton, SignInPanel } from "./sign-in";
 import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";

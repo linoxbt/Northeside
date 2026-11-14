@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 /** Focused pages (sign-in) render without the site header and footer. */
-const BARE = ["/sign-in"];
+const BARE = ["/sign-in", "/tg"];
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const path = usePathname();

@@ -3,7 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { CookieNotice } from "@/components/cookie-notice";
-import { Providers } from "@/components/providers";
+import { QueryProvider } from "@/components/query-provider";
 import { SiteChrome } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="font-sans">
-        <Providers>
+        <QueryProvider>
           <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-ink focus:px-4 focus:py-2 focus:text-white">
             Skip to content
           </a>
@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <SiteFooter />
           </SiteChrome>
           <CookieNotice />
-        </Providers>
+        </QueryProvider>
         <script
           dangerouslySetInnerHTML={{
             __html: `if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(function(){});`,

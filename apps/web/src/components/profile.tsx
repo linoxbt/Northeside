@@ -5,13 +5,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { Hex } from "viem";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
-import { txError } from "./matchweek";
-import { useAuthBridge } from "./providers";
+import { txError } from "@/lib/client/tx-errors";
+import { useAuthBridge } from "./auth-bridge";
 import { PanelSkeleton, SignInPanel } from "./sign-in";
 import { Button, Card, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { chain, publicEnv, short } from "@/lib/client/env";
-import { useSession, useSignIn } from "@/lib/client/session";
+import { useSession } from "@/lib/client/session";
+import { useSignIn } from "@/lib/client/sign-in-hooks";
 
 function urlB64ToUint8Array(base64: string) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);

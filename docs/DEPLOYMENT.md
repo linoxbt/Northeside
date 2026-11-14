@@ -61,11 +61,12 @@ operator and results keys are set (see "Mainnet deployment").
 | --- | --- | --- |
 | Admin | `DEFAULT_ADMIN_ROLE` on all contracts | hardware wallet only, never in any env |
 | Deployer | gas for deployment, no roles | your machine, discard after |
-| Operator | create matchweeks, post reward roots, pause | `OPERATOR_PRIVATE_KEY` (Vercel + CLI) |
-| Results | propose results, finalize | `RESULTS_PRIVATE_KEY` (CLI only is fine) |
-| Attester | signs QIE Pass attestations | `ATTESTER_PRIVATE_KEY` (Vercel) |
-| Gas drip | sends QIEV3 to new players, no roles | `DRIP_PRIVATE_KEY` (Vercel), hold at most 2 days of budget |
-| Challengers | challenge bad results | your second device and one trusted person |
+| Operator | create matchweeks, post reward roots | `OPERATOR_PRIVATE_KEY` (Netlify secret, production only; ops-worker) |
+| Results | propose results, finalize | `RESULTS_PRIVATE_KEY` (Netlify secret, production only; ops-worker) |
+| Pauser | emergency pause only | a separate key kept off servers (`PAUSER_PRIVATE_KEY` for the CLI); only the admin can unpause (v1.1) |
+| Attester | signs QIE Pass attestations | `ATTESTER_PRIVATE_KEY` (Netlify secret) |
+| Gas drip | sends QIEV3 to new players, no roles | `DRIP_PRIVATE_KEY` (Netlify secret), hold at most 2 days of budget |
+| Challengers | challenge bad results | at least two keys independent of the admin: your second device and one trusted person |
 | Treasury | receives platform fees | any address you control |
 
 Fund the deployer, operator, results and attester keys with a little QIEV3 (a few cents each).
@@ -113,10 +114,12 @@ migrations applied and RLS on all 22 tables. Netlify holds `DATABASE_URL` (trans
 port 6543), `DATA_ENCRYPTION_KEY`, `SESSION_SECRET` and `PERSON_PEPPER` as secret variables. The
 database password is not stored anywhere else; reset it in the Supabase dashboard if you need
 direct access, then update `DATABASE_URL` on Netlify. Never rotate `PERSON_PEPPER` after launch.
-`CRON_SECRET` is deliberately unset until the contracts exist, so scheduled jobs stay idle.
 
-Where raw Postgres connections are blocked, apply future migrations over HTTPS with
-`python3 packages/db/scripts/apply-via-management-api.py lwjcuimxhcttezjwyncc` (from `packages/db`).
+Apply new migrations after a deploy that adds one, from anywhere, through the app itself:
+`curl -H "Authorization: Bearer $CRON_SECRET" https://<site>/api/v1/cron/migrate` (the `migrate`
+job applies the embedded migrations and records them exactly like drizzle's migrator), or
+`pnpm cli migrate` with `DATABASE_URL` set. The Management API script
+(`packages/db/scripts/apply-via-management-api.py`) still works where only HTTPS is available.
 
 For a fresh setup:
 
@@ -136,33 +139,26 @@ For a fresh setup:
 
 ### 7. Hosting
 
-The site runs on **Netlify** today: project `northeside` (https://northeside.netlify.app), in
-preview mode until the backend variables below are set. `apps/web/netlify.toml` configures the
-build; scheduled functions in `apps/web/netlify/functions` call the cron routes once
-`CRON_SECRET` is set (Netlify scheduled functions stop at 30 s, so the indexer runs one pass a
-minute there).
+The site runs on **Netlify**: project `northeside` (https://northeside.netlify.app), live mode.
+`apps/web/netlify.toml` configures the build. `pnpm build` first bundles the ops worker
+(`apps/web/worker/ops-worker.ts` → `netlify/functions/ops-worker.mjs`, esbuild), then builds Next.
+Two functions run the operation: `cron-ops` (scheduled, every 10 minutes) starts `ops-worker`
+(background, up to 15 minutes), which runs every job in-process for about 9 minutes.
 
-To connect Git deploys: in Netlify, link the GitHub repo, leave the base directory empty and set
-the package directory to `apps/web`. To deploy by hand from a machine with the Netlify CLI:
+Environment rules on Netlify: every secret exists in the **production** context only (deploy
+previews and branch deploys get none, so untrusted pull-request builds cannot reach the keys or
+the database). `NEXT_PUBLIC_*` values are inlined at build time: change them, then redeploy.
+Functions run on `AWS_LAMBDA_JS_RUNTIME=nodejs22.x`.
+
+Deploys today are made with the Netlify CLI, recording the commit in the deploy message:
 
 ```bash
-netlify build --context production --filter @northeside/web
-netlify deploy --prod --no-build --filter @northeside/web --dir apps/web/.netlify/static
+netlify build --offline --context production --filter @northeside/web   # NEXT_PUBLIC_* in the shell env
+netlify deploy --prod --no-build --filter @northeside/web --dir apps/web/.netlify/static --message "$(git rev-parse --short HEAD)"
 ```
 
-Preview mode ends when `DATABASE_URL`, `DATA_ENCRYPTION_KEY`, `SESSION_SECRET` and the three
-`NEXT_PUBLIC_*_ADDRESS` variables are set (then redeploy: public values are inlined at build time).
-
-#### Vercel (alternative)
-
-1. Import the repo, root directory `apps/web`, framework Next.js. Install command
-   `pnpm install --frozen-lockfile` at the repo root (Vercel detects the pnpm workspace).
-2. Set every variable in `.env.example` (production values). Generate secrets with
-   `openssl rand -base64 32` (`DATA_ENCRYPTION_KEY`, `SESSION_SECRET`, `CRON_SECRET`) and
-   `openssl rand -hex 32` (`PERSON_PEPPER`; never rotate it after launch).
-3. `vercel.json` schedules the jobs. Per-minute crons need a paid plan; on Hobby, enable the
-   GitHub Actions fallback in `.github/workflows/cron.yml` (set `APP_URL` and `CRON_SECRET` secrets).
-4. Custom domain with HTTPS only (QIE Wallet injects no provider on `file://` or plain http).
+To switch to Git deploys (recommended once `main` holds the release): in Netlify link the GitHub
+repo, production branch `main`, base directory empty, package directory `apps/web`.
 
 ### 8. Data providers
 
@@ -181,8 +177,8 @@ Preview mode ends when `DATABASE_URL`, `DATA_ENCRYPTION_KEY`, `SESSION_SECRET` a
 ### 10. QIE Pass
 
 Until QIE publishes how a dApp checks Pass status, leave `QIE_PASS_MODE` unset on mainnet: the
-"Get verified" button reports that verification is not available yet, and host payouts count
-nobody. The adapter and attestation flow are built and tested (Mode B); wiring the real provider is
+profile shows "coming soon" instead of a "Get verified" button, marketing pages say payouts start
+once Pass is live, and host payouts count nobody. The adapter and attestation flow are built and tested (Mode B); wiring the real provider is
 one `PassProvider` implementation in `packages/core/src/identity.ts`. Do not claim live QIE Pass
 integration until a real verification has gone through on mainnet.
 

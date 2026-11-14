@@ -5,6 +5,9 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  // Only Northeside itself and Telegram (Mini App webview, web.telegram.org) may frame the site, so
+  // the seal and sign-in pages cannot be clickjacked (audit S9).
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org" },
 ];
 
 const config: NextConfig = {
@@ -27,7 +30,7 @@ const config: NextConfig = {
     ];
   },
   async headers() {
-    // Telegram opens the app inside its in-app browser and Mini App webview, so no X-Frame-Options DENY.
+    // frame-ancestors (above) replaces X-Frame-Options, which cannot allow Telegram.
     return [{ source: "/:path*", headers: securityHeaders }];
   },
 };

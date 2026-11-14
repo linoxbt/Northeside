@@ -29,13 +29,16 @@ export function deploymentFromEnv(env: Env): Deployment {
     if (!v) throw new Error(`Missing env ${a} (or ${b})`);
     return getAddress(v);
   };
+  // On a public chain the indexer must start at the deployment block, not scan from genesis (audit B19).
+  const deployedAt = pick("NEXT_PUBLIC_DEPLOYED_AT_BLOCK", "DEPLOYED_AT_BLOCK");
+  if (!deployedAt && chainId !== 31337) throw new Error("Missing env NEXT_PUBLIC_DEPLOYED_AT_BLOCK (or DEPLOYED_AT_BLOCK)");
   return {
     chainId,
     matchweeks: addr("NEXT_PUBLIC_MATCHWEEKS_ADDRESS", "MATCHWEEKS_ADDRESS"),
     hostRewards: addr("NEXT_PUBLIC_HOST_REWARDS_ADDRESS", "HOST_REWARDS_ADDRESS"),
     identity: addr("NEXT_PUBLIC_IDENTITY_ADDRESS", "IDENTITY_ADDRESS"),
     qusdc: addr("NEXT_PUBLIC_QUSDC_ADDRESS", "QUSDC_ADDRESS"),
-    deployedAtBlock: BigInt(pick("NEXT_PUBLIC_DEPLOYED_AT_BLOCK", "DEPLOYED_AT_BLOCK") ?? "0"),
+    deployedAtBlock: BigInt(deployedAt ?? "0"),
   };
 }
 

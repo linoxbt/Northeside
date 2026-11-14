@@ -31,7 +31,7 @@ export default function HowItWorks() {
           <div className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-4">
             {[
               ["5", "Exact score", "Arsenal 2–1 called 2–1"],
-              ["2", "Right result", "Home win, draw or away win"],
+              ["2", "Right result", "Home, draw or away, called correctly"],
               ["0", "Wrong", "Anything else"],
               ["0", "Void game", "Postponed or abandoned, for everyone"],
             ].map(([pts, t, ex]) => (

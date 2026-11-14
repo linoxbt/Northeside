@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ButtonLink, Chevron, Logo } from "./ui";
+import { prefetchFor } from "@/lib/routes";
 import { api } from "@/lib/client/api";
 import { isPreview, short } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
@@ -49,7 +50,7 @@ function AnnouncementBar() {
         {open ? (
           <>
             Matchweek {m.id} locks {when}.{" "}
-            <Link href="/play" className="inline-flex items-center gap-1 font-medium text-accent-deep">
+            <Link href="/play" prefetch={false} className="inline-flex items-center gap-1 font-medium text-accent-deep">
               Make your picks <Chevron />
             </Link>
           </>
@@ -75,8 +76,28 @@ export function SiteHeader() {
   const user = session.data?.user;
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     document.body.style.overflow = menu ? "hidden" : "";
+    if (!menu) return;
+    // Keyboard: focus moves into the menu, Escape closes it and returns focus, Tab stays inside.
+    menuRef.current?.querySelector<HTMLElement>("a,button")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenu(false);
+        toggleRef.current?.focus();
+        return;
+      }
+      if (e.key !== "Tab" || !menuRef.current) return;
+      const items = [toggleRef.current!, ...menuRef.current.querySelectorAll<HTMLElement>("a,button")];
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : i === items.length - 1 ? 0 : i + 1;
+      e.preventDefault();
+      items[next]?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [menu]);
   const active = (href: string) => path === href || path.startsWith(`${href}/`) || (href === "/leagues" && path.startsWith("/l/"));
   const account = user ? (user.qieId ?? user.displayName ?? short(session.data!.wallet!)) : null;
@@ -94,6 +115,7 @@ export function SiteHeader() {
               <Link
                 key={n.href}
                 href={n.href}
+                prefetch={prefetchFor(n.href)}
                 aria-current={active(n.href) ? "page" : undefined}
                 className={`rounded-full px-3.5 py-2 text-[15px] tracking-[-0.01em] transition-colors ${active(n.href) ? "bg-subtle text-ink" : "text-ink-2 hover:text-ink"}`}
               >
@@ -103,22 +125,27 @@ export function SiteHeader() {
           </nav>
           <div className="ml-auto flex items-center gap-2 lg:ml-0">
             {account ? (
-              <Link href="/me" className="hidden min-h-10 items-center gap-2 rounded-full border border-line px-3.5 text-[14px] sm:inline-flex">
+              <Link href="/me" prefetch={false} className="hidden min-h-10 items-center gap-2 rounded-full border border-line px-3.5 text-[14px] sm:inline-flex">
                 <span className="size-2 rounded-full bg-accent" aria-hidden />
                 {account}
               </Link>
             ) : !isPreview && !session.isLoading ? (
-              <Link href={`/sign-in?next=${encodeURIComponent(path)}`} className="hidden min-h-10 items-center rounded-full px-3.5 text-[14px] text-ink-2 hover:bg-subtle sm:inline-flex">
+              <Link href={`/sign-in?next=${encodeURIComponent(path)}`} prefetch={false} className="hidden min-h-10 items-center rounded-full px-3.5 text-[14px] text-ink-2 hover:bg-subtle sm:inline-flex">
                 Sign in
               </Link>
             ) : null}
-            <ButtonLink href="/play" variant="primary" className="hidden !min-h-10 !px-4 !text-[14px] sm:inline-flex" arrow>
-              {user ? "This week" : "Play now"}
-            </ButtonLink>
+            {/* wrapper carries the breakpoint: ButtonLink's own inline-flex would override "hidden" */}
+            <span className="hidden sm:inline-flex">
+              <ButtonLink href="/play" variant="primary" className="!min-h-10 !px-4 !text-[14px]" arrow>
+                {user ? "This week" : "Play now"}
+              </ButtonLink>
+            </span>
             <button
-              className="inline-flex size-10 items-center justify-center rounded-full border border-line lg:hidden"
+              ref={toggleRef}
+              className="inline-flex size-11 items-center justify-center rounded-full border border-line lg:hidden"
               aria-label={menu ? "Close menu" : "Open menu"}
               aria-expanded={menu}
+              aria-controls="mobile-menu"
               onClick={() => setMenu((m) => !m)}
             >
               <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
@@ -129,10 +156,10 @@ export function SiteHeader() {
         </div>
       </header>
       {menu ? (
-        <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-white lg:hidden">
+        <div ref={menuRef} id="mobile-menu" className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-white lg:hidden">
           <nav aria-label="Mobile" className="px-5 py-6">
             {[...NAV, { href: "/how-it-works", label: "How it works" }, { href: "/stats", label: "Live stats" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
-              <Link key={n.href} href={n.href} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
+              <Link key={n.href} href={n.href} prefetch={prefetchFor(n.href)} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
                 {n.label}
                 <Chevron className="size-4 text-muted" />
               </Link>

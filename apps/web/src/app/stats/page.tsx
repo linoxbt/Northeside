@@ -1,6 +1,7 @@
 import { stats } from "@northeside/core";
 import type { Metadata } from "next";
 import { Container, ExtLink, PageHeader } from "@/components/ui";
+import { formatQusdc } from "@/lib/money";
 import { backendConfigured, safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 
@@ -19,7 +20,7 @@ export default async function StatsPage() {
     revenue: 0n,
   });
   const live = backendConfigured();
-  const explorer = "https://mainnet.qie.digital";
+  const explorer = live ? (getCtx().chain.blockExplorers?.default.url ?? "") : "";
   const contracts = live ? getCtx().deployment : null;
   const latest = s.weekly.at(-1);
   const maxPlayers = Math.max(1, ...s.weekly.map((w) => w.activePlayers));
@@ -29,7 +30,7 @@ export default async function StatsPage() {
     ["Returning rate", latest?.returningRate != null ? `${Math.round(latest.returningRate * 100)}%` : "—", latest ? `matchweek ${latest.matchweekId} vs the one before` : "after two matchweeks"],
     ["Active hosts", String(s.activeHosts), "leagues with 5+ sealed players"],
     ["Sponsors", String(s.sponsors), "campaigns funded with real QUSDC"],
-    ["QUSDC to hosts", (Number(s.qusdcSettled) / 1e6).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), "claimed onchain"],
+    ["QUSDC to hosts", formatQusdc(s.qusdcSettled), "claimed onchain"],
   ];
   return (
     <Container className="pb-24">
@@ -85,7 +86,7 @@ export default async function StatsPage() {
         <div>
           <h2 className="text-[24px] tracking-[-0.03em]">Revenue and contracts</h2>
           <p className="mt-6 text-[15px] leading-6 text-ink-2">
-            Platform fees from outside sponsors: <span className="font-mono">{(Number(s.revenue) / 1e6).toFixed(2)} QUSDC</span>, taken onchain at funding.
+            Platform fees from outside sponsors: <span className="font-mono">{formatQusdc(s.revenue)} QUSDC</span>, taken onchain at funding.
           </p>
           {contracts ? (
             <ul className="mt-5 space-y-2 text-[15px]">

@@ -4,8 +4,10 @@
 Fans play in leagues run by creators and communities; sponsors pay those hosts in QUSDC for real,
 verified, returning players. Track: **Consumer Apps & Social**, QIE Hackathon 3.0.
 
-> Status: built and tested end to end on a local chain and a fork of QIE mainnet. Mainnet
-> deployment needs the owner's keys and accounts; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+> **Live:** https://northeside.netlify.app · contracts on QIE mainnet (chain 1990), source-verified on
+> [the explorer](https://mainnet.qie.digital/address/0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B).
+> Addresses and roles: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mainnet-deployment-2026-11-12) ·
+> audit and status: [docs/AUDIT.md](docs/AUDIT.md).
 
 ## The problem
 
@@ -42,10 +44,10 @@ No token, no odds, no stakes, no prizes for players. See [How it works](apps/web
  Browser (Next.js PWA / Telegram Mini App)
    │  picks + salt stay local; commit(hash) from the player's wallet ──────────────┐
    ▼                                                                               ▼
- Next.js API + jobs (Vercel) ── Postgres (Supabase, an index of the chain) ── QIE mainnet
-   │  reveal after lock · two-source results · scoring · Merkle roots            NorthesideMatchweeks
-   └─ operator CLI (create, publish, finalize, reward roots) ─────────────────►  HostRewards (QUSDC)
-                                                                                 IdentityAdapter
+ Next.js API (Netlify) ── Postgres (Supabase, an index of the chain) ──────────── QIE mainnet
+   │  ops-worker (Netlify background function, every 10 min):                    NorthesideMatchweeks
+   │  index · reveal after lock · two-source results · score · finalize · roots  HostRewards (QUSDC)
+   └─ operator CLI (overrides, campaigns, refunds, pause, migrate) ──────────►  IdentityAdapter
 ```
 
 The chain is the source of truth for commitments, results, payout roots and funds. Postgres is an
@@ -96,8 +98,9 @@ docs/               commitments, deployment runbook, security, contract audit
 
 ```bash
 pnpm install
-pnpm test:contracts            # forge: 77 tests incl. fuzz + invariants, 98% line coverage
+pnpm test:contracts            # forge: 103 tests incl. fuzz, invariants and the deploy script
 pnpm test                      # vitest: packages + CLI, incl. a two-matchweek pipeline on anvil
+pnpm --filter @northeside/web test   # web unit tests
 cp .env.example .env           # fill in; addresses from contracts/deployments/<chainId>.json
 pnpm --filter @northeside/db migrate
 pnpm dev
@@ -109,15 +112,16 @@ Requires Node 22, pnpm 10 and Foundry 1.7 (`forge`, `anvil`).
 
 | Layer | What runs |
 | --- | --- |
-| Contracts | 77 forge tests: every revert path and role, lock-time fuzzing, commitment fuzzing, tampered Merkle leaves, reentrancy, fee-on-transfer rejection, and invariants (`balance == Σ(budget − claimed − refunded)`, `claimed ≤ allocated ≤ budget`) over 16k random calls |
+| Contracts | 103 forge tests: every revert path and role, lock-time and commitment fuzzing, tampered Merkle leaves, reentrancy, fee-on-transfer rejection, the deploy script's checks, and invariants (`balance == Σ(budget − claimed − refunded)`, `claimed ≤ allocated ≤ budget`, deadlines never shortened) over random fund/post/replace/void/claim/refund/pause sequences |
 | Packages | Vitest, including golden vectors shared with Solidity, provider cross-checks, payouts and the DB schema on PGlite |
 | Pipeline | `packages/core/test/pipeline.test.ts`: anvil + PGlite, two matchweeks, reveal, results, finalize, a funded campaign, and a host claiming QUSDC with the stored proof |
-| Browser | `apps/web/e2e/run.mjs`: deploys to anvil, runs the production build against Postgres, and drives Chromium with an injected EIP-6963 "QIE Wallet": host creates a league, two players join and seal from their own wallets, the operator CLI reveals, publishes and finalizes, and the table, Proof page and in-browser verifier are checked |
+| Browser | `apps/web/e2e/run.mjs`: deploys to anvil, runs the production build against Postgres, and drives Chromium with an injected EIP-6963 "QIE Wallet": sign-in, 18+ gate, host creates a league, two players join and seal from their own wallets, unsealed-edit warning, then the automated steps open, propose and finalize, and the table, Proof page, in-browser verifier and player-route bundle size are checked |
 
 ## Honest status notes
 
 - **Prize vault**: designed, not deployed; waits for a permit (Nigeria's NLRC treats predict-and-win as lottery-related).
-- **QIE Pass**: Mode B (Northeside attests after checking Pass). QIE has not published the dApp interface yet; until it does, verification is off on mainnet and the UI says so.
+- **QIE Pass**: Mode B (Northeside attests after checking Pass). QIE has not published the dApp interface yet; until it does, verification is off on mainnet, the UI says "coming soon", and host payouts count nobody.
+- **Contracts v1.1**: the audit's contract fixes (replaceRoot/voidRoot near expiry, admin-only unpause) are in the source and tested; mainnet runs v1 until v1.1 is deployed (see docs/AUDIT.md).
 - **Results oracle**: operator-run, from two providers that must agree, with a 12-hour on-chain challenge window. Overrides need a written reason that is published with the evidence.
 - **Legal texts**: drafts pending review by Nigerian counsel.
 - All player, wallet and revenue numbers are targets until they appear on `/stats`.
