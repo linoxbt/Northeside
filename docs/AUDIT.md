@@ -96,7 +96,7 @@ Critical and High items:
 | --- | --- | --- | --- |
 | B1 | Critical | Wallet sign-in impossible with Privy on | Fixed: Privy email wallet with setup/retry states, external wallets through Privy, e2e-tested |
 | B2 | Critical | A late seal blocks finalize | Fixed: reveals frozen at proposal, checked against DB and chain; e2e and pipeline tests |
-| G2 | Critical | Fixture import cannot run | Code fixed (refresh, moved-kickoff voiding, loud failure). **Owner:** add `FOOTBALL_DATA_API_KEY` and `API_FOOTBALL_KEY` on Netlify |
+| G2 | Critical | Fixture import cannot run | Code fixed (refresh, moved-kickoff voiding, loud failure). Done: `FOOTBALL_DATA_API_KEY` on Netlify; second source TheSportsDB (free public key), since API-Football's free plan does not cover the current season |
 | G1 | Critical | QIE Pass has no mainnet provider | Cannot be fixed in code. Mitigated: verification and host payouts shown as "coming", never faked; mock mode refused on mainnet |
 | S1 | High | Secrets exposed to every deploy context | Fixed: all secrets production-only on Netlify (22 preview/branch values removed) |
 | S2 | High | Operator key holds pause; admin is the only challenger | Fixed in v1.1 source (admin-only unpause; deploy script refuses pauser == operator and challenger == admin). **Owner:** mainnet still runs v1 until v1.1 is deployed with a separate pauser and two independent challengers |

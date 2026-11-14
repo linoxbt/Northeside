@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { getJson } from "./http";
-import type { FetchLike, MatchResult, ResultStatus } from "./types";
+import type { FetchLike, MatchResult, ResultStatus, ResultsSource } from "./types";
 
-/** API-Football (api-sports.io), the secondary source. Used only for the results cross-check. */
+/** API-Football (api-sports.io): an optional secondary source (paid plan for the current season). */
 const item = z.object({
   fixture: z.object({ id: z.number(), date: z.string(), status: z.object({ short: z.string() }) }),
   teams: z.object({ home: z.object({ name: z.string() }), away: z.object({ name: z.string() }) }),
@@ -31,7 +31,8 @@ export interface ApiFootballOptions {
   backoffMs?: number;
 }
 
-export class ApiFootballClient {
+export class ApiFootballClient implements ResultsSource {
+  readonly name = "API-Football v3";
   constructor(private readonly opts: ApiFootballOptions) {}
 
   async results(matchday: number, season: number): Promise<MatchResult[]> {
