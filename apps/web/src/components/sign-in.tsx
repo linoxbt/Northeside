@@ -1,18 +1,50 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useAccount, useConnect } from "wagmi";
-import { useAuthBridge } from "./providers";
-import { Button, Card } from "./ui";
+import { usePathname } from "next/navigation";
+import { useMounted } from "@/lib/client/use-mounted";
+import { useState } from "react";
+import { Button, ButtonLink, Card } from "./ui";
 import { api } from "@/lib/client/api";
-import { chain, isPreview, short } from "@/lib/client/env";
-import { useSession, useSignIn } from "@/lib/client/session";
+import { isPreview } from "@/lib/client/env";
+import { useSession } from "@/lib/client/session";
 import { useQueryClient } from "@tanstack/react-query";
 
-/** Email (Privy embedded wallet) or an EIP-6963 wallet, preferring QIE Wallet by rdns. */
+/**
+ * Shown where a page needs a signed-in player. While the session is still loading it shows a
+ * placeholder (no "Sign in" flash for signed-in players); otherwise it sends people to the
+ * dedicated /sign-in page and back here afterwards (audit B14).
+ */
 export function SignInPanel({ title = "Sign in to play" }: { title?: string }) {
+  const session = useSession();
+  const pathname = usePathname();
+  // The query string is read after mount (useSearchParams would force a Suspense boundary on
+  // statically rendered pages such as /me).
+  const mounted = useMounted();
   if (isPreview) return <LaunchingSoon title={title} />;
-  return <SignInPanelLive title={title} />;
+  if (session.isLoading) return <PanelSkeleton />;
+  const here = `${pathname}${mounted ? window.location.search : ""}`;
+  return (
+    <Card className="space-y-5 p-6 sm:p-7">
+      <div>
+        <h2 className="text-[22px] tracking-[-0.03em]">{title}</h2>
+        <p className="mt-1 text-[15px] text-muted">Sign in with your email, or use a wallet such as QIE Wallet.</p>
+      </div>
+      <ButtonLink href={`/sign-in?next=${encodeURIComponent(here)}`} variant="primary" className="w-full" arrow>
+        Sign in
+      </ButtonLink>
+      <p className="border-t border-line pt-4 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">18+ only. Free to play: no purchase, no stakes, no prizes.</p>
+    </Card>
+  );
+}
+
+export function PanelSkeleton() {
+  return (
+    <Card className="space-y-4 p-6 sm:p-7" aria-busy="true" aria-label="Loading">
+      <div className="h-6 w-1/2 animate-pulse rounded bg-subtle" />
+      <div className="h-4 w-3/4 animate-pulse rounded bg-subtle" />
+      <div className="h-12 w-full animate-pulse rounded-full bg-subtle" />
+    </Card>
+  );
 }
 
 function LaunchingSoon({ title }: { title: string }) {
@@ -24,85 +56,6 @@ function LaunchingSoon({ title }: { title: string }) {
       <a href="/how-it-works" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong px-5 text-[15px] font-medium hover:bg-subtle">
         See how it works
       </a>
-    </Card>
-  );
-}
-
-function SignInPanelLive({ title }: { title: string }) {
-  const bridge = useAuthBridge();
-  const { connectors, connectAsync, isPending } = useConnect();
-  const { isConnected, address } = useAccount();
-  const { signIn, error, pending } = useSignIn();
-  const session = useSession();
-  const wantSignIn = useRef(false);
-  const [connectError, setConnectError] = useState<string | null>(null);
-
-  // Never branch on isMetaMask: QIE Wallet sets it for compatibility. Match on rdns instead.
-  // EIP-6963 wallets are also type "injected"; hide only wagmi's generic fallback when a named one exists.
-  const wallets = connectors
-    .filter((c) => c.id !== "injected" || connectors.length === 1)
-    .sort((a, b) => (a.id === "me.qiewallet" ? -1 : b.id === "me.qiewallet" ? 1 : 0));
-
-  useEffect(() => {
-    if (wantSignIn.current && isConnected && !session.data?.user && !pending) {
-      wantSignIn.current = false;
-      void signIn();
-    }
-  }, [isConnected, session.data?.user, pending, signIn]);
-
-  async function connect(c: (typeof connectors)[number]) {
-    setConnectError(null);
-    wantSignIn.current = true;
-    try {
-      await connectAsync({ connector: c, chainId: chain.id });
-    } catch (e) {
-      wantSignIn.current = false;
-      const msg = e instanceof Error ? e.message : String(e);
-      setConnectError(/4902|Unrecognized chain/i.test(msg) ? "Add QIE to your wallet (testnet users: turn on the testnet toggle in QIE Wallet settings)" : /rejected|4001/i.test(msg) ? "You cancelled the connection" : msg);
-    }
-  }
-
-  return (
-    <Card className="space-y-5 p-6 sm:p-7">
-      <div>
-        <h2 className="text-[22px] tracking-[-0.03em]">{title}</h2>
-        <p className="mt-1 text-[15px] text-muted">Use your email, or connect a wallet. QIE Wallet works best.</p>
-      </div>
-      {isConnected && address ? (
-        <div className="space-y-3">
-          <p className="text-[15px] text-muted">Connected as <span className="font-mono text-ink">{short(address)}</span>. Sign a message to prove it is you. It is free and sends no transaction.</p>
-          <Button onClick={() => void signIn()} disabled={pending} className="w-full">
-            {pending ? "Waiting for signature…" : "Sign in"}
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {bridge.privyEnabled ? (
-            <Button
-              className="w-full"
-              onClick={() => {
-                wantSignIn.current = true;
-                bridge.emailLogin();
-              }}
-            >
-              Continue with email
-            </Button>
-          ) : null}
-          {wallets.map((c) => (
-            <Button key={c.uid} variant={bridge.privyEnabled || c.id !== "me.qiewallet" ? "secondary" : "primary"} className="w-full !justify-between" disabled={isPending} onClick={() => void connect(c)}>
-              <span>{c.id === "me.qiewallet" ? "QIE Wallet" : c.name === "Injected" ? "Browser wallet" : c.name}</span>
-              {c.icon ? <img src={c.icon} alt="" className="size-5 rounded" /> : <span aria-hidden className="size-5" />}
-            </Button>
-          ))}
-          {wallets.length === 0 && !bridge.privyEnabled ? (
-            <p className="text-sm text-muted">
-              No wallet found. Install <a className="text-accent-deep underline" href="https://www.qie.digital/" target="_blank" rel="noreferrer">QIE Wallet</a> and reload.
-            </p>
-          ) : null}
-        </div>
-      )}
-      {error || connectError ? <p role="alert" className="text-sm text-bad">{error ?? connectError}</p> : null}
-      <p className="border-t border-line pt-4 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">18+ only. Free to play: no purchase, no stakes, no prizes.</p>
     </Card>
   );
 }

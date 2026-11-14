@@ -6,6 +6,7 @@ import { z } from "zod";
 import { HttpError, json, limitWrites, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { verifyPrivyToken } from "@/lib/server/privy";
+import { passProvider } from "@/lib/server/services/identity";
 import { joinLeague, userById, walletsOf, isVerifiedUser } from "@/lib/server/services/accounts";
 import { checkNonce, clearSessionCookie, getSession, setSessionCookie } from "@/lib/server/session";
 
@@ -30,6 +31,8 @@ export const GET = route(async () => {
     wallet: s.wallet,
     wallets: (await walletsOf(user.id)).map((w) => ({ address: w.address, kind: w.kind })),
     verified: await isVerifiedUser(user.id),
+    // False until a real QIE Pass provider is configured: the UI must not offer verification (spec 9.4).
+    verificationAvailable: passProvider() !== null,
   });
 });
 

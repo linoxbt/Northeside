@@ -2,7 +2,7 @@ import { DripRefused, dripConfigFromEnv, requestDrip } from "@northeside/core";
 import { z } from "zod";
 import { HttpError, clientIp, json, limitWrites, quotaLeft, rateLimit, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
-import { userById } from "@/lib/server/services/accounts";
+import { requireAdult, userById } from "@/lib/server/services/accounts";
 
 const body = z.object({ deviceId: z.string().min(16).max(128) });
 
@@ -14,6 +14,7 @@ export const POST = route(async (req) => {
   const ipKey = `drip:ip-day:${await clientIp()}`;
   await quotaLeft(ipKey, 5, 24 * 3600);
   const { deviceId } = body.parse(await req.json());
+  await requireAdult(s.userId);
   const user = await userById(s.userId);
   if (!user) throw new HttpError(401, "unauthenticated", "Sign in first");
   try {
