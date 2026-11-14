@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatQusdc } from "../src/lib/money";
-import { applySelection, crowdCount, crowdOdds, satisfies } from "../src/lib/markets";
+import { applySelection, crowdCount, crowdOdds, marketGrid, resultOdds, satisfies, selectionOdds } from "../src/lib/markets";
 import { LATE_PAYLOAD_GRACE_MS, payloadWindowOpen } from "../src/lib/payload-window";
 import { isWalletRoute, prefetchFor } from "../src/lib/routes";
 import { safeNext } from "../src/lib/safe-next";
@@ -110,5 +110,36 @@ describe("betting-style markets from one exact score", () => {
     expect(crowdCount(dist, { market: "1x2", value: "home" })).toBe(3);
     expect(crowdCount(dist, { market: "gg", value: "yes" })).toBe(4);
     expect(crowdCount(dist, { market: "ou", value: "over" })).toBe(3);
+  });
+});
+
+describe("odds engine on the client", () => {
+  const xg = { home: 1.9, away: 0.9 };
+
+  it("model odds: the favourite is shorter, and 1X2 probabilities add up to 1", () => {
+    const g = marketGrid(xg, null)!;
+    const h = selectionOdds(g, { market: "1x2", value: "home" })!;
+    const d = selectionOdds(g, { market: "1x2", value: "draw" })!;
+    const a = selectionOdds(g, { market: "1x2", value: "away" })!;
+    expect(h.p + d.p + a.p).toBeCloseTo(1, 10);
+    expect(Number(h.odds)).toBeLessThan(Number(a.odds));
+    // Over 2.5 and under 2.5 are complementary.
+    const o = selectionOdds(g, { market: "ou", value: "over" })!;
+    const u = selectionOdds(g, { market: "ou", value: "under" })!;
+    expect(o.p + u.p).toBeCloseTo(1, 10);
+  });
+
+  it("crowd picks move the board's 1X2 odds", () => {
+    const model = resultOdds(xg, undefined);
+    const crowdOnAway = resultOdds(xg, { home: 0, draw: 0, away: 50 });
+    expect(crowdOnAway.away!.p).toBeGreaterThan(model.away!.p);
+    expect(crowdOnAway.home!.p + crowdOnAway.draw!.p + crowdOnAway.away!.p).toBeCloseTo(1, 10);
+  });
+
+  it("falls back to crowd-only odds without a model, and to nothing without either", () => {
+    const g = marketGrid(null, [{ home: 1, away: 0, count: 3 }, { home: 1, away: 1, count: 1 }])!;
+    expect(selectionOdds(g, { market: "1x2", value: "home" })!.odds).toBe("1.33");
+    expect(marketGrid(null, null)).toBeNull();
+    expect(resultOdds(null, undefined).home).toBeNull();
   });
 });

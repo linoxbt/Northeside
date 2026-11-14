@@ -1,6 +1,7 @@
 "use client";
 
 import { crowdBonus, type FixtureBreakdown } from "@northeside/scoring";
+import { resultOdds } from "@/lib/markets";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -44,6 +45,8 @@ export interface MatchweekDTO {
     status: string;
     homeGoals: number | null;
     awayGoals: number | null;
+    /** Odds model expected goals (null before the first fit). */
+    xg?: { home: number; away: number } | null;
   }[];
 }
 
@@ -441,7 +444,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                             </div>
                             <div className="order-last col-span-2 flex min-w-0 items-center gap-1.5 md:order-none md:col-span-1">
                               <div className="min-w-0 flex-1">
-                                <OddsButtons c={cf} pick={outcomeOf(h, a)} v2={v2} disabled={!editable} onPick={(o) => pickOutcome(f.index, o)} />
+                                <OddsButtons c={cf} xg={f.xg} pick={outcomeOf(h, a)} v2={v2} disabled={!editable} onPick={(o) => pickOutcome(f.index, o)} />
                               </div>
                                 {v2 && (open || isBanker) ? (
                                   <button
@@ -601,18 +604,21 @@ function ChallengeButton({ mwId }: { mwId: number }) {
  */
 function OddsButtons({
   c,
+  xg,
   pick,
   v2,
   disabled,
   onPick,
 }: {
   c?: { home: number; draw: number; away: number };
+  xg?: { home: number; away: number } | null;
   pick: "home" | "draw" | "away" | null;
   v2: boolean;
   disabled: boolean;
   onPick(o: "home" | "draw" | "away"): void;
 }) {
   const total = c ? c.home + c.draw + c.away : 0;
+  const odds = resultOdds(xg, c);
   const items = [
     ["home", "1"],
     ["draw", "X"],
@@ -622,7 +628,8 @@ function OddsButtons({
     <div className="grid grid-cols-3 gap-1" role="group" aria-label="Result">
       {items.map(([k, label]) => {
         const count = c ? c[k] : 0;
-        const pct = c && total ? `${Math.round((count * 100) / total)}%` : "–";
+        const o = odds[k];
+        const pct = o ? `${Math.round(o.p * 100)}%` : "–";
         const bonus = v2 && c ? crowdBonus(count, total) : 0;
         const mine = pick === k;
         return (
@@ -632,17 +639,15 @@ function OddsButtons({
             disabled={disabled}
             aria-pressed={mine}
             onClick={() => onPick(k)}
-            title={c ? `${count} of ${total} players` : "Crowd odds appear once 5 players have sealed"}
+            title={o ? `${pct} chance${c ? ` · ${count} of ${total} players` : ""}` : "Odds appear after the first model fit"}
             className={`relative flex h-8 min-w-0 items-center justify-between gap-1 overflow-hidden rounded-md px-2 text-[12px] tabular-nums transition-colors disabled:cursor-default ${
               mine ? "bg-ink text-white" : "bg-subtle text-ink hover:bg-line disabled:hover:bg-subtle"
             }`}
           >
             {/* Polymarket-style fill: how much of the crowd is on this result. */}
-            {c && total ? (
-              <span aria-hidden className={`absolute inset-y-0 left-0 ${mine ? "bg-accent/25" : "bg-accent/20"}`} style={{ width: `${Math.round((count * 100) / total)}%` }} />
-            ) : null}
+            {o ? <span aria-hidden className={`absolute inset-y-0 left-0 ${mine ? "bg-accent/25" : "bg-accent/15"}`} style={{ width: `${Math.round(o.p * 100)}%` }} /> : null}
             <span className={`relative font-mono text-[11px] ${mine ? "text-white/60" : "text-muted"}`}>{label}</span>
-            <span className="relative font-medium">{pct}</span>
+            <span className="relative font-medium">{o ? o.odds : "–"}</span>
             {bonus ? <span className={`relative font-mono text-[10px] ${mine ? "text-accent" : "text-accent-deep"}`}>+{bonus}</span> : null}
           </button>
         );

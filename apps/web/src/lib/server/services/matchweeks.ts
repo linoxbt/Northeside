@@ -1,6 +1,6 @@
 import { RULES_V2, rulesVersion } from "@northeside/scoring";
 import "server-only";
-import { currentMatchweek, matchweekWithFixtures } from "@northeside/core";
+import { currentMatchweek, matchweekWithFixtures, oddsFor } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { desc } from "drizzle-orm";
 import { getCtx } from "../ctx";
@@ -36,17 +36,29 @@ export function publicMatchweek(data: NonNullable<Awaited<ReturnType<typeof matc
 }
 export type PublicMatchweek = ReturnType<typeof publicMatchweek>;
 
+/** Adds the odds model's expected goals to each fixture (null before the first fit). */
+async function withOdds(pm: PublicMatchweek) {
+  const odds = await oddsFor(getCtx(), pm.id).catch(() => null);
+  return {
+    ...pm,
+    fixtures: pm.fixtures.map((f) => {
+      const o = odds?.fixtures.find((x) => x.index === f.index);
+      return { ...f, xg: o ? { home: o.home, away: o.away } : null };
+    }),
+  };
+}
+
 export async function getCurrent() {
   const ctx = getCtx();
   const mw = await currentMatchweek(ctx);
   if (!mw) return null;
   const data = await matchweekWithFixtures(ctx, mw.id);
-  return data ? publicMatchweek(data) : null;
+  return data ? withOdds(publicMatchweek(data)) : null;
 }
 
 export async function getById(id: number) {
   const data = await matchweekWithFixtures(getCtx(), id);
-  return data ? publicMatchweek(data) : null;
+  return data ? withOdds(publicMatchweek(data)) : null;
 }
 
 export interface MatchweekTab {

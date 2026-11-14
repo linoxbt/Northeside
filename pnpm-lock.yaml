@@ -44,6 +44,9 @@ importers:
       '@northeside/merkle':
         specifier: workspace:*
         version: link:../../packages/merkle
+      '@northeside/odds':
+        specifier: workspace:*
+        version: link:../../packages/odds
       '@northeside/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
@@ -174,6 +177,9 @@ importers:
       '@northeside/merkle':
         specifier: workspace:*
         version: link:../merkle
+      '@northeside/odds':
+        specifier: workspace:*
+        version: link:../odds
       '@northeside/scoring':
         specifier: workspace:*
         version: link:../scoring
@@ -227,6 +233,12 @@ importers:
       viem:
         specifier: 2.57.19
         version: 2.57.19(bufferutil@4.2.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
+
+  packages/odds:
+    dependencies:
+      '@northeside/football':
+        specifier: workspace:*
+        version: link:../football
 
   packages/scoring:
     dependencies:

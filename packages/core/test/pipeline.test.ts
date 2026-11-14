@@ -31,6 +31,8 @@ import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from
 import {
   createCampaign,
   createJobs,
+  computeOdds,
+  oddsFor,
   computeNsdRewards,
   postNsdRoot,
   nsdClaimsFor,
@@ -336,6 +338,21 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       const created = await createMatchweekOnChain(ctx, 11);
       expect(created.txHash).toMatch(/^0x/);
       expect(await createMatchweekOnChain(ctx, 11)).toMatchObject({ txHash: null }); // idempotent
+
+      // Odds engine: fit on a history where Arsenal and Everton are strong, store expected goals.
+      const teams = ["Arsenal", "Chelsea", "Everton", "Liverpool", "Fulham", "Brentford"];
+      const strong = new Set(["Arsenal", "Everton"]);
+      const history = Array.from({ length: 90 }, (_, i) => {
+        const home = teams[i % 6]!;
+        const away = teams[(i + 1 + Math.floor(i / 6)) % 6]!;
+        return { home, away, homeGoals: strong.has(home) ? 3 : 1, awayGoals: strong.has(away) ? 2 : 0, date: new Date(clock.getTime() - (90 - i) * 86_400_000).toISOString() };
+      }).filter((m) => m.home !== m.away);
+      expect(await computeOdds(ctx, { history })).toMatchObject({ matchweeks: [{ matchweekId: 11, fixtures: 3 }] });
+      const odds11 = await oddsFor(ctx, 11);
+      expect(odds11?.model).toBe("dixon-coles-v1");
+      // Arsenal (strong) at home to Chelsea: more expected goals for Arsenal; Everton (strong) away at Liverpool scores more than at a weak side would.
+      expect(odds11!.fixtures[0]!.home).toBeGreaterThan(odds11!.fixtures[0]!.away);
+      expect(odds11!.fixtures[1]!.home).toBeGreaterThan(0);
 
       await seal(KEYS.p1, u1.id, 11, [0, 0, 0], [0, 0, 0]); // first seal, then re-seal:
       await seal(KEYS.p1, u1.id, 11, [2, 1, 1], [1, 1, 0], 0); // Banker on game 0

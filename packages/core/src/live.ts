@@ -4,6 +4,7 @@ import { breakdown, crowdCounts, rank, rulesVersion, scoreEntries, type FixtureB
 import { asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
+import { oddsFor } from "./odds";
 import { displayName } from "./queries";
 
 /** Crowd odds before lock appear only once this many wallets have sealed, so no single pick shows. */
@@ -215,6 +216,8 @@ export interface MatchView {
   index: number;
   /** Games in the matchweek (a draft holds one pick per game). */
   fixtureCount: number;
+  /** Odds model expected goals for this game (null before the first fit). */
+  xg: { home: number; away: number } | null;
   home: string;
   away: string;
   kickoff: string;
@@ -241,6 +244,7 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
   if (!f) return null;
   const version = rulesVersion(mw.scoringRulesHash);
   const locked = ctx.now() >= mw.lockTime;
+  const odds = await oddsFor(ctx, id).catch(() => null);
 
   // Crowd market for this game (same rules as crowdView: hidden before lock until MIN_CROWD seals).
   const crowd = await cached(ctx, `crowdmatch:${id}:${index}:${locked ? "r" : "s"}`, locked ? 60_000 : 120_000, async () => {
@@ -315,6 +319,10 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
     matchweekId: id,
     index,
     fixtureCount: fixtures.length,
+    xg: (() => {
+      const o = odds?.fixtures.find((x) => x.index === index);
+      return o ? { home: o.home, away: o.away } : null;
+    })(),
     home: f.home,
     away: f.away,
     kickoff: f.kickoff.toISOString(),
