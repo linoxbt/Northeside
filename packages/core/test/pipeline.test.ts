@@ -32,6 +32,7 @@ import {
   DripRefused,
   requestDrip,
   finalizeAndScore,
+  refreshFixtures,
   fetchResults,
   fundCampaign,
   importFixtures,
@@ -367,7 +368,9 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       // ---------------- matchweek 12
       const start12 = Math.floor(clock.getTime() / 1000) + 3 * 24 * 3600;
       providers.fixtures.set(12, fixturesFor(12, start12));
-      await importFixtures(ctx, 12);
+      // The scheduled refresh imports the next matchday only when no draft is waiting (audit B4).
+      expect(await refreshFixtures(ctx, 11)).toEqual([expect.objectContaining({ matchweekId: 12, created: true })]);
+      expect(await refreshFixtures(ctx, 11)).toEqual([expect.objectContaining({ matchweekId: 12, created: true })]); // refreshes the draft, no 13
       await createMatchweekOnChain(ctx, 12);
       await seal(KEYS.p1, u1.id, 12, [1, 1, 1], [0, 0, 0]);
       await seal(KEYS.p2, u2.id, 12, [0, 0, 0], [1, 1, 1]);

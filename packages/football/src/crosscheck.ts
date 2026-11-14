@@ -55,6 +55,8 @@ export interface CheckedFixture {
   status: "played" | "void";
   homeGoals: number;
   awayGoals: number;
+  /** Why a fixture was voided by rule rather than by the providers. */
+  reason?: string;
 }
 
 export type CrossCheckRow =
@@ -95,7 +97,14 @@ function matchByKickoff(f: Fixture, secondary: MatchResult[]): MatchResult | und
  * FR-32: publishing blocks if providers disagree. A fixture agrees when both sources say it was
  * played with the same score, or both say it is void. Anything else is a conflict or pending.
  */
-export function crossCheck(fixtures: Fixture[], primary: MatchResult[], secondary: MatchResult[]): CrossCheck {
+export interface CrossCheckWindow {
+  /** On-chain lock time (unix s). A game that kicks off before it is void: players could see it. */
+  lockTime?: number;
+  /** End of the matchweek window (unix s). A game rescheduled past it is void (FR-09). */
+  windowEnd?: number;
+}
+
+export function crossCheck(fixtures: Fixture[], primary: MatchResult[], secondary: MatchResult[], window: CrossCheckWindow = {}): CrossCheck {
   const pById = new Map(primary.map((r) => [r.externalId, r]));
   const sByKey = new Map(secondary.map((r) => [keyOf(r.home, r.away), r]));
   const rows: CrossCheckRow[] = [];
@@ -110,6 +119,19 @@ export function crossCheck(fixtures: Fixture[], primary: MatchResult[], secondar
     }
     if (!s) {
       rows.push({ index: f.index, fixture: f, state: "missing", detail: "not in secondary source", primary: p });
+      continue;
+    }
+    // FR-09 and lock integrity, decided from the primary source's current schedule.
+    const voidReason =
+      window.lockTime !== undefined && p.kickoff < window.lockTime - 60
+        ? "kicked off before the on-chain lock"
+        : window.windowEnd !== undefined && p.status !== "played" && p.kickoff > window.windowEnd
+          ? "rescheduled outside the matchweek"
+          : null;
+    if (voidReason) {
+      const result: CheckedFixture = { index: f.index, externalId: f.externalId, home: f.home, away: f.away, status: "void", homeGoals: 0, awayGoals: 0, reason: voidReason };
+      rows.push({ index: f.index, fixture: f, state: "agree", result });
+      results.push(result);
       continue;
     }
     if (p.status === "pending" || s.status === "pending") {

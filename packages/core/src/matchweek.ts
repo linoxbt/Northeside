@@ -63,6 +63,20 @@ function fixtureLeaves(id: number, rows: Awaited<ReturnType<typeof getFixtures>>
   }));
 }
 
+/** A matchweek's games are those within this many seconds of the first kickoff. */
+export const MATCHWEEK_WINDOW_SECONDS = 7 * 24 * 3600;
+
+/**
+ * The matchweek window from kickoffs (unix s): first kickoff, and the last kickoff inside the window.
+ * Games already rescheduled weeks out are outside it: they are voided rather than holding up
+ * results for everyone (FR-09).
+ */
+export function matchWindow(kickoffs: number[]) {
+  const first = Math.min(...kickoffs);
+  const last = Math.max(...kickoffs.filter((k) => k <= first + MATCHWEEK_WINDOW_SECONDS));
+  return { first, last, end: last + 2 * 24 * 3600 };
+}
+
 // ---------------------------------------------------------------- import and create
 
 /** FR-07: pull the matchday's fixtures. Before creation they can be replaced; after, only flagged. */
@@ -79,6 +93,14 @@ export async function importFixtures(ctx: CoreContext, matchday: number) {
       const f = fresh.find((x) => x.externalId === s.externalId);
       return !f || f.kickoff * 1000 !== s.kickoff.getTime();
     });
+    const earliest = Math.min(...fresh.map((f) => f.kickoff));
+    if (earliest * 1000 < existing.lockTime.getTime()) {
+      await ctx.alert(
+        `URGENT matchweek ${matchday}: a game now kicks off at ${new Date(earliest * 1000).toISOString()}, before the on-chain lock ` +
+          `(${existing.lockTime.toISOString()}). Commits stay open until the lock; that game will be voided automatically at results. ` +
+          `Pause the matchweeks contract if you need to stop commits earlier.`,
+      );
+    }
     if (moved.length > 0) {
       await ctx.alert(
         `matchweek ${matchday}: ${moved.length} kickoff(s) changed after creation (${moved
@@ -109,6 +131,33 @@ export async function importFixtures(ctx: CoreContext, matchday: number) {
   return { matchweekId: matchday, created: true, fixtures: fresh.length, lockTime };
 }
 
+/**
+ * Daily (and before opening): refresh every draft matchweek from the provider so the fixtures and
+ * lock time that go on-chain are current, re-check open ones for moved kickoffs, and import the
+ * next matchday only once no draft is waiting. Any failure is thrown so the job alerts and retries.
+ */
+export async function refreshFixtures(ctx: CoreContext, firstMatchday: number) {
+  const rows = await ctx.db.select({ id: schema.matchweeks.id, status: schema.matchweeks.status, lockTime: schema.matchweeks.lockTime }).from(schema.matchweeks);
+  const out: unknown[] = [];
+  const errors: string[] = [];
+  const attempt = async (id: number) => {
+    try {
+      out.push(await importFixtures(ctx, id));
+    } catch (e) {
+      errors.push(`matchday ${id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const drafts = rows.filter((r) => r.status === "draft");
+  for (const d of drafts) await attempt(d.id);
+  for (const o of rows.filter((r) => r.status === "open" && r.lockTime > ctx.now())) await attempt(o.id);
+  if (drafts.length === 0) {
+    const next = rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : firstMatchday;
+    if (next <= 38) await attempt(next);
+  }
+  if (errors.length) throw new Error(`fixture import failed: ${errors.join("; ")}`);
+  return out;
+}
+
 /** FR-08: fixtures root on-chain with lock time = earliest kickoff. Idempotent. */
 export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
   const operator = need(ctx.operator, "OPERATOR_PRIVATE_KEY");
@@ -119,7 +168,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
   const lockTime = BigInt(Math.min(...rows.map((r) => r.kickoff.getTime())) / 1000);
   // No results can be proposed on-chain before the last kickoff plus a buffer (audit L-1).
   const buffer = BigInt(process.env.RESULTS_BUFFER_SECONDS ?? 3 * 3600);
-  const resultsNotBefore = BigInt(Math.max(...rows.map((r) => r.kickoff.getTime())) / 1000) + buffer;
+  const resultsNotBefore = BigInt(matchWindow(rows.map((r) => Math.floor(r.kickoff.getTime() / 1000))).last) + buffer;
 
   const chain = await onChainMatchweek(ctx, id);
   let txHash: Hex | null = null;
@@ -325,7 +374,12 @@ export async function fetchResults(ctx: CoreContext, id: number): Promise<CrossC
     football.primary.results(id, ctx.season),
     football.secondary.results(id, ctx.season),
   ]);
-  const check = crossCheck(fixtures, primary, secondary);
+  const mw = await getMatchweek(ctx, id);
+  const w = matchWindow(fixtures.map((f) => f.kickoff));
+  const check = crossCheck(fixtures, primary, secondary, {
+    lockTime: Math.floor(mw.lockTime.getTime() / 1000),
+    windowEnd: w.end,
+  });
   await ctx.db
     .update(schema.matchweeks)
     .set({ resultsCheck: JSON.parse(JSON.stringify({ ...check, fetchedAt: ctx.now() }, bigintReplacer)) })

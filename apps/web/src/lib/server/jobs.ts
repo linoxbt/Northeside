@@ -9,10 +9,12 @@ import {
   fetchResults,
   importFixtures,
   indexChain,
+  matchWindow,
   notifyJob,
   onChainMatchweek,
   postRewardRootsForMatchweek,
   publishResults,
+  refreshFixtures,
   revealMatchweek,
   runJob,
 } from "@northeside/core";
@@ -46,17 +48,11 @@ async function eachWithBudget<T>(items: T[], fn: (item: T) => Promise<unknown>, 
 
 /** Scheduled jobs (spec 10.3). Every job is idempotent and safe to re-run. */
 export const JOBS = {
-  /** Daily: import the next matchday's fixtures; flag kickoff changes on the open one. */
+  /** Every 6 hours: refresh drafts, check open matchweeks for moved kickoffs, import the next one. */
   "import-fixtures": async () => {
     const ctx = getCtx();
-    const [{ latest } = { latest: null }] = await ctx.db.select({ latest: max(schema.matchweeks.id) }).from(schema.matchweeks);
-    const next = (latest ?? Number(process.env.FIRST_MATCHDAY ?? 11) - 1) + 1;
-    return runJob(ctx, "import-fixtures", new Date().toISOString().slice(0, 10), async () => {
-      const out = [];
-      if (latest) out.push(await importFixtures(ctx, latest).catch((e) => ({ error: String(e) })));
-      out.push(await importFixtures(ctx, next).catch((e) => ({ error: String(e) })));
-      return out;
-    });
+    const first = Number(process.env.FIRST_MATCHDAY ?? 11);
+    return runJob(ctx, "import-fixtures", `${new Date().toISOString().slice(0, 13)}`, () => refreshFixtures(ctx, first));
   },
 
   /** Every minute: poll at 15 s intervals for `loops` passes (4 on Vercel; 1 on Netlify's 30 s scheduled functions). */
@@ -90,8 +86,11 @@ export const JOBS = {
     const out = [];
     for (const mw of locked) {
       if (ctx.now() < mw.lockTime) continue;
-      const [last] = await ctx.db.select().from(schema.fixtures).where(eq(schema.fixtures.matchweekId, mw.id)).orderBy(desc(schema.fixtures.kickoff)).limit(1);
-      if (!last || ctx.now().getTime() < last.kickoff.getTime() + 2 * 3600_000) continue;
+      const fx = await ctx.db.select({ kickoff: schema.fixtures.kickoff }).from(schema.fixtures).where(eq(schema.fixtures.matchweekId, mw.id));
+      if (fx.length === 0) continue;
+      // The last game inside the matchweek window, not one already rescheduled weeks out (audit B10).
+      const { last } = matchWindow(fx.map((f) => Math.floor(f.kickoff.getTime() / 1000)));
+      if (ctx.now().getTime() < last * 1000 + 2 * 3600_000) continue;
       const check = await fetchResults(ctx, mw.id);
       if (check.agreed) {
         await runJob(ctx, "results-ready-alert", String(mw.id), async () => ctx.alert(`matchweek ${mw.id}: both sources agree; results will be proposed automatically once the chain allows`));
@@ -127,7 +126,11 @@ export const JOBS = {
       )
       .orderBy(asc(schema.matchweeks.id));
     return eachWithBudget(drafts, async (mw) => {
-      const r = await runJob(ctx, "open-matchweek", String(mw.id), () => createMatchweekOnChain(ctx, mw.id));
+      // Re-import right before going on-chain: the fixtures root and lock time must be current (audit B4).
+      const r = await runJob(ctx, "open-matchweek", String(mw.id), async () => {
+        await importFixtures(ctx, mw.id);
+        return createMatchweekOnChain(ctx, mw.id);
+      });
       if (r.status === "ok") await ctx.alert(`matchweek ${mw.id} opened on-chain; locks ${mw.lockTime.toISOString()}`);
       return { id: mw.id, ...r };
     });
