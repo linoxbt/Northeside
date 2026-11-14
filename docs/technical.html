@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northeside: technical overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0a0b0d;--muted:#6b6f76;--line:#e7e8eb;--sub:#f5f6f7;--acc:#19e07a;--deep:#097a41}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:#fff;line-height:1.6;font-size:16px}
+.w{max-width:760px;margin:0 auto;padding:24px 18px 64px}
+header.h{background:var(--ink);color:#fff;border-radius:18px;padding:22px 20px}
+.k{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.03em;margin:6px 0 10px;font-weight:600}
+.h p{color:rgba(255,255,255,.75);margin:0;font-size:15px}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.links a{background:var(--acc);color:#04140b;text-decoration:none;font-weight:500;font-size:13px;padding:7px 12px;border-radius:999px}
+.links a.o{background:rgba(255,255,255,.1);color:#fff}
+h2{font-size:20px;letter-spacing:-.02em;margin:34px 0 10px;font-weight:600}
+p,li{color:#2b2e33}code,.mono{font-family:"JetBrains Mono",monospace;font-size:13px}
+.c{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:8px 0}
+.cn{font-weight:600;font-size:15px}.cd{color:var(--muted);font-size:13px;margin-top:4px}
+.addr{display:flex;align-items:center;gap:8px;margin-top:4px}
+.addr a{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--deep);word-break:break-all;text-decoration:none}
+.cp{flex-shrink:0;border:1px solid var(--line);background:#fff;border-radius:999px;font-size:12px;padding:4px 10px;cursor:pointer}
+ol li,ul li{margin:6px 0}.note{background:var(--sub);border-radius:12px;padding:12px 14px;font-size:14px;color:#2b2e33}
+.pill{display:inline-block;background:var(--sub);border-radius:999px;padding:2px 9px;font-size:12px;font-family:"JetBrains Mono",monospace}
+footer{color:var(--muted);font-size:13px;margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
+</style></head><body><div class="w">
+<header class="h"><div class="k">Technical overview · QIE mainnet (chain 1990)</div>
+<h1>Northeside</h1>
+<p>Free weekly Premier League score predictions. Players seal their picks on-chain before kickoff from their own wallet; results come from two independent data providers and are published on-chain with a 12-hour challenge window; every matchweek has a public proof page.</p>
+<div class="links"><a href="https://northeside.netlify.app">Open the app</a><a class="o" href="https://northeside.netlify.app/proof/11">Proof page</a><a class="o" href="https://mainnet.qie.digital/address/0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B">Explorer</a></div></header>
+
+<h2>Contracts on QIE mainnet</h2>
+<p>Deployed at block <span class="mono">11,852,159</span>, source verified on the QIE explorer. Solidity 0.8.28 for the Shanghai EVM, OpenZeppelin 5.4.0, not upgradeable.</p>
+<div class="c"><div class="cn">NorthesideMatchweeks</div><div class="addr"><a href="https://mainnet.qie.digital/address/0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B">0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B</a><button data-a="0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B" class="cp">Copy</button></div><div class="cd">Matchweeks, sealed commitments, results, 12-hour challenge window, finalization</div></div><div class="c"><div class="cn">HostRewards</div><div class="addr"><a href="https://mainnet.qie.digital/address/0x8b2f938F40c6A6d62C79f82a1f2d8DB12b6D6246">0x8b2f938F40c6A6d62C79f82a1f2d8DB12b6D6246</a><button data-a="0x8b2f938F40c6A6d62C79f82a1f2d8DB12b6D6246" class="cp">Copy</button></div><div class="cd">Sponsor campaigns in QUSDC; league hosts claim per verified, returning player</div></div><div class="c"><div class="cn">IdentityAdapter</div><div class="addr"><a href="https://mainnet.qie.digital/address/0x7Bdef3854f9bC0B25271Cee756274fEb3d33eAA9">0x7Bdef3854f9bC0B25271Cee756274fEb3d33eAA9</a><button data-a="0x7Bdef3854f9bC0B25271Cee756274fEb3d33eAA9" class="cp">Copy</button></div><div class="cd">Links a wallet to one person (EIP-712 attestation); up to 3 wallets per person</div></div><div class="c"><div class="cn">QUSDC (QIE)</div><div class="addr"><a href="https://mainnet.qie.digital/address/0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5">0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5</a><button data-a="0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5" class="cp">Copy</button></div><div class="cd">Sponsor payments</div></div>
+<p class="note">The admin role is the owner&#39;s own wallet. Operator, results, attester, pauser and gas-drip keys are separate.</p>
+
+<h2>How a matchweek works</h2>
+<ol>
+<li><b>Open.</b> The operator creates the matchweek on-chain with the Merkle root of its fixtures, the lock time (first kickoff) and the hash of the scoring rules.</li>
+<li><b>Seal.</b> The browser builds the picks and a random 32-byte salt and computes <code>keccak256(abi.encode(chainId, contract, player, matchweekId, fixturesRoot, predictionsHash, salt))</code>. The player&#39;s own wallet sends <code>commit()</code>; no relayer. Re-sealing is allowed until lock. New wallets get a small, rate-limited QIEV3 gas drip.</li>
+<li><b>Reveal.</b> After lock, stored picks and salts are checked against the on-chain commitments.</li>
+<li><b>Results.</b> Two providers (football-data.org and TheSportsDB) must agree; postponed games are void. Results, reveals and scores roots are proposed together and stay open to challenge for 12 hours.</li>
+<li><b>Finalize.</b> The roots become final on-chain. Anyone can recompute a commitment in the browser; the proof page reads it straight from the chain.</li>
+</ol>
+<p>Scoring: exact score <b>5</b>, correct result <b>2</b>. From matchweek 12, a sealed <b>Banker</b> (one game counts double) and a <b>beat-the-crowd</b> bonus (+1 / +2 / +3 when at most 50% / 25% / 10% of players called the result). The rules&#39; hash is fixed per matchweek.</p>
+
+<h2>Identity: one person, one player</h2>
+<p><code>IdentityAdapter</code> stores <code>wallet &rarr; personHash</code> from an attestation signed by the Northeside attester and submitted from the player&#39;s wallet. Tables and payouts count one person once.</p>
+<p class="note"><b>Plan: QIE ID verification</b> (which now includes QIE Pass) as the source of that attestation. The player approves a request in QIE Wallet, Northeside receives a signed credential with only the claims it needs (for example <span class="pill">age_over_18</span>), derives the person hash and issues the attestation. No contract change is needed.</p>
+
+<h2>Off-chain</h2>
+<ul>
+<li>Next.js app and API on Netlify; Postgres (Supabase) as an index of the chain. If they disagree, the chain wins.</li>
+<li>A background worker every 5 minutes: index the chain, lock and reveal, fetch results, propose, finalize, post reward roots.</li>
+<li>Sign-in with email (Privy, embedded wallet) or QIE Wallet directly.</li>
+</ul>
+
+<h2>Quality</h2>
+<ul>
+<li>127 Foundry tests: unit, fuzz and invariant suites (solvency, accounting, one claim per person), deploy-script tests, golden vectors shared with the TypeScript code; Slither reviewed.</li>
+<li>Package and API tests, plus an end-to-end run on a local chain driving the real UI: sign-in, seal from the player&#39;s wallet, lock, reveal, two-source results, finalize, proof verification.</li>
+<li>Internal audits, with every finding and fix recorded.</li>
+</ul>
+
+<h2>Roadmap</h2>
+<ul>
+<li>QIE ID verification for the verified badge and host payouts.</li>
+<li><b>$NSD rewards</b> (built and tested, not deployed): fixed supply of 1,000,000, with 30% for players over the first 2-month season, paid weekly by finishing position to verified people only, one claim per person per matchweek, enforced on-chain. Launch waits for verification and legal review.</li>
+</ul>
+<footer>Northeside · northeside.netlify.app</footer>
+</div>
+<script>
+document.querySelectorAll('.cp').forEach(function(b){b.addEventListener('click',function(){var a=b.getAttribute('data-a');
+if(navigator.clipboard){navigator.clipboard.writeText(a).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)},function(){b.textContent='Select it'})}})});
+</script></body></html>
