@@ -109,9 +109,9 @@ const fmtTime = (iso: string, local: boolean) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(local ? {} : WAT) });
 
 function Stepper({ value, onChange, disabled, label, compact }: { value: number | null; onChange(v: number): void; disabled: boolean; label: string; compact?: boolean }) {
-  const btn = compact ? "size-8 text-base" : "size-11 text-lg";
+  const btn = compact ? "size-6 text-[14px] leading-none sm:size-7 sm:text-[15px]" : "size-11 text-lg";
   return (
-    <div className="flex items-center gap-1" role="group" aria-label={label}>
+    <div className={`flex items-center ${compact ? "gap-0.5" : "gap-1"}`} role="group" aria-label={label}>
       <button
         type="button"
         aria-label={`${label}: one less`}
@@ -121,7 +121,7 @@ function Stepper({ value, onChange, disabled, label, compact }: { value: number 
       >
         −
       </button>
-      <output aria-live="polite" className={`${compact ? "w-6 text-[20px]" : "w-9 text-[26px]"} text-center tracking-[-0.04em] tabular-nums ${value === null ? "text-line-strong" : ""}`}>
+      <output aria-live="polite" className={`${compact ? "w-4 text-[16px] sm:w-5 sm:text-[17px]" : "w-9 text-[26px]"} text-center tracking-[-0.04em] tabular-nums ${value === null ? "text-line-strong" : ""}`}>
         {value ?? "–"}
       </output>
       <button
@@ -319,21 +319,21 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   }, [picks, crowd.data, v2]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Dashboard header */}
-      <header className="rounded-[20px] bg-ink p-4 text-white sm:p-5">
+      <header className="rounded-2xl bg-ink px-4 py-3 text-white sm:px-5 sm:py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-white/50">
               Premier League {mw.season}/{String((mw.season + 1) % 100).padStart(2, "0")}
             </p>
-            <h1 className="mt-1 text-[28px] font-medium tracking-[-0.03em] sm:text-[34px]">Matchweek {mw.id}</h1>
+            <h1 className="mt-0.5 text-[24px] font-medium tracking-[-0.03em] sm:text-[28px]">Matchweek {mw.id}</h1>
           </div>
           <div className="text-right">
             {open ? (
               <>
                 <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-white/50">Locks in</p>
-                <p className="font-mono text-[22px] tabular-nums text-accent">{countdown}</p>
+                <p className="font-mono text-[20px] tabular-nums text-accent">{countdown}</p>
               </>
             ) : anyLive ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 font-mono text-[12px] font-medium">
@@ -345,7 +345,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
             )}
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2 font-mono text-[11px] uppercase tracking-[0.06em]">
+        <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[10px] uppercase tracking-[0.06em]">
           <span className="rounded-full bg-white/10 px-2.5 py-1">{n} games</span>
           <span className="rounded-full bg-white/10 px-2.5 py-1">{crowd.data?.players ?? 0} sealed</span>
           <span className="rounded-full bg-white/10 px-2.5 py-1">{v2 ? "Banker ×2 · beat the crowd" : "Exact 5 · result 2"}</span>
@@ -357,9 +357,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
       {!user ? <SignInPanel /> : <AdultGate />}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         {/* Match board */}
-        <section className="min-w-0 space-y-3">
+        <section className="min-w-0 space-y-2.5">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {[["all", "All"], ...days.map((g) => [g.day, g.day] as const), ...(anyLive ? [["live", "● Live"] as const] : [])].map(([k, label]) => (
               <button
@@ -367,29 +367,32 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                 type="button"
                 onClick={() => setTab(k)}
                 aria-pressed={tab === k}
-                className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] font-medium transition-colors ${tab === k ? "bg-ink text-white" : "border border-line bg-white text-ink-2 hover:border-ink"}`}
+                className={`h-8 shrink-0 rounded-full px-3 text-[12px] font-medium transition-colors ${tab === k ? "bg-ink text-white" : "border border-line bg-white text-ink-2 hover:border-ink"}`}
               >
                 {label}
               </button>
             ))}
             {open && user ? (
-              <button type="button" onClick={quickPick} className="ml-auto h-9 shrink-0 rounded-full bg-accent px-3.5 text-[13px] font-medium text-accent-ink hover:brightness-95">
+              <button type="button" onClick={quickPick} className="ml-auto h-8 shrink-0 rounded-full bg-accent px-3 text-[12px] font-medium text-accent-ink hover:brightness-95">
                 Quick pick
               </button>
             ) : null}
           </div>
 
           <Card className="overflow-hidden p-0 sm:p-0">
-            <div className="hidden grid-cols-[52px_minmax(0,1fr)_210px_260px] items-center gap-3 border-b border-line bg-subtle px-4 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted md:grid">
-              <span>Time</span>
+            <div className="hidden grid-cols-[minmax(0,1fr)_228px_auto] items-center gap-x-3 border-b border-line bg-subtle px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted md:grid">
               <span>Match</span>
-              <span className="text-center">1 · X · 2 {crowd.data?.shown ? "crowd" : ""}</span>
-              <span className="pr-[72px] text-right">Your score</span>
+              <span className="grid grid-cols-3 text-center">
+                <span>1</span>
+                <span>X</span>
+                <span>2</span>
+              </span>
+              <span className={`text-right ${v2 ? "pr-9" : ""}`}>Your score</span>
             </div>
             <ol>
               {visibleDays.map((g) => (
                 <li key={g.day}>
-                  <h3 className="border-b border-line bg-subtle/60 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{g.day}</h3>
+                  <h3 className="border-b border-line bg-subtle/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted sm:px-4">{g.day}</h3>
                   <ul className="divide-y divide-line">
                     {g.items.map((f) => {
                       const h = shown.home[f.index] ?? null;
@@ -402,44 +405,35 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       const score = lf && lf.state !== "scheduled" ? `${lf.home}–${lf.away}` : `${f.homeGoals}–${f.awayGoals}`;
                       const editable = open && !!user;
                       return (
-                        <li key={f.index} className={`px-4 py-3 ${isBanker ? "bg-accent/5" : ""}`}>
-                          <div className="grid grid-cols-[44px_minmax(0,1fr)] items-center gap-3 md:grid-cols-[52px_minmax(0,1fr)_210px_260px]">
-                            <div className="font-mono text-[12px] leading-4 text-muted">
-                              {state === "scheduled" ? (
-                                fmtTime(f.kickoff, mounted)
-                              ) : state === "void" ? (
-                                <span className="text-warn">VOID</span>
-                              ) : state === "live" ? (
-                                <span className="font-medium text-red-600">LIVE</span>
-                              ) : (
-                                <span>{state === "ht" ? "HT" : "FT"}</span>
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="flex items-center justify-between gap-2 truncate text-[15px] tracking-[-0.01em]">
-                                <span className="truncate">{f.home}</span>
-                                {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[14px] font-medium">{score.split("–")[0]}</b> : null}
-                              </p>
-                              <p className="flex items-center justify-between gap-2 truncate text-[15px] tracking-[-0.01em]">
-                                <span className="truncate">{f.away}</span>
-                                {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[14px] font-medium">{score.split("–")[1]}</b> : null}
-                              </p>
-                            </div>
-                            <div className="col-span-2 md:col-span-1">
-                              <OddsButtons c={cf} pick={outcomeOf(h, a)} v2={v2} disabled={!editable} onPick={(o) => pickOutcome(f.index, o)} />
-                            </div>
-                            <div className="col-span-2 flex items-center justify-between gap-2 md:col-span-1 md:justify-end">
-                              <div className="flex items-center gap-1">
-                                <Stepper compact label={`${f.home} goals`} value={h} disabled={!editable} onChange={(v) => update("home", f.index, v)} />
-                                <span className="text-muted">:</span>
-                                <Stepper compact label={`${f.away} goals`} value={a} disabled={!editable} onChange={(v) => update("away", f.index, v)} />
+                        <li key={f.index} className={`px-3 py-2 sm:px-4 ${isBanker ? "bg-accent/5" : ""}`}>
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_228px_auto]">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span className="w-9 shrink-0 font-mono text-[11px] leading-4 text-muted">
+                                {state === "scheduled" ? (
+                                  fmtTime(f.kickoff, mounted)
+                                ) : state === "void" ? (
+                                  <span className="text-warn">VOID</span>
+                                ) : state === "live" ? (
+                                  <span className="font-medium text-red-600">LIVE</span>
+                                ) : (
+                                  state === "ht" ? "HT" : "FT"
+                                )}
+                              </span>
+                              <div className="min-w-0 flex-1 text-[14px] leading-[18px] tracking-[-0.01em]">
+                                <p className="flex items-center justify-between gap-2">
+                                  <span className="truncate">{f.home}</span>
+                                  {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[13px] font-medium">{score.split("–")[0]}</b> : null}
+                                </p>
+                                <p className="flex items-center justify-between gap-2">
+                                  <span className="truncate">{f.away}</span>
+                                  {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[13px] font-medium">{score.split("–")[1]}</b> : null}
+                                </p>
                               </div>
-                              <div className="flex w-[64px] items-center justify-end gap-1">
-                                {mineF ? (
-                                  <span className={`font-mono text-[13px] font-bold ${mineF.points ? "text-accent-deep" : "text-muted"}`}>
-                                    +{mineF.points}
-                                  </span>
-                                ) : null}
+                            </div>
+                            <div className="order-last col-span-2 flex min-w-0 items-center gap-1.5 md:order-none md:col-span-1">
+                              <div className="min-w-0 flex-1">
+                                <OddsButtons c={cf} pick={outcomeOf(h, a)} v2={v2} disabled={!editable} onPick={(o) => pickOutcome(f.index, o)} />
+                              </div>
                                 {v2 && (open || isBanker) ? (
                                   <button
                                     type="button"
@@ -448,14 +442,36 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                                     title="Banker: this game's points count double"
                                     disabled={!editable}
                                     onClick={() => toggleBanker(f.index)}
-                                    className={`flex size-8 items-center justify-center rounded-full text-[15px] transition-colors disabled:cursor-default ${
+                                    className={`flex size-8 shrink-0 md:hidden items-center justify-center rounded-full text-[13px] transition-colors disabled:cursor-default ${
                                       isBanker ? "bg-ink text-accent" : "border border-line text-muted hover:border-ink hover:text-ink"
                                     }`}
                                   >
                                     ★
                                   </button>
                                 ) : null}
-                              </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Stepper compact label={`${f.home} goals`} value={h} disabled={!editable} onChange={(v) => update("home", f.index, v)} />
+                              <span className="text-[13px] text-muted">:</span>
+                              <Stepper compact label={`${f.away} goals`} value={a} disabled={!editable} onChange={(v) => update("away", f.index, v)} />
+                              {mineF ? (
+                                <span className={`w-7 text-right font-mono text-[12px] font-bold ${mineF.points ? "text-accent-deep" : "text-muted"}`}>+{mineF.points}</span>
+                              ) : null}
+                              {v2 && (open || isBanker) ? (
+                                <button
+                                  type="button"
+                                  aria-pressed={isBanker}
+                                  aria-label={`Banker: ${f.home} v ${f.away}`}
+                                  title="Banker: this game's points count double"
+                                  disabled={!editable}
+                                  onClick={() => toggleBanker(f.index)}
+                                  className={`ml-0.5 hidden size-7 md:flex items-center justify-center rounded-full text-[13px] transition-colors disabled:cursor-default ${
+                                    isBanker ? "bg-ink text-accent" : "border border-line text-muted hover:border-ink hover:text-ink"
+                                  }`}
+                                >
+                                  ★
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                         </li>
@@ -594,7 +610,7 @@ function OddsButtons({
     ["away", "2"],
   ] as const;
   return (
-    <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Result">
+    <div className="grid grid-cols-3 gap-1" role="group" aria-label="Result">
       {items.map(([k, label]) => {
         const count = c ? c[k] : 0;
         const pct = c && total ? `${Math.round((count * 100) / total)}%` : "–";
@@ -608,13 +624,17 @@ function OddsButtons({
             aria-pressed={mine}
             onClick={() => onPick(k)}
             title={c ? `${count} of ${total} players` : "Crowd odds appear once 5 players have sealed"}
-            className={`flex h-10 min-w-0 items-center justify-between gap-1 rounded-lg px-2.5 text-[13px] tabular-nums transition-colors disabled:cursor-default ${
+            className={`relative flex h-8 min-w-0 items-center justify-between gap-1 overflow-hidden rounded-md px-2 text-[12px] tabular-nums transition-colors disabled:cursor-default ${
               mine ? "bg-ink text-white" : "bg-subtle text-ink hover:bg-line disabled:hover:bg-subtle"
             }`}
           >
-            <span className={`font-mono text-[12px] ${mine ? "text-white/60" : "text-muted"}`}>{label}</span>
-            <span className="font-medium">{pct}</span>
-            {bonus ? <span className={`font-mono text-[10px] ${mine ? "text-accent" : "text-accent-deep"}`}>+{bonus}</span> : null}
+            {/* Polymarket-style fill: how much of the crowd is on this result. */}
+            {c && total ? (
+              <span aria-hidden className={`absolute inset-y-0 left-0 ${mine ? "bg-accent/25" : "bg-accent/20"}`} style={{ width: `${Math.round((count * 100) / total)}%` }} />
+            ) : null}
+            <span className={`relative font-mono text-[11px] ${mine ? "text-white/60" : "text-muted"}`}>{label}</span>
+            <span className="relative font-medium">{pct}</span>
+            {bonus ? <span className={`relative font-mono text-[10px] ${mine ? "text-accent" : "text-accent-deep"}`}>+{bonus}</span> : null}
           </button>
         );
       })}
