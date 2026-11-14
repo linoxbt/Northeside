@@ -50,7 +50,7 @@ function Intro({ children }: { children?: ReactNode }) {
     <div className="text-center">
       <h1 className="text-[34px] font-medium leading-[1.08] tracking-[-0.04em] sm:text-[44px]">Call the score. Seal it.</h1>
       <p className="mx-auto mt-4 max-w-[400px] text-[17px] leading-7 text-muted">
-        Sign in to seal your Premier League predictions on QIE before kickoff, join your league and keep every receipt.
+        Free Premier League predictions on QIE.
       </p>
       {children}
     </div>
@@ -64,7 +64,7 @@ function Preview() {
       <p className="mt-10 rounded-2xl border border-line bg-subtle p-5 text-center text-[15px] leading-6 text-ink-2">
         Sign-in opens with the first live matchweek.
       </p>
-      <Link href="/how-it-works" className={`${secondary} mt-6`}>
+      <Link href="/docs" className={`${secondary} mt-6`}>
         See how it works
       </Link>
     </>
@@ -265,11 +265,11 @@ function Live() {
     <>
       <Intro>
         {linking ? (
-          <p className="mt-8 text-[15px] text-muted">Connect the wallet you want to add, then sign the message. Up to 3 wallets per account.</p>
+          <p className="mt-8 text-[15px] text-muted">Connect a wallet to add. Up to 3.</p>
         ) : (
           <p className="mt-8 text-[15px] text-muted">
-            New to Northeside? Signing in creates your account.{" "}
-            <Link href="/how-it-works" className={`${link} whitespace-nowrap`}>
+            New? Signing in creates your account.{" "}
+            <Link href="/docs" className={`${link} whitespace-nowrap`}>
               How it works
             </Link>
           </p>
@@ -369,15 +369,15 @@ function Live() {
         {shownError ? <ErrorLine text={shownError} /> : null}
 
         <p className="mt-8 text-center text-[13px] leading-6 text-muted">
-          By continuing you confirm you are 18 or older and accept the{" "}
-          <Link href="/legal/terms" className={link}>
+          18+ only. By continuing you accept the{" "}
+          <Link href="/docs/terms" className={link}>
             Terms of use
           </Link>{" "}
           and{" "}
-          <Link href="/legal/privacy" className={link}>
+          <Link href="/docs/privacy" className={link}>
             Privacy notice
           </Link>
-          . Free to play: no purchase, no stakes, no prizes.
+          .
         </p>
       </div>
     </>

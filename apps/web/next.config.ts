@@ -26,7 +26,11 @@ const config: NextConfig = {
   async redirects() {
     return [
       { source: "/leaderboard", destination: "/table", permanent: true },
-      { source: "/rules", destination: "/how-it-works", permanent: true },
+      { source: "/rules", destination: "/docs", permanent: true },
+      // Reading pages moved into /docs.
+      { source: "/how-it-works", destination: "/docs", permanent: true },
+      { source: "/sponsors", destination: "/docs/sponsors", permanent: true },
+      { source: "/legal/:doc", destination: "/docs/:doc", permanent: true },
     ];
   },
   async headers() {

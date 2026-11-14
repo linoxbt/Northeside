@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CtaBand } from "@/components/cta-band";
 import { ButtonLink, Chevron, Container, PageHeader } from "@/components/ui";
 import { safely } from "@/lib/server/configured";
 import { leagueDirectory } from "@/lib/server/services/leagues";
@@ -13,7 +12,7 @@ export default async function LeaguesPage() {
   return (
     <>
       <Container className="pb-20">
-        <PageHeader eyebrow="Leagues" title="Play with your people." lede="Every league is run by a host: a creator, a fan page, a group chat. Join one through its invite link, or start your own in a minute.">
+        <PageHeader eyebrow="Leagues" title="Play with your people.">
           <ButtonLink href="/host" variant="primary" arrow>
             Start a league
           </ButtonLink>
@@ -21,7 +20,6 @@ export default async function LeaguesPage() {
         {leagues.length === 0 ? (
           <div className="rounded-[var(--radius-card)] border border-dashed border-line-strong px-6 py-16 text-center">
             <p className="text-[20px] tracking-[-0.02em]">No public leagues yet.</p>
-            <p className="mt-2 text-muted">Be the first host this season.</p>
           </div>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -42,7 +40,6 @@ export default async function LeaguesPage() {
           </ul>
         )}
       </Container>
-      <CtaBand />
     </>
   );
 }

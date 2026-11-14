@@ -25,7 +25,7 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
           <MatchweekView mw={mw} />
         </div>
       ) : (
-        <PageHeader eyebrow="Play" title="The next matchweek opens soon." lede="Fixtures appear here a few days before the first kickoff. Join a league in the meantime.">
+        <PageHeader eyebrow="Play" title="The next matchweek opens soon.">
           <ButtonLink href="/leagues" variant="primary" arrow>
             Find a league
           </ButtonLink>

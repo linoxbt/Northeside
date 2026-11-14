@@ -34,7 +34,7 @@ export default async function StatsPage() {
   ];
   return (
     <Container className="pb-24">
-      <PageHeader eyebrow="Live stats" title="Traction you can audit." lede="Computed from QIE events as they land. Wallets, people and transactions are separate numbers and are never added together." />
+      <PageHeader eyebrow="Live stats" title="Traction you can audit." />
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line lg:grid-cols-3">
         {tiles.map(([k, v, hint]) => (
           <div key={k} className="bg-white p-6 sm:p-8">
@@ -48,7 +48,7 @@ export default async function StatsPage() {
       <section className="mt-16">
         <h2 className="mb-6 text-[24px] tracking-[-0.03em]">Weekly active players</h2>
         {s.weekly.length === 0 ? (
-          <p className="rounded-[var(--radius-card)] border border-dashed border-line-strong px-6 py-12 text-center text-muted">The first matchweek's numbers appear here once players seal.</p>
+          <p className="rounded-[var(--radius-card)] border border-dashed border-line-strong px-6 py-12 text-center text-muted">No data yet.</p>
         ) : (
           <ul className="space-y-3">
             {s.weekly.map((w) => (
@@ -95,7 +95,7 @@ export default async function StatsPage() {
               <li><ExtLink href={`${explorer}/address/${contracts.identity}`}>IdentityAdapter</ExtLink></li>
             </ul>
           ) : (
-            <p className="mt-5 text-[15px] text-muted">Contract links appear here once Northeside launches on QIE mainnet.</p>
+            <p className="mt-5 text-[15px] text-muted">Not deployed yet.</p>
           )}
         </div>
       </section>

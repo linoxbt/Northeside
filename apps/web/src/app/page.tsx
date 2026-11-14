@@ -4,7 +4,7 @@ import { formatQusdc } from "@/lib/money";
 import { prefetchFor } from "@/lib/routes";
 import type { ReactNode } from "react";
 import { CtaBand } from "@/components/cta-band";
-import { HeroScatter, PayoutArt, PersonArt, SealArt, SourcesArt } from "@/components/illustrations";
+import { HeroScatter } from "@/components/illustrations";
 import { ArrowLink, ButtonLink, Chevron, Container, Eyebrow, SectionHeading } from "@/components/ui";
 import { backendConfigured, safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
@@ -35,10 +35,9 @@ export default async function Landing() {
       <section className="relative overflow-hidden">
         <HeroScatter />
         <Container className="relative pb-16 pt-20 text-center sm:pb-24 sm:pt-28">
-          <Link href="/how-it-works" className="mx-auto mb-8 inline-flex animate-rise items-center gap-2 rounded-full border border-line bg-white py-1.5 pl-1.5 pr-3.5 text-[13px] text-ink-2 hover:border-line-strong">
+          <Link href="/docs" className="mx-auto mb-8 inline-flex animate-rise items-center gap-2 rounded-full border border-line bg-white py-1.5 pl-1.5 pr-3.5 text-[13px] text-ink-2 hover:border-line-strong">
             <span className="whitespace-nowrap rounded-full bg-ink px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{live && mw ? "Live on QIE" : "Launching on QIE"}</span>
-            <span className="whitespace-nowrap sm:hidden">Free, every matchweek</span>
-            <span className="hidden whitespace-nowrap sm:inline">Free to play, every Premier League matchweek</span>
+            <span className="whitespace-nowrap">Free, every matchweek</span>
             <Chevron />
           </Link>
           <h1 className="display mx-auto max-w-4xl animate-rise text-[48px] sm:text-[80px] [animation-delay:80ms]">
@@ -47,7 +46,7 @@ export default async function Landing() {
             Seal it onchain.
           </h1>
           <p className="mx-auto mt-6 max-w-xl animate-rise text-lg leading-7 tracking-[-0.01em] text-muted sm:text-xl sm:leading-8 [animation-delay:160ms]">
-            Predict every game, lock your picks before kickoff, and climb leagues run by the creators you follow. Anyone can check the result.
+            Free Premier League predictions, sealed on QIE.
           </p>
           <div className="mt-9 flex animate-rise flex-wrap justify-center gap-3 [animation-delay:240ms]">
             <ButtonLink href="/play" variant="accent" arrow>
@@ -80,9 +79,9 @@ export default async function Landing() {
       <section>
         <Container className="py-20 sm:py-28">
           <div className="grid gap-4 md:grid-cols-3">
-            <AudienceCard href="/play" icon={<IconBall />} title="For fans" body="Ten games, two numbers each. Seal in under a minute, no money in, ever. Track your record week after week." />
-            <AudienceCard href="/host" icon={<IconFlag />} title="For hosts" body="Run a league for your community. Sponsors pay you in QUSDC for every verified fan who keeps coming back." />
-            <AudienceCard href="/sponsors" icon={<IconCoin />} title="For sponsors" body="Pay for real, returning football fans, not clicks. Terms locked onchain, funds in escrow, reports you can verify." />
+            <AudienceCard href="/play" icon={<IconBall />} title="For fans" body="Ten scores a week. Free." />
+            <AudienceCard href="/host" icon={<IconFlag />} title="For hosts" body="Run a league. Earn QUSDC." />
+            <AudienceCard href="/docs/sponsors" icon={<IconCoin />} title="For sponsors" body="Pay for real, returning fans." />
           </div>
         </Container>
       </section>
@@ -91,7 +90,6 @@ export default async function Landing() {
       <section className="bg-subtle">
         <Container className="py-20 text-center sm:py-24">
           <h2 className="display text-[30px] sm:text-[40px]">Every number is onchain.</h2>
-          <p className="mt-3 text-[17px] text-muted">Counted from QIE events, never estimated, never added together.</p>
           <dl className="mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-y-10 sm:grid-cols-4 sm:divide-x sm:divide-line-strong">
             <Stat value={s ? s.activatedWallets.toLocaleString("en-GB") : "—"} label="Activated wallets" />
             <Stat value={s ? s.verifiedPersons.toLocaleString("en-GB") : "—"} label="Verified persons" />
@@ -104,37 +102,13 @@ export default async function Landing() {
         </Container>
       </section>
 
-      {/* ---------------------------------------------------------------- principles */}
-      <section>
-        <Container className="py-20 sm:py-28">
-          <SectionHeading
-            title={
-              <>
-                <span className="font-medium">Northeside</span> <span className="text-muted">is football prediction you can check for yourself.</span>
-              </>
-            }
-            action={
-              <ButtonLink href="/how-it-works" variant="secondary" arrow>
-                How it works
-              </ButtonLink>
-            }
-          />
-          <div className="grid gap-x-6 gap-y-14 md:grid-cols-2">
-            <Principle art={<SealArt />} title="Sealed before kickoff" body="Your browser hashes your picks with a random salt and your own wallet seals the hash on QIE. After the first whistle, no one can change a thing." />
-            <Principle art={<SourcesArt />} title="Two sources, one result" body="Final scores come from two independent data providers that must agree, then sit in a 12-hour challenge window before they are final." />
-            <Principle art={<PersonArt />} title="One person, one player" body="QIE Pass proves there is a real person behind a profile. However many wallets they use, they count once on tables and for payouts." />
-            <Principle art={<PayoutArt />} title="Paid for real fans" body="Sponsors fund campaigns in QUSDC escrow. After each matchweek a Merkle root lands onchain and hosts claim exactly what they earned." />
-          </div>
-        </Container>
-      </section>
-
       {/* ---------------------------------------------------------------- this week */}
       {mw && mw.fixtures.length > 0 ? (
         <section className="border-t border-line">
           <Container className="py-20 sm:py-24">
             <SectionHeading
               title={`Matchweek ${mw.id}`}
-              lede={mw.status === "open" ? `Locks ${wat(mw.lockTime, { weekday: "long", hour: "2-digit", minute: "2-digit" })} WAT, at the first kickoff.` : "Locked. Results and proof land after the last game."}
+              lede={mw.status === "open" ? `Locks ${wat(mw.lockTime, { weekday: "long", hour: "2-digit", minute: "2-digit" })} WAT` : "Locked"}
               action={
                 <ButtonLink href="/play" variant="secondary" arrow>
                   {mw.status === "open" ? "Make your picks" : "See this week"}
@@ -162,12 +136,12 @@ export default async function Landing() {
       {/* ---------------------------------------------------------------- steps */}
       <section className="border-t border-line">
         <Container className="grid gap-12 py-20 sm:py-24 md:grid-cols-[1fr_2fr]">
-          <h2 className="display text-[30px] sm:text-[40px]">Three steps. Under a minute.</h2>
+          <h2 className="display text-[30px] sm:text-[40px]">Three steps.</h2>
           <ol className="grid gap-8 sm:grid-cols-3">
             {[
-              ["01", "Pick", "Sign in with email or QIE Wallet and call all ten scores. Drafts save as you go."],
-              ["02", "Seal", "Tap seal. Your wallet sends one tiny transaction; new players get the gas for free."],
-              ["03", "Climb", "Points land after the final whistle: five for an exact score, two for the right result."],
+              ["01", "Pick", "Call ten scores."],
+              ["02", "Seal", "One tap. Gas is on us."],
+              ["03", "Climb", "5 for exact, 2 for the result."],
             ].map(([n, t, b]) => (
               <li key={n} className="border-t border-ink pt-5">
                 <p className="font-mono text-[13px] text-muted">{n}</p>
@@ -260,16 +234,6 @@ function Stat({ value, label }: { value: string; label: string }) {
       <dd className="text-[34px] tracking-[-0.04em] sm:text-[40px]">{value}</dd>
       <dt className="eyebrow mt-2">{label}</dt>
     </div>
-  );
-}
-
-function Principle({ art, title, body }: { art: ReactNode; title: string; body: string }) {
-  return (
-    <article>
-      <div className="dot-grid overflow-hidden rounded-[var(--radius-card)] border border-line bg-white px-4 py-6">{art}</div>
-      <h3 className="mt-6 text-[20px] tracking-[-0.02em]">{title}</h3>
-      <p className="mt-2 max-w-lg text-[15px] leading-6 text-muted">{body}</p>
-    </article>
   );
 }
 

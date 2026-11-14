@@ -15,8 +15,8 @@ export const NAV = [
   { href: "/table", label: "Table" },
   { href: "/leagues", label: "Leagues" },
   { href: "/host", label: "Hosts" },
-  { href: "/sponsors", label: "Sponsors" },
   { href: "/proof", label: "Proof" },
+  { href: "/docs", label: "Docs" },
 ];
 
 function AnnouncementBar() {
@@ -33,9 +33,9 @@ function AnnouncementBar() {
     return (
       <div className="border-b border-line bg-white text-center text-[13px] tracking-[-0.01em]">
         <p className="px-10 py-2.5">
-          Northeside is launching on QIE mainnet.{" "}
-          <Link href="/how-it-works" className="inline-flex items-center gap-1 font-medium text-accent-deep">
-            See how it works <Chevron />
+          Launching on QIE mainnet.{" "}
+          <Link href="/docs" className="inline-flex items-center gap-1 font-medium text-accent-deep">
+            Docs <Chevron />
           </Link>
         </p>
       </div>
@@ -158,7 +158,7 @@ export function SiteHeader() {
       {menu ? (
         <div ref={menuRef} id="mobile-menu" className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-white lg:hidden">
           <nav aria-label="Mobile" className="px-5 py-6">
-            {[...NAV, { href: "/how-it-works", label: "How it works" }, { href: "/stats", label: "Live stats" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
+            {[...NAV, { href: "/stats", label: "Live stats" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
               <Link key={n.href} href={n.href} prefetch={prefetchFor(n.href)} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
                 {n.label}
                 <Chevron className="size-4 text-muted" />

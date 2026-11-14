@@ -15,7 +15,6 @@ export function CtaBand() {
           </svg>
         </div>
         <h2 className="display relative max-w-xl text-[36px] sm:text-[52px]">Your call. Sealed before kickoff.</h2>
-        <p className="relative mt-4 max-w-md text-[17px] leading-7 text-accent-ink/75">Free forever for fans. Built on QIE, checked by anyone.</p>
         <div className="relative mt-8 flex flex-wrap gap-3">
           <ButtonLink href="/play" variant="primary" arrow>
             Play this week

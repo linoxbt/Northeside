@@ -110,7 +110,7 @@ export function Profile() {
           <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
         <label className="block text-sm">
-          <span className="text-[14px] text-muted">QIE ID (e.g. lino.qie), shown as self-reported until it can be checked</span>
+          <span className="text-[14px] text-muted">QIE ID (e.g. yourname.qie), self-reported</span>
           <input value={qieId} maxLength={40} onChange={(e) => setQieId(e.target.value.toLowerCase())} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
         <Button
@@ -127,13 +127,12 @@ export function Profile() {
 
       <Card className="space-y-2">
         <h2 className="text-[20px] tracking-[-0.02em]">Verified human (QIE Pass)</h2>
-        <p className="text-[15px] leading-6 text-muted">A verified badge shows you are one real person. It is what sponsors pay your host for. Northeside stores only an encrypted reference, never your documents.</p>
         {session.data?.verified ? null : session.data?.verificationAvailable ? (
           <Button variant="ghost" onClick={() => { track("verification_started"); location.href = "/api/v1/identity/start"; }}>Get verified</Button>
         ) : (
           // Spec 9.4: never offer or claim QIE Pass verification before a real one works on mainnet.
           <p className="rounded-xl bg-subtle px-4 py-3 text-[14px] leading-6 text-ink-2">
-            Coming soon. Verification opens once QIE Pass is connected; we will remind you. You can play and climb the tables in the meantime.
+            Coming soon.
           </p>
         )}
       </Card>
@@ -163,7 +162,7 @@ export function Profile() {
             </Button>
           ) : null}
         </div>
-        <p className="text-[13px] leading-5 text-muted">Up to 3 wallets count as one person. Export shows your wallet&apos;s private key in a secure Privy window so you can use it in another wallet app.</p>
+        <p className="text-[13px] leading-5 text-muted">Up to 3 wallets count as one person.</p>
       </Card>
 
       <Card className="space-y-2">
@@ -183,7 +182,6 @@ export function Profile() {
 
       <Card className="space-y-2">
         <h2 className="text-[20px] tracking-[-0.02em]">Your data</h2>
-        <p className="text-[15px] leading-6 text-muted">Export your sealed picks from each matchweek page. Deleting your account removes your email, name and identity reference. On-chain commitments stay, unlinked from you.</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={() => void signOut()}>Sign out</Button>
           {confirmDelete ? null : (
