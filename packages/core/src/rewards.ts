@@ -13,7 +13,7 @@ import {
   type Hex,
 } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext, type Signer } from "./context";
-import { audit, confirm } from "./ops";
+import { audit, confirm, sendWrite } from "./ops";
 
 export const CampaignStatus = { None: 0, Pending: 1, Active: 2, Closed: 3, Cancelled: 4 } as const;
 
@@ -61,7 +61,7 @@ export async function createCampaign(ctx: CoreContext, c: NewCampaign) {
     functionName: "createCampaign",
     args: [terms],
   });
-  const tx = await operator.writeContract(request);
+  const tx = await sendWrite(ctx, operator, request);
   const receipt = await confirm(ctx, tx, "createCampaign");
   let id = Number(result);
   for (const log of receipt.logs) {
@@ -120,12 +120,12 @@ export async function fundCampaign(ctx: CoreContext, sponsor: Signer, id: number
     args: [sponsor.account.address, ctx.deployment.hostRewards],
   });
   if (allowance < gross) {
-    const approveTx = await sponsor.writeContract({
+    const approveTx = await sendWrite(ctx, sponsor, {
       address: ctx.deployment.qusdc,
       abi: erc20Abi,
       functionName: "approve",
       args: [ctx.deployment.hostRewards, gross],
-    });
+    } as Parameters<typeof sponsor.writeContract>[0]);
     await confirm(ctx, approveTx, "QUSDC approve");
   }
   const { request } = await ctx.publicClient.simulateContract({
@@ -135,7 +135,7 @@ export async function fundCampaign(ctx: CoreContext, sponsor: Signer, id: number
     functionName: "fund",
     args: [BigInt(id)],
   });
-  const tx = await sponsor.writeContract(request);
+  const tx = await sendWrite(ctx, sponsor, request);
   await confirm(ctx, tx, `fund(${id})`);
   await ctx.db.update(schema.campaigns).set({ status: "active", fundTx: tx }).where(eq(schema.campaigns.id, id));
   await audit(ctx, "sponsor", "fund-campaign", { id, gross }, tx);
@@ -368,7 +368,7 @@ async function sendRoot(ctx: CoreContext, operator: NonNullable<CoreContext["ope
     functionName: "postRoot",
     args: [BigInt(campaignId), matchweekId, root, total, reportUri],
   });
-  const tx = await operator.writeContract(request);
+  const tx = await sendWrite(ctx, operator, request);
   await ctx.db
     .update(schema.rewardRoots)
     .set({ txHash: tx })
@@ -431,7 +431,7 @@ export async function refundCampaign(ctx: CoreContext, signer: Signer, campaignI
     functionName: "refund",
     args: [BigInt(campaignId)],
   });
-  const tx = await signer.writeContract(request);
+  const tx = await sendWrite(ctx, signer, request);
   await confirm(ctx, tx, `refund(${campaignId})`);
   await audit(ctx, "operator", "refund", { campaignId, amount: result }, tx);
   return { campaignId, amount: result, txHash: tx };

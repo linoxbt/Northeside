@@ -4,6 +4,7 @@ import { hostRewardsAbi } from "@northeside/chain";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { formatUnits, type Hex } from "viem";
+import { safeGas } from "@/lib/client/gas";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { txError } from "@/lib/client/tx-errors";
 import { AdultGate, PanelSkeleton, SignInPanel } from "./sign-in";
@@ -37,7 +38,7 @@ export function HostDashboard() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
-  const { chainId } = useAccount();
+  const { address, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const [err, setErr] = useState<string | null>(null);
   const publicClient = usePublicClient({ chainId: chain.id });
@@ -90,12 +91,17 @@ export function HostDashboard() {
         throw new Error(`Claims for this payout open on ${new Date(e.claimableFrom).toLocaleString()}`);
       }
       if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
+      const claimArgs = [BigInt(e.campaignId), e.matchweekId, e.host as Hex, BigInt(e.amount), e.countablePlayers, e.proof] as const;
+      const estimate = await publicClient
+        ?.estimateContractGas({ address: publicEnv.hostRewards, abi: hostRewardsAbi, functionName: "claim", args: claimArgs, account: address })
+        .catch(() => null);
       const hash = await writeContractAsync({
         address: publicEnv.hostRewards,
         abi: hostRewardsAbi,
         functionName: "claim",
-        args: [BigInt(e.campaignId), e.matchweekId, e.host as Hex, BigInt(e.amount), e.countablePlayers, e.proof],
+        args: claimArgs,
         chainId: chain.id,
+        gas: safeGas(estimate, 250_000n),
       });
       const receipt = await publicClient?.waitForTransactionReceipt({ hash, timeout: 90_000 });
       if (receipt && receipt.status !== "success") throw new Error("The claim failed on-chain");

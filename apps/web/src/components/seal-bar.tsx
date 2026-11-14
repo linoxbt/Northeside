@@ -4,6 +4,7 @@ import { matchweeksAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
 import { useEffect, useRef, useState } from "react";
 import type { Hex } from "viem";
+import { COMMIT_GAS } from "@/lib/client/gas";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { useAuthBridge } from "./auth-bridge";
 import { WalletProviders } from "./providers";
@@ -140,6 +141,7 @@ function SealBar(props: {
         functionName: "commit",
         args: [props.mwId, payload.commitment],
         chainId: chain.id,
+        gas: COMMIT_GAS,
       });
       localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, txHash: hash, synced: false } satisfies LocalSeal));
       setStep("Sealing on QIE…");
