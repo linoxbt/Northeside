@@ -79,7 +79,7 @@ export default async function Landing() {
       <section>
         <Container className="py-20 sm:py-28">
           <div className="grid gap-4 md:grid-cols-3">
-            <AudienceCard href="/play" icon={<IconBall />} title="For fans" body="Ten scores a week. Free." />
+            <AudienceCard href="/play" icon={<IconBall />} title="For fans" body="Crowd odds, Banker, head-to-head. Free." />
             <AudienceCard href="/host" icon={<IconFlag />} title="For hosts" body="Run a league. Earn QUSDC." />
             <AudienceCard href="/docs/sponsors" icon={<IconCoin />} title="For sponsors" body="Pay for real, returning fans." />
           </div>
@@ -139,9 +139,9 @@ export default async function Landing() {
           <h2 className="display text-[30px] sm:text-[40px]">Three steps.</h2>
           <ol className="grid gap-8 sm:grid-cols-3">
             {[
-              ["01", "Pick", "Call ten scores."],
-              ["02", "Seal", "One tap. Gas is on us."],
-              ["03", "Climb", "5 for exact, 2 for the result."],
+              ["01", "Pick", "Call ten scores. Star a Banker."],
+              ["02", "Seal", "One tap, onchain. Gas is on us."],
+              ["03", "Climb", "Beat the crowd. Live table."],
             ].map(([n, t, b]) => (
               <li key={n} className="border-t border-ink pt-5">
                 <p className="font-mono text-[13px] text-muted">{n}</p>

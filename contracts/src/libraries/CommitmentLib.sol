@@ -12,6 +12,13 @@ library CommitmentLib {
         return keccak256(abi.encode(home, away));
     }
 
+    /// @notice Payload v2 (scoring rules v2): the Banker fixture index is sealed with the picks.
+    ///         `banker` = 255 means no Banker. The deployed contract treats predictionsHash as opaque,
+    ///         so v1 and v2 commitments verify the same way on-chain.
+    function predictionsHashV2(uint8[] memory home, uint8[] memory away, uint8 banker) internal pure returns (bytes32) {
+        return keccak256(abi.encode(home, away, banker));
+    }
+
     function commitment(
         uint256 chainId,
         address matchweeksContract,

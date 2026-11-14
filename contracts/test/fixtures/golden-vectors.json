@@ -52,5 +52,16 @@
     "deadline": "1800000000",
     "structHash": "0x67be88c5653a4c5af17702ca563b0a1ae342ed28edb67b21ad867eae504fdf9b",
     "digest": "0x776b769c0152a84ecd5e22f20a39ee5fa5b5723ac50925ba9a72e1d5c92d6113"
+  },
+  "commitmentV2": {
+    "comment": "Payload v2 (scoring rules v2): predictionsHash = keccak256(abi.encode(uint8[] home, uint8[] away, uint8 banker)); banker 255 = none. Same home/away/salt/context as commitment.",
+    "banker": 3,
+    "predictionsHash": "0xbc922856cce144ca2d9a8cd19ae3be5be91656f0571de7f9c35ce25b83746523",
+    "commitment": "0xa9f9f845f68e2f0303ff865b9fc61daa991e1d1b6190475af9e87f118e26af6e",
+    "noBanker": {
+      "banker": 255,
+      "predictionsHash": "0xfccd96bd075421c2e00d9e09fd3f2d082b2e79ec9be6bbc4a4b705d1dca3cff4",
+      "commitment": "0x3ca7b9fa846258805005bd289b9d77872728b23c4565391eee43e9c987b752e3"
+    }
   }
 }

@@ -1,7 +1,8 @@
 import type { SealedPayload } from "@northeside/commitments";
 import { api } from "./api";
 
-export type Picks = { home: (number | null)[]; away: (number | null)[] };
+/** Draft picks; `banker` is the doubled fixture (rules v2), null for none. */
+export type Picks = { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
 
 export const sealedKey = (mw: number, wallet: string) => `ns_sealed_${mw}_${wallet.toLowerCase()}`;
 /** A seal whose transaction has not succeeded yet. Promoted to sealedKey only after its receipt (audit B6). */

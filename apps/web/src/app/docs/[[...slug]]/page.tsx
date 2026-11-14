@@ -1,4 +1,4 @@
-import { RULES_V1_HASH } from "@northeside/scoring";
+import { RULES_V1_HASH, RULES_V2_HASH } from "@northeside/scoring";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -105,7 +105,17 @@ function HowItWorks() {
           ))}
         </div>
         <p>Ties share a rank. No random tie-breaks.</p>
-        <p className="break-all font-mono text-[12px] text-muted">Rules hash {RULES_V1_HASH}</p>
+      </Section>
+      <Section id="crowd" title="Beat the crowd">
+        <p>A right call few players made earns extra: +1 if half or fewer called it, +2 for a quarter or fewer, +3 for a tenth or fewer.</p>
+        <p>Crowd odds show how everyone is calling each game (1 · X · 2). They appear once 5 players have sealed.</p>
+      </Section>
+      <Section id="banker" title="Banker">
+        <p>Star one game as your Banker. Its points, bonus included, count double. It is sealed with your picks.</p>
+      </Section>
+      <Section id="h2h" title="Head-to-head and live">
+        <p>Challenge a friend with a link. During games, the live table updates every minute.</p>
+        <p className="break-all font-mono text-[12px] text-muted">Rules v2 hash {RULES_V2_HASH} (from matchweek 12) · v1 {RULES_V1_HASH}</p>
       </Section>
       <Section id="sealing" title="Sealing">
         <p>Your picks are hashed with a random salt; your wallet seals only the hash on QIE. Re-seal until the first kickoff, then the contract locks.</p>

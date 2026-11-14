@@ -499,4 +499,30 @@ contract CommitmentGoldenTest is Base {
             "chain id changes the commitment"
         );
     }
+
+    function test_golden_predictionsHashV2AndCommitment() public pure {
+        uint8[] memory home = new uint8[](10);
+        uint8[] memory away = new uint8[](10);
+        uint8[10] memory h = [2, 1, 0, 3, 1, 2, 0, 1, 2, 1];
+        uint8[10] memory a = [1, 1, 0, 2, 0, 2, 1, 0, 3, 0];
+        for (uint256 i = 0; i < 10; ++i) {
+            home[i] = h[i];
+            away[i] = a[i];
+        }
+        bytes32 fixturesRoot = 0x1111111111111111111111111111111111111111111111111111111111111111;
+        bytes32 salt = 0x4242424242424242424242424242424242424242424242424242424242424242;
+        address contractAddr = 0x5FbDB2315678afecb367f032d93F642f64180aa3;
+        address player = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+
+        bytes32 ph = CommitmentLib.predictionsHashV2(home, away, 3);
+        assertEq(ph, 0xbc922856cce144ca2d9a8cd19ae3be5be91656f0571de7f9c35ce25b83746523, "v2 predictionsHash");
+        assertEq(
+            CommitmentLib.commitment(1990, contractAddr, player, 11, fixturesRoot, ph, salt),
+            0xa9f9f845f68e2f0303ff865b9fc61daa991e1d1b6190475af9e87f118e26af6e,
+            "v2 commitment"
+        );
+        bytes32 none = CommitmentLib.predictionsHashV2(home, away, 255);
+        assertEq(none, 0xfccd96bd075421c2e00d9e09fd3f2d082b2e79ec9be6bbc4a4b705d1dca3cff4, "v2 no banker");
+        assertTrue(none != CommitmentLib.predictionsHash(home, away), "v2 never collides with v1");
+    }
 }

@@ -32,6 +32,8 @@ export async function acquireLease(ctx: CoreContext, name: string, ms: number) {
 
 /** How often each job runs inside the worker loop. */
 export const WORKER_SCHEDULE: [JobName, number][] = [
+  // First, so every later job sees the current schema after a deploy (idempotent: one SELECT when nothing is pending).
+  ["migrate", 60 * 60_000],
   ["index-chain", 15_000],
   ["lock-and-reveal", 5 * 60_000],
   ["fetch-results", 15 * 60_000],

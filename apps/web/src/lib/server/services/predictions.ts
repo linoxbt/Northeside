@@ -2,6 +2,7 @@ import "server-only";
 import { matchweeksAbi } from "@northeside/chain";
 import { sealedPayloadSchema, verifyPayload, type SealedPayload } from "@northeside/commitments";
 import { payloadAad } from "@northeside/core";
+import { rulesVersion } from "@northeside/scoring";
 import { schema } from "@northeside/db";
 import { and, eq } from "drizzle-orm";
 import type { Hex } from "viem";
@@ -24,7 +25,7 @@ export async function myPrediction(s: Session, matchweekId: number) {
 }
 
 /** Checks a sealed payload belongs to this player, deployment and matchweek, and is self-consistent. */
-export function checkPayload(s: Session, raw: unknown, mw: { id: number; fixturesRoot: string | null }, fixtureCount: number): SealedPayload {
+export function checkPayload(s: Session, raw: unknown, mw: { id: number; fixturesRoot: string | null; scoringRulesHash: string | null }, fixtureCount: number): SealedPayload {
   const ctx = getCtx();
   const payload = sealedPayloadSchema.parse(raw);
   const v = verifyPayload(payload);
@@ -38,6 +39,8 @@ export function checkPayload(s: Session, raw: unknown, mw: { id: number; fixture
     throw new HttpError(400, "wrong_fixtures", "Payload fixtures root does not match");
   }
   if (payload.home.length !== fixtureCount) throw new HttpError(400, "wrong_count", `Expected ${fixtureCount} predictions`);
+  const version = rulesVersion(mw.scoringRulesHash);
+  if (payload.v !== version) throw new HttpError(400, "wrong_version", `This matchweek uses scoring rules v${version}; reload and seal again`);
   return payload;
 }
 

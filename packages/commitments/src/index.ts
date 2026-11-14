@@ -49,6 +49,25 @@ export function predictionsHash(picks: Picks): Hex {
   );
 }
 
+/** Payload v2: no Banker chosen. */
+export const NO_BANKER = 255;
+
+/**
+ * Payload v2 (scoring rules v2): the Banker fixture index is sealed with the picks, so it cannot be
+ * moved after kickoff. Mirrors CommitmentLib.predictionsHashV2:
+ *   keccak256(abi.encode(uint8[] home, uint8[] away, uint8 banker)), banker 255 = none.
+ */
+export function predictionsHashV2(picks: Picks, banker: number): Hex {
+  return keccak256(
+    encodeAbiParameters([{ type: "uint8[]" }, { type: "uint8[]" }, { type: "uint8" }], [picks.home, picks.away, banker]),
+  );
+}
+
+/** The predictionsHash a payload commits to, by payload version. */
+export function payloadPredictionsHash(p: { v: number; home: number[]; away: number[]; banker?: number }): Hex {
+  return p.v === 2 ? predictionsHashV2(p, p.banker ?? NO_BANKER) : predictionsHash(p);
+}
+
 export function computeCommitment(ctx: CommitmentContext, predictionsHash_: Hex, salt: Hex): Hex {
   return keccak256(
     encodeAbiParameters(
@@ -74,7 +93,10 @@ export function generateSalt(): Hex {
 }
 
 export const sealedPayloadSchema = z.object({
-  v: z.literal(1),
+  /** 1: scoring rules v1. 2: rules v2, with a Banker sealed in the predictionsHash. */
+  v: z.union([z.literal(1), z.literal(2)]),
+  /** v2 only: Banker fixture index, or 255 for none. */
+  banker: z.number().int().min(0).max(NO_BANKER).optional(),
   chainId: z.number().int().positive(),
   matchweeks: address,
   player: address,
@@ -90,10 +112,20 @@ export const sealedPayloadSchema = z.object({
 /** What a player can export ("Export my sealed picks") and what the backend reveals after lock. */
 export type SealedPayload = z.infer<typeof sealedPayloadSchema>;
 
-export function buildSealedPayload(ctx: CommitmentContext, picks: Picks, salt: Hex = generateSalt()): SealedPayload {
-  const ph = predictionsHash(picks);
+export function buildSealedPayload(
+  ctx: CommitmentContext,
+  picks: Picks,
+  salt: Hex = generateSalt(),
+  opts: { version?: 1 | 2; banker?: number } = {},
+): SealedPayload {
+  const v = opts.version ?? 1;
+  if (v === 1 && opts.banker !== undefined) throw new Error("A Banker needs payload v2");
+  const banker = v === 2 ? (opts.banker ?? NO_BANKER) : undefined;
+  if (banker !== undefined && banker !== NO_BANKER && (banker < 0 || banker >= picks.home.length)) throw new Error("Banker must be one of the fixtures");
+  const ph = v === 2 ? predictionsHashV2(picks, banker!) : predictionsHash(picks);
   return {
-    v: 1,
+    v,
+    ...(v === 2 ? { banker } : {}),
     chainId: ctx.chainId,
     matchweeks: getAddress(ctx.matchweeks),
     player: getAddress(ctx.player),
@@ -115,7 +147,11 @@ export function verifyPayload(payload: SealedPayload, onChainCommitment?: Hex): 
   if (!parsed.success) return { ok: false, reason: `malformed payload: ${parsed.error.issues[0]?.message}` };
   const p = parsed.data;
   if (p.home.length !== p.away.length) return { ok: false, reason: "home/away length mismatch" };
-  const ph = predictionsHash(p);
+  if (p.v === 1 && p.banker !== undefined) return { ok: false, reason: "v1 payloads have no Banker" };
+  if (p.v === 2 && (p.banker === undefined || (p.banker !== NO_BANKER && p.banker >= p.home.length))) {
+    return { ok: false, reason: "v2 Banker must be a fixture index or 255" };
+  }
+  const ph = payloadPredictionsHash(p);
   if (ph !== p.predictionsHash.toLowerCase()) return { ok: false, reason: "predictionsHash does not match picks" };
   const c = computeCommitment(p, ph, p.salt);
   if (c !== p.commitment.toLowerCase()) return { ok: false, reason: "commitment does not match payload" };

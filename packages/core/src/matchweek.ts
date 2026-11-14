@@ -10,7 +10,7 @@ import {
   buildScoresTree,
   type FixtureLeaf,
 } from "@northeside/merkle";
-import { RULES_V1_HASH, rank, scorePicks, type FixtureResult } from "@northeside/scoring";
+import { CURRENT_RULES_HASH, rank, rulesVersion, scoreEntries, type FixtureResult } from "@northeside/scoring";
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext } from "./context";
@@ -186,7 +186,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
       address: ctx.deployment.matchweeks,
       abi: matchweeksAbi,
       functionName: "createMatchweek",
-      args: [id, tree.root, lockTime, resultsNotBefore, rows.length, RULES_V1_HASH],
+      args: [id, tree.root, lockTime, resultsNotBefore, rows.length, CURRENT_RULES_HASH],
     });
     txHash = await sendWrite(ctx, operator, request);
     await confirm(ctx, txHash, `createMatchweek(${id})`);
@@ -198,7 +198,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
       status: "open",
       fixturesRoot: tree.root,
       fixturesTree: toJson(tree.dump()),
-      scoringRulesHash: RULES_V1_HASH,
+      scoringRulesHash: CURRENT_RULES_HASH,
       lockTime: new Date(Number(lockTime) * 1000),
       ...(txHash ? { createTx: txHash } : {}),
     })
@@ -255,6 +255,8 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
           error = "payload is for another deployment";
         } else if (payload.fixturesRoot.toLowerCase() !== (mw.fixturesRoot ?? "").toLowerCase()) {
           error = "payload fixtures root does not match the matchweek";
+        } else if (payload.v !== rulesVersion(mw.scoringRulesHash)) {
+          error = `payload v${payload.v} does not match this matchweek's scoring rules v${rulesVersion(mw.scoringRulesHash)}`;
         }
         return { payload, error };
       } catch (e) {
@@ -336,13 +338,21 @@ async function buildRevealsFromDb(ctx: CoreContext, id: number) {
  * are proposed with the results and sit through the dispute window (audit M-2).
  */
 async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResult[], onlyPlayers?: Set<string>) {
+  const mw = await getMatchweek(ctx, id);
   const reveals = (await validReveals(ctx, id)).filter((r) => !onlyPlayers || onlyPlayers.has(r.row.wallet.toLowerCase()));
-  const scored = reveals.map(({ row, payload }) => ({
-    id: row.wallet,
-    predictionId: row.id,
-    player: getAddress(row.wallet),
-    ...scorePicks(payload, results),
-  }));
+  // Rules v2: the crowd bonus is computed over exactly this scored set (the proposed reveals).
+  const scored = scoreEntries(
+    rulesVersion(mw.scoringRulesHash),
+    reveals.map(({ row, payload }) => ({
+      id: row.wallet,
+      predictionId: row.id,
+      player: getAddress(row.wallet),
+      home: payload.home,
+      away: payload.away,
+      banker: payload.banker,
+    })),
+    results,
+  );
   const scoresTree = buildScoresTree(
     scored.map((s) => ({ player: s.player, matchweekId: id, points: s.points, exactScores: s.exactScores })),
   );

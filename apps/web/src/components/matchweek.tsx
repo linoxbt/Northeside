@@ -1,6 +1,6 @@
 "use client";
 
-import { scoreFixture } from "@northeside/scoring";
+import { crowdBonus, type FixtureBreakdown } from "@northeside/scoring";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,6 +32,8 @@ export interface MatchweekDTO {
   lockTime: string;
   locked: boolean;
   fixturesRoot: string | null;
+  /** Scoring rules version: 2 adds the Banker and the beat-the-crowd bonus. */
+  rules?: number;
   createTx: string | null;
   fixtures: {
     index: number;
@@ -45,18 +47,41 @@ export interface MatchweekDTO {
 }
 
 interface MyPrediction {
-  draft: { home: (number | null)[]; away: (number | null)[] } | null;
+  draft: { home: (number | null)[]; away: (number | null)[]; banker?: number | null } | null;
   commitment: string | null;
   version: number;
   txHash: string | null;
   txStatus: string;
   hasPayload: boolean;
-  sealedPicks: { home: number[]; away: number[]; commitment: string } | null;
+  sealedPicks: { home: number[]; away: number[]; banker?: number; commitment: string } | null;
   revealValid: boolean | null;
   points: number | null;
   exactScores: number | null;
   rank: number | null;
 }
+
+interface CrowdDTO {
+  players: number;
+  shown: boolean;
+  minPlayers: number;
+  source: string;
+  fixtures: { index: number; home: number; draw: number; away: number }[];
+}
+
+interface LiveDTO {
+  started: boolean;
+  provisional: boolean;
+  rules: number;
+  fixtures: { index: number; state: "scheduled" | "live" | "ht" | "ft" | "void"; home: number | null; away: number | null }[];
+  players: number;
+  table: { rank: number; name: string; points: number; exactScores: number; me: boolean }[];
+  me: { rank: number; points: number; exactScores: number; fixtures: FixtureBreakdown[] } | null;
+}
+
+const NO_BANKER = 255;
+/** Common scorelines for Quick pick. */
+const QUICK = [[1, 0], [2, 1], [1, 1], [2, 0], [0, 0], [0, 1], [1, 2], [2, 2], [3, 1], [0, 2]] as const;
+const outcomeOf = (h: number | null, a: number | null) => (h === null || a === null ? null : h > a ? "home" : h === a ? "draw" : "away");
 
 /** Null before mount; after that, live. `serverOpen` decides the first paint so SSR and hydration agree. */
 function useCountdown(target: string, serverOpen: boolean) {
@@ -127,7 +152,20 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     queryFn: () => api<{ prediction: MyPrediction | null }>(`/api/v1/predictions/${mw.id}/me`).then((r) => r.prediction),
   });
 
-  const [picks, setPicks] = useState<Picks>(() => ({ home: Array(n).fill(null), away: Array(n).fill(null) }));
+  const v2 = (mw.rules ?? 1) === 2;
+  const crowd = useQuery({
+    queryKey: ["crowd", mw.id, open],
+    queryFn: () => api<CrowdDTO>(`/api/v1/matchweeks/${mw.id}/crowd`),
+    refetchInterval: 120_000,
+  });
+  const live = useQuery({
+    queryKey: ["live", mw.id, wallet],
+    queryFn: () => api<LiveDTO>(`/api/v1/matchweeks/${mw.id}/live`),
+    enabled: mounted && !open,
+    refetchInterval: mw.status === "finalized" ? false : 60_000,
+  });
+
+  const [picks, setPicks] = useState<Picks>(() => ({ home: Array(n).fill(null), away: Array(n).fill(null), banker: null }));
   const [saveFailed, setSaveFailed] = useState(false);
   const loaded = useRef(false);
   useEffect(() => {
@@ -144,45 +182,77 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     const fromServer = mine.data?.draft;
     const src = fromServer ?? local;
     if (src && src.home.length === n) {
-      setPicks({ home: src.home, away: src.away });
+      setPicks({ home: src.home, away: src.away, banker: src.banker ?? null });
       loaded.current = true;
     } else if (!user || mine.isFetched) loaded.current = true;
   }, [mine.data, mine.isFetched, mw.id, n, user, session.isLoading]);
 
   // Autosave: locally at once, to the server after a pause (FR-10).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persist = useCallback(
+    (next: Picks) => {
+      localStorage.setItem(draftKey(mw.id), JSON.stringify(next));
+      if (user) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => {
+          void api("/api/v1/predictions/draft", { method: "POST", json: { matchweekId: mw.id, ...next } })
+            .then(() => setSaveFailed(false))
+            .catch(() => setSaveFailed(true));
+        }, 1200);
+      }
+    },
+    [mw.id, user],
+  );
   const update = useCallback(
     (side: "home" | "away", i: number, v: number) => {
       setPicks((p) => {
         const next = { ...p, [side]: p[side].map((x, j) => (j === i ? v : x)) };
-        localStorage.setItem(draftKey(mw.id), JSON.stringify(next));
-        if (user) {
-          if (saveTimer.current) clearTimeout(saveTimer.current);
-          saveTimer.current = setTimeout(() => {
-            void api("/api/v1/predictions/draft", { method: "POST", json: { matchweekId: mw.id, ...next } })
-              .then(() => setSaveFailed(false))
-              .catch(() => setSaveFailed(true));
-          }, 1200);
-        }
+        persist(next);
         return next;
       });
       track("prediction_started", { matchweek_id: mw.id });
     },
-    [mw.id, user],
+    [mw.id, persist],
   );
+  const toggleBanker = useCallback(
+    (i: number) =>
+      setPicks((p) => {
+        const next = { ...p, banker: p.banker === i ? null : i };
+        persist(next);
+        return next;
+      }),
+    [persist],
+  );
+  const quickPick = useCallback(() => {
+    setPicks((p) => {
+      const fill = p.home.map((h, i) => (h === null || p.away[i] === null ? QUICK[Math.floor(Math.random() * QUICK.length)]! : null));
+      const next = {
+        ...p,
+        home: p.home.map((h, i) => (fill[i] ? fill[i]![0] : h)),
+        away: p.away.map((a, i) => (fill[i] ? fill[i]![1] : a)),
+      };
+      persist(next);
+      return next;
+    });
+    track("quick_pick", { matchweek_id: mw.id });
+  }, [mw.id, persist]);
 
   // What is actually sealed on-chain: the server copy, or this browser's backup if it matches.
   const sealedPicks = useMemo<Picks | null>(() => {
     const p = mine.data;
     if (!p?.commitment) return null;
-    if (p.sealedPicks && p.sealedPicks.commitment.toLowerCase() === p.commitment.toLowerCase()) return p.sealedPicks;
+    const norm = (b: number | undefined) => (b === undefined || b === NO_BANKER ? null : b);
+    if (p.sealedPicks && p.sealedPicks.commitment.toLowerCase() === p.commitment.toLowerCase()) return { ...p.sealedPicks, banker: norm(p.sealedPicks.banker) };
     const local = readLocalSeal(mw.id, wallet ?? undefined);
-    if (local && local.payload.commitment.toLowerCase() === p.commitment.toLowerCase()) return { home: local.payload.home, away: local.payload.away };
+    if (local && local.payload.commitment.toLowerCase() === p.commitment.toLowerCase()) return { home: local.payload.home, away: local.payload.away, banker: norm(local.payload.banker) };
     return null;
   }, [mine.data, mw.id, wallet]);
   // After lock the sealed picks are the only picks that count: show them, read-only.
   const shown = !open && sealedPicks ? sealedPicks : picks;
-  const unsealed = open && !!sealedPicks && (picks.home.some((v, i) => v !== sealedPicks.home[i]) || picks.away.some((v, i) => v !== sealedPicks.away[i]));
+  const unsealed =
+    open &&
+    !!sealedPicks &&
+    (picks.home.some((v, i) => v !== sealedPicks.home[i]) || picks.away.some((v, i) => v !== sealedPicks.away[i]) || (v2 && (picks.banker ?? null) !== (sealedPicks.banker ?? null)));
 
   const complete = picks.home.every((x) => x !== null) && picks.away.every((x) => x !== null);
   const picked = picks.home.filter((x, i) => x !== null && picks.away[i] !== null).length;
@@ -220,6 +290,20 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
       {!user ? <SignInPanel /> : <AdultGate />}
 
+      {live.data?.started ? <LiveCentre live={live.data} /> : null}
+
+      {open && user ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[14px] text-muted">
+            {v2 ? "Tap ★ to make one game your Banker (points ×2)." : null}
+            {crowd.data && !crowd.data.shown ? ` Crowd odds at ${crowd.data.minPlayers} players (${crowd.data.players} so far).` : null}
+          </p>
+          <button type="button" onClick={quickPick} className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 text-[14px] font-medium hover:bg-subtle">
+            Quick pick
+          </button>
+        </div>
+      ) : null}
+
       <Card className="overflow-hidden p-0 sm:p-0">
         <ol className="divide-y divide-line">
           {days.map((g) => (
@@ -229,10 +313,12 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                 {g.items.map((f) => {
                   const h = shown.home[f.index] ?? null;
                   const a = shown.away[f.index] ?? null;
-                  const scored =
-                    results && f.status !== "scheduled" && h !== null && a !== null
-                      ? scoreFixture(h, a, { index: f.index, homeGoals: f.homeGoals ?? 0, awayGoals: f.awayGoals ?? 0, status: f.status === "void" ? "void" : "played" })
-                      : null;
+                  const lf = live.data?.fixtures.find((x) => x.index === f.index);
+                  const mineF = live.data?.me?.fixtures.find((x) => x.index === f.index);
+                  const isBanker = v2 && (shown.banker ?? null) === f.index;
+                  const cf = crowd.data?.shown ? crowd.data.fixtures.find((x) => x.index === f.index) : undefined;
+                  const state = f.status === "void" ? "void" : lf && lf.state !== "scheduled" ? lf.state : f.status === "played" ? "ft" : "scheduled";
+                  const score = lf && lf.state !== "scheduled" ? `${lf.home}–${lf.away}` : `${f.homeGoals}–${f.awayGoals}`;
                   return (
                     <li key={f.index} className="px-4 py-4 sm:px-5">
                       <div className="flex items-baseline justify-between gap-2">
@@ -242,18 +328,52 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       </div>
                       <div className="mt-2 flex items-center justify-between">
                         <Stepper label={`${f.home} goals`} value={h} disabled={!open || !user} onChange={(v) => update("home", f.index, v)} />
-                        {f.status === "void" ? (
+                        {state === "void" ? (
                           <Pill tone="warn">Void</Pill>
-                        ) : f.status === "played" ? (
-                          <p className="text-center text-sm">
-                            FT {f.homeGoals}–{f.awayGoals}
-                            {scored ? <span className={`ml-2 font-bold ${scored.points ? "text-accent-deep" : "text-muted"}`}>+{scored.points}</span> : null}
+                        ) : state !== "scheduled" ? (
+                          <p className="flex flex-col items-center whitespace-nowrap text-center text-sm leading-5">
+                            <span>
+                            {state === "live" ? (
+                              <span className="mr-1 inline-flex items-center gap-1 font-mono text-[11px] font-medium text-red-600">
+                                <span className="size-1.5 animate-pulse rounded-full bg-red-600" aria-hidden />
+                                LIVE
+                              </span>
+                            ) : (
+                              <span className="mr-1 font-mono text-[11px] text-muted">{state === "ht" ? "HT" : "FT"}</span>
+                            )}
+                            <b className="font-medium tabular-nums">{score}</b>
+                            </span>
+                            {mineF ? (
+                              <span className={`text-[13px] font-bold ${mineF.points ? "text-accent-deep" : "text-muted"}`}>
+                                +{mineF.points}
+                                {mineF.banker ? " ×2" : ""}
+                              </span>
+                            ) : null}
                           </p>
                         ) : (
                           <span className="font-mono text-[12px] uppercase tracking-[0.08em] text-muted">vs</span>
                         )}
                         <Stepper label={`${f.away} goals`} value={a} disabled={!open || !user} onChange={(v) => update("away", f.index, v)} />
                       </div>
+                      {cf || (v2 && (open || isBanker)) ? (
+                        <div className="mt-3 flex items-center gap-2">
+                          {cf ? <CrowdBar c={cf} pick={outcomeOf(h, a)} v2={v2} /> : <div className="flex-1" />}
+                          {v2 && (open || isBanker) ? (
+                            <button
+                              type="button"
+                              aria-pressed={isBanker}
+                              aria-label={`Banker: ${f.home} v ${f.away}`}
+                              disabled={!open || !user}
+                              onClick={() => toggleBanker(f.index)}
+                              className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-medium transition-colors disabled:cursor-default ${
+                                isBanker ? "bg-ink text-white" : "border border-line text-muted hover:border-ink hover:text-ink disabled:hover:border-line disabled:hover:text-muted"
+                              }`}
+                            >
+                              ★ {isBanker ? "Banker ×2" : "Banker"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -268,7 +388,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
           <p>
             <b className="font-medium">Unsealed changes.</b> Your sealed picks have not changed. Re-seal before the first kickoff to keep these.
           </p>
-          <button type="button" className="underline underline-offset-4" onClick={() => setPicks({ home: [...sealedPicks!.home], away: [...sealedPicks!.away] })}>
+          <button type="button" className="underline underline-offset-4" onClick={() => setPicks({ home: [...sealedPicks!.home], away: [...sealedPicks!.away], banker: sealedPicks!.banker ?? null })}>
             Undo my changes
           </button>
         </div>
@@ -276,13 +396,15 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
       {saveFailed ? <p className="text-center text-[13px] text-warn">Your draft is saved on this device but could not be saved to your account. It will retry.</p> : null}
 
       {user && user.adultConfirmed && open ? (
-        <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
+        <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} version={v2 ? 2 : 1} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
       ) : null}
 
       {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
 
+      {user && user.adultConfirmed && open ? <ChallengeButton mwId={mw.id} /> : null}
+
       <p className="pt-2 text-center text-[14px] text-muted">
-        Exact score 5 points · right result 2 ·{" "}
+        {v2 ? "Exact 5 · result 2 · beat the crowd up to +3 · Banker ×2 · " : "Exact score 5 points · right result 2 · "}
         <a className="underline underline-offset-4" href="/docs">
           how it works
         </a>{" "}
@@ -292,6 +414,105 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
         </a>
       </p>
     </div>
+  );
+}
+
+/** Create a head-to-head link for this matchweek and open it to share. */
+function ChallengeButton({ mwId }: { mwId: number }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function go() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ code: string }>("/api/v1/h2h", { method: "POST", json: { matchweekId: mwId } });
+      track("h2h_created", { matchweek_id: mwId });
+      window.location.href = `/h2h/${r.code}`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the challenge");
+      setBusy(false);
+    }
+  }
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p className="text-[17px] tracking-[-0.02em]">Head-to-head</p>
+        <p className="text-[14px] text-muted">Challenge a friend for this matchweek.</p>
+        {error ? <p className="mt-1 text-[13px] text-bad">{error}</p> : null}
+      </div>
+      <Button variant="ghost" disabled={busy} onClick={() => void go()}>
+        {busy ? "Creating…" : "Challenge a friend"}
+      </Button>
+    </Card>
+  );
+}
+
+/** Betting-style crowd line: 1 (home) · X (draw) · 2 (away), with the bonus a right call would earn. */
+function CrowdBar({ c, pick, v2 }: { c: { home: number; draw: number; away: number }; pick: "home" | "draw" | "away" | null; v2: boolean }) {
+  const total = c.home + c.draw + c.away;
+  if (total === 0) return <div className="flex-1" />;
+  const items = [
+    ["home", "1", c.home],
+    ["draw", "X", c.draw],
+    ["away", "2", c.away],
+  ] as const;
+  return (
+    <div className="flex min-w-0 flex-1 gap-1" aria-label="Crowd odds">
+      {items.map(([k, label, count]) => {
+        const pct = Math.round((count * 100) / total);
+        const bonus = v2 ? crowdBonus(count, total) : 0;
+        const mine = pick === k;
+        return (
+          <div
+            key={k}
+            className={`flex h-8 min-w-0 flex-1 items-center justify-between gap-1 rounded-lg px-2 text-[12px] tabular-nums ${mine ? "bg-ink text-white" : "bg-subtle text-ink-2"}`}
+            title={`${count} of ${total} players`}
+          >
+            <span className="font-mono">{label}</span>
+            <span>{pct}%</span>
+            {bonus ? <span className={`font-mono text-[10px] ${mine ? "text-accent" : "text-accent-deep"}`}>+{bonus}</span> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Live match centre: provisional table while games are played; final once the matchweek is. */
+function LiveCentre({ live }: { live: LiveDTO }) {
+  return (
+    <Card className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[20px] tracking-[-0.02em]">Live table</h2>
+        <Pill tone={live.provisional ? "warn" : "good"}>{live.provisional ? "Provisional" : "Final"}</Pill>
+      </div>
+      {live.me ? (
+        <div className="flex items-baseline gap-6 rounded-xl bg-subtle px-4 py-3">
+          <span>
+            <b className="text-[30px] font-normal tracking-[-0.04em]">{live.me.points}</b> pts
+          </span>
+          <span className="text-[15px]">
+            #{live.me.rank} of {live.players}
+          </span>
+          <span className="text-[15px] text-muted">{live.me.exactScores} exact</span>
+        </div>
+      ) : null}
+      {live.table.length ? (
+        <ol className="divide-y divide-line text-[15px]">
+          {live.table.map((r) => (
+            <li key={`${r.rank}-${r.name}`} className={`flex items-center justify-between py-2 ${r.me ? "font-medium" : ""}`}>
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="w-6 font-mono text-[12px] text-muted tabular-nums">{r.rank}</span>
+                <span className="truncate">{r.name}</span>
+              </span>
+              <span className="tabular-nums">{r.points}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-[14px] text-muted">The table appears once picks are revealed.</p>
+      )}
+    </Card>
   );
 }
 

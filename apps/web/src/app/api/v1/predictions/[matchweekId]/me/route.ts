@@ -10,12 +10,12 @@ export const GET = route(async (_req, { params }: { params: Promise<{ matchweekI
   if (!p) return json({ prediction: null });
   // The picks this player actually sealed (their own data), so every device can show them and
   // warn about unsealed edits (audit B7): the revealed payload after lock, else the stored one.
-  let sealedPicks: { home: number[]; away: number[]; commitment: string } | null = null;
+  let sealedPicks: { home: number[]; away: number[]; banker?: number; commitment: string } | null = null;
   try {
     const src =
-      (p.revealPayload as { home: number[]; away: number[]; commitment: string } | null) ??
+      (p.revealPayload as { home: number[]; away: number[]; banker?: number; commitment: string } | null) ??
       (p.payloadEnc ? decryptPayload(p.payloadEnc, p.wallet, p.matchweekId) : null);
-    if (src) sealedPicks = { home: src.home, away: src.away, commitment: src.commitment };
+    if (src) sealedPicks = { home: src.home, away: src.away, ...(src.banker !== undefined ? { banker: src.banker } : {}), commitment: src.commitment };
   } catch {
     sealedPicks = null;
   }
