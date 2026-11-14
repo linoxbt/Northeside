@@ -61,6 +61,13 @@ describe("worker", () => {
     await release!();
   });
 
+  it("with durationMs 0 runs every job exactly once (production: one pass per start)", async () => {
+    const calls: string[] = [];
+    const jobs = { a: async () => void calls.push("a"), b: async () => void calls.push("b") } as unknown as Jobs;
+    await runWorker(() => ctx, jobs, { durationMs: 0, schedule: [["a" as never, 15_000], ["b" as never, 600_000]], sleep: async () => {} });
+    expect(calls).toEqual(["a", "b"]);
+  });
+
   it("refuses a second holder while the lease is valid", async () => {
     const first = await acquireLease(ctx, "x", 60_000);
     expect(first).not.toBeNull();

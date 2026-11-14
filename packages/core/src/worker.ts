@@ -53,9 +53,10 @@ export interface WorkerOptions {
 }
 
 /**
- * The single background worker (Netlify background function, started every 10 minutes): runs every
- * scheduled job in-process at its cadence, so the indexer polls every 15 s and on-chain steps are
- * not cut off by a route's time limit. A lease keeps two runs from overlapping.
+ * The single background worker (Netlify background function, started every 5 minutes): runs every
+ * scheduled job in-process, so on-chain steps are not cut off by a route's time limit. In
+ * production one pass per start (durationMs 0) keeps function compute within the plan; a longer
+ * durationMs loops at the job cadences. A lease keeps two runs from overlapping.
  */
 export async function runWorker(getCtx: () => CoreContext, jobs: Jobs, opts: WorkerOptions) {
   const ctx = getCtx();
@@ -68,7 +69,8 @@ export async function runWorker(getCtx: () => CoreContext, jobs: Jobs, opts: Wor
   const last = new Map<JobName, number>();
   const runs: { job: JobName; ok: boolean; error?: string }[] = [];
   try {
-    while (Date.now() - started < opts.durationMs) {
+    // At least one pass; with durationMs 0 the run is exactly one pass of every due job.
+    for (;;) {
       const tickStart = Date.now();
       for (const [name, every] of schedule) {
         const prev = last.get(name);

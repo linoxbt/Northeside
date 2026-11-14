@@ -1,4 +1,4 @@
-// Netlify scheduled function: every 10 minutes, start the ops-worker background function, which
+// Netlify scheduled function: every 5 minutes, start the ops-worker background function, which
 // runs all scheduled jobs (scheduled functions themselves stop after 30 s).
 export default async () => {
   const secret = process.env.CRON_SECRET;
@@ -13,4 +13,4 @@ export default async () => {
   return new Response(null, { status: 204 });
 };
 
-export const config = { schedule: "*/10 * * * *" };
+export const config = { schedule: "*/5 * * * *" };
