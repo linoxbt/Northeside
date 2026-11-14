@@ -2,6 +2,9 @@ import "server-only";
 import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
+import { schema } from "@northeside/db";
+import { eq } from "drizzle-orm";
+import { getCtx } from "./ctx";
 
 export const SESSION_COOKIE = "ns_session";
 const SESSION_DAYS = 30;
@@ -9,6 +12,8 @@ const SESSION_DAYS = 30;
 export interface Session {
   userId: string;
   wallet: `0x${string}`;
+  /** users.session_version when the session was issued; a bump signs out every device. */
+  sv?: number;
 }
 
 function secret() {
@@ -18,7 +23,7 @@ function secret() {
 }
 
 export async function createSessionToken(s: Session): Promise<string> {
-  return new SignJWT({ wallet: s.wallet })
+  return new SignJWT({ wallet: s.wallet, sv: s.sv ?? 0 })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(s.userId)
     .setIssuedAt()
@@ -31,15 +36,26 @@ export async function readSessionToken(token: string | undefined): Promise<Sessi
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
     if (!payload.sub || typeof payload.wallet !== "string") return null;
-    return { userId: payload.sub, wallet: payload.wallet as `0x${string}` };
+    return { userId: payload.sub, wallet: payload.wallet as `0x${string}`, sv: typeof payload.sv === "number" ? payload.sv : 0 };
   } catch {
     return null;
   }
 }
 
+/**
+ * The signed cookie, checked against the database: a deleted account or a bumped session version
+ * (account deletion, "sign out everywhere") ends every session at once (audit B17).
+ */
 export async function getSession(): Promise<Session | null> {
   const jar = await cookies();
-  return readSessionToken(jar.get(SESSION_COOKIE)?.value);
+  const s = await readSessionToken(jar.get(SESSION_COOKIE)?.value);
+  if (!s) return null;
+  const [u] = await getCtx()
+    .db.select({ deletedAt: schema.users.deletedAt, sessionVersion: schema.users.sessionVersion })
+    .from(schema.users)
+    .where(eq(schema.users.id, s.userId));
+  if (!u || u.deletedAt || u.sessionVersion !== (s.sv ?? 0)) return null;
+  return s;
 }
 
 export async function setSessionCookie(s: Session) {

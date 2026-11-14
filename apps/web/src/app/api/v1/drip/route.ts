@@ -1,6 +1,6 @@
 import { DripRefused, dripConfigFromEnv, requestDrip } from "@northeside/core";
 import { z } from "zod";
-import { HttpError, json, limitWrites, requireSession, route } from "@/lib/server/api";
+import { HttpError, clientIp, json, limitWrites, quotaLeft, rateLimit, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { userById } from "@/lib/server/services/accounts";
 
@@ -10,6 +10,9 @@ const body = z.object({ deviceId: z.string().min(16).max(128) });
 export const POST = route(async (req) => {
   const s = await requireSession();
   await limitWrites(s, "drip", 3, 10);
+  // The device id is client-chosen, so also cap drips actually sent per network per day (audit S5).
+  const ipKey = `drip:ip-day:${await clientIp()}`;
+  await quotaLeft(ipKey, 5, 24 * 3600);
   const { deviceId } = body.parse(await req.json());
   const user = await userById(s.userId);
   if (!user) throw new HttpError(401, "unauthenticated", "Sign in first");
@@ -19,7 +22,9 @@ export const POST = route(async (req) => {
       wallet: s.wallet,
       deviceId,
       emailVerified: user.emailVerified,
+      emailHash: user.emailHash,
     });
+    if (r.status !== "already") await rateLimit(ipKey, Number.MAX_SAFE_INTEGER, 24 * 3600);
     return json(r);
   } catch (e) {
     if (e instanceof DripRefused) throw new HttpError(e.code === "not_configured" ? 503 : 409, e.code, e.message);

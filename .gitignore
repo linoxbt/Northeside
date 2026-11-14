@@ -23,3 +23,4 @@ apps/web/next-env.d.ts
 *.tsbuildinfo
 contracts/deployments/31337.json
 .netlify
+apps/web/netlify/functions/ops-worker.mjs

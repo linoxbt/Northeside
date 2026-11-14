@@ -19,6 +19,9 @@ import {
   postRewardRootsForMatchweek,
   publishResults,
   revealMatchweek,
+  refundCampaign,
+  setAutomationPaused,
+  automationPaused,
   bigintReplacer,
   audit,
   confirm,
@@ -47,13 +50,16 @@ Host rewards
                   --cap <QUSDC> --first <mw> --last <mw> --expiry <YYYY-MM-DD> --terms <file>
                   [--leagues a,b] [--self-funded]
   fund-campaign <id>                   fund from SPONSOR_PRIVATE_KEY (operator-assisted or self-funded)
-  post-reward-root <campaign> <mw>     compute payouts and post the root
+  post-reward-root <campaign> <mw>     compute payouts and post the root (never within 26 h of expiry)
+  refund <campaign>                    return unused money to the sponsor's refund recipient (after expiry)
 
 Operations
   index                                run the chain indexer once
   pause <matchweeks|rewards>           emergency pause (PAUSER_PRIVATE_KEY, else OPERATOR_PRIVATE_KEY)
   unpause <matchweeks|rewards>
   status <id>                          on-chain state of a matchweek
+  automation <pause|resume|status>     stop or restart the scheduled on-chain steps (takes effect at once)
+  migrate                              apply pending database migrations
 `;
 
 function loadEnv() {
@@ -132,6 +138,23 @@ async function main() {
       return out(await postRewardRoot(ctx, int(a.positional[0], "campaign"), int(a.positional[1], "mw")));
     case "index":
       return out(await indexChain(ctx));
+    case "refund": {
+      const key = (process.env.OPERATOR_PRIVATE_KEY ?? process.env.SPONSOR_PRIVATE_KEY) as `0x${string}` | undefined;
+      if (!key) throw new Error("OPERATOR_PRIVATE_KEY or SPONSOR_PRIVATE_KEY is required to send the refund transaction");
+      return out(await refundCampaign(ctx, signerFor(key), id()));
+    }
+    case "automation": {
+      const action = a.positional[0];
+      if (action === "pause" || action === "resume") {
+        await setAutomationPaused(ctx, action === "pause");
+        await audit(ctx, "operator", `automation-${action}`, {});
+      } else if (action !== "status") throw new Error("automation takes pause, resume or status");
+      return out({ paused: await automationPaused(ctx) });
+    }
+    case "migrate": {
+      const { applyMigrations } = await import("@northeside/db/migrations");
+      return out(await applyMigrations(ctx.db));
+    }
     case "pause":
     case "unpause": {
       const target = a.positional[0];

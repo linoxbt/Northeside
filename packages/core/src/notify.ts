@@ -1,5 +1,5 @@
 import { schema } from "@northeside/db";
-import { and, eq, gt, inArray, isNull, lte, notInArray, or } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { sendNotification, setVapidDetails, type PushSubscription } from "web-push";
 import type { CoreContext } from "./context";
 
@@ -48,12 +48,10 @@ function message(kind: Kind, mwId: number, siteUrl: string): Message {
   return { title: `Matchweek ${mwId} locks in ${when}`, body: "Seal your predictions before the first kickoff.", url: `${siteUrl}/play` };
 }
 
-async function deliver(ctx: CoreContext, env: Env, userId: string, kind: Kind, mwId: number) {
-  const [prefs] = await ctx.db.select().from(schema.notificationPrefs).where(eq(schema.notificationPrefs.userId, userId));
-  if (!prefs) return null;
-  if (kind !== "results" && !prefs.remindLock) return null;
-  if (kind === "results" && !prefs.remindResults) return null;
-  const m = message(kind, mwId, ctx.siteUrl);
+type Prefs = typeof schema.notificationPrefs.$inferSelect;
+
+async function deliver(ctx: CoreContext, env: Env, prefs: Prefs, kind: Kind, mwId: number, m: Message = message(kind, mwId, ctx.siteUrl)) {
+  const userId = prefs.userId;
   // Claim the slot first so concurrent runs never double-send.
   const claimed = await ctx.db
     .insert(schema.notificationsSent)
@@ -86,7 +84,38 @@ async function deliver(ctx: CoreContext, env: Env, userId: string, kind: Kind, m
   return channel;
 }
 
-/** FR-29: lock reminders at 24h and 2h for players who have not sealed; results-ready after finalize. */
+/**
+ * Users who can actually be reached for `kind` on this matchweek: at least one channel, the reminder
+ * switched on, not deleted, and not already sent. One query, so the job scales with recipients, not
+ * with every user (audit P3).
+ */
+async function reachable(ctx: CoreContext, kind: Kind, mwId: number, extra?: ReturnType<typeof and>) {
+  const flag = kind === "results" ? schema.notificationPrefs.remindResults : schema.notificationPrefs.remindLock;
+  const rows = await ctx.db
+    .select({ prefs: schema.notificationPrefs })
+    .from(schema.notificationPrefs)
+    .innerJoin(schema.users, eq(schema.users.id, schema.notificationPrefs.userId))
+    .leftJoin(
+      schema.notificationsSent,
+      and(
+        eq(schema.notificationsSent.userId, schema.notificationPrefs.userId),
+        eq(schema.notificationsSent.kind, kind),
+        eq(schema.notificationsSent.matchweekId, mwId),
+      ),
+    )
+    .where(
+      and(
+        eq(flag, true),
+        isNull(schema.users.deletedAt),
+        isNull(schema.notificationsSent.userId),
+        or(isNotNull(schema.notificationPrefs.telegramChatId), isNotNull(schema.notificationPrefs.webPush), eq(schema.notificationPrefs.emailOptIn, true)),
+        extra,
+      ),
+    );
+  return rows.map((r) => r.prefs);
+}
+
+/** FR-29: lock reminders at 24h and 2h for players who have not sealed; results with rank change after finalize. */
 export async function notifyJob(ctx: CoreContext, env: Env = process.env) {
   const now = ctx.now();
   const sent: Record<Kind, number> = { lock_24h: 0, lock_2h: 0, results: 0 };
@@ -98,18 +127,8 @@ export async function notifyJob(ctx: CoreContext, env: Env = process.env) {
 
   for (const mw of open) {
     const kind: Kind = mw.lockTime.getTime() - now.getTime() <= 2 * 3600_000 ? "lock_2h" : "lock_24h";
-    const sealedUsers = (
-      await ctx.db
-        .select({ userId: schema.predictions.userId })
-        .from(schema.predictions)
-        .where(and(eq(schema.predictions.matchweekId, mw.id), inArray(schema.predictions.txStatus, ["sent", "confirmed"])))
-    ).map((r) => r.userId);
-    const targets = await ctx.db
-      .select({ userId: schema.notificationPrefs.userId })
-      .from(schema.notificationPrefs)
-      .innerJoin(schema.users, eq(schema.users.id, schema.notificationPrefs.userId))
-      .where(and(isNull(schema.users.deletedAt), sealedUsers.length ? notInArray(schema.notificationPrefs.userId, sealedUsers) : undefined));
-    for (const t of targets) if (await deliver(ctx, env, t.userId, kind, mw.id)) sent[kind]++;
+    const notSealed = sql`not exists (select 1 from ${schema.predictions} p where p.user_id = ${schema.notificationPrefs.userId} and p.matchweek_id = ${mw.id} and p.tx_status in ('sent', 'confirmed'))`;
+    for (const prefs of await reachable(ctx, kind, mw.id, and(notSealed))) if (await deliver(ctx, env, prefs, kind, mw.id)) sent[kind]++;
   }
 
   const finalized = await ctx.db
@@ -117,11 +136,28 @@ export async function notifyJob(ctx: CoreContext, env: Env = process.env) {
     .from(schema.matchweeks)
     .where(and(eq(schema.matchweeks.status, "finalized"), gt(schema.matchweeks.finalizedAt, new Date(now.getTime() - 24 * 3600_000))));
   for (const mw of finalized) {
-    const players = await ctx.db
-      .selectDistinct({ userId: schema.predictions.userId })
-      .from(schema.predictions)
-      .where(and(eq(schema.predictions.matchweekId, mw.id), or(eq(schema.predictions.revealValid, true))));
-    for (const p of players) if (await deliver(ctx, env, p.userId, "results", mw.id)) sent.results++;
+    const played = sql`exists (select 1 from ${schema.predictions} p where p.user_id = ${schema.notificationPrefs.userId} and p.matchweek_id = ${mw.id} and p.reveal_valid)`;
+    for (const prefs of await reachable(ctx, "results", mw.id, and(played))) {
+      const m = await resultsMessage(ctx, prefs.userId, mw.id);
+      if (await deliver(ctx, env, prefs, "results", mw.id, m)) sent.results++;
+    }
   }
   return sent;
+}
+
+/** Results notice with the player's rank and how it moved since their previous matchweek (FR-29). */
+async function resultsMessage(ctx: CoreContext, userId: string, mwId: number): Promise<Message> {
+  const base = message("results", mwId, ctx.siteUrl);
+  const rows = await ctx.db
+    .select({ matchweekId: schema.predictions.matchweekId, rank: schema.predictions.rank, points: schema.predictions.points })
+    .from(schema.predictions)
+    .where(and(eq(schema.predictions.userId, userId), lte(schema.predictions.matchweekId, mwId), isNotNull(schema.predictions.rank)))
+    .orderBy(sql`${schema.predictions.matchweekId} desc`)
+    .limit(2);
+  const now = rows.find((r) => r.matchweekId === mwId);
+  if (!now?.rank) return base;
+  const prev = rows.find((r) => r.matchweekId !== mwId);
+  const move = prev?.rank ? prev.rank - now.rank : 0;
+  const change = !prev?.rank ? "" : move > 0 ? `, up ${move} place${move === 1 ? "" : "s"}` : move < 0 ? `, down ${-move}` : ", same place as last time";
+  return { ...base, body: `${now.points ?? 0} points, ranked #${now.rank}${change}.` };
 }
