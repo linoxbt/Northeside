@@ -288,8 +288,8 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   migrate: async () => applyMigrations(getCtx().db),
 
   /**
-   * Every 6 hours: ask API-Football (used only for results) for the next matchweek, so a bad key or
-   * a plan that does not cover the season shows up days before results are due, not after.
+   * Every 6 hours: ask the secondary results source (used only for results) for the next matchweek,
+   * so a bad key, a plan without the season or a provider outage shows up days before results are due.
    */
   "check-providers": async () => {
     const ctx = getCtx();
@@ -305,9 +305,9 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
     return runJob(ctx, "check-providers", `${mw.id}:${sixHourKey()}`, async () => {
       const games = await football.secondary.results(mw.id, ctx.season);
       if (games.length === 0) {
-        throw new Error(`API-Football returned no games for matchday ${mw.id}, season ${ctx.season}: the key's plan may not cover this season`);
+        throw new Error(`${football.secondary.name} returned no games for matchday ${mw.id}, season ${ctx.season}`);
       }
-      return { matchweek: mw.id, apiFootballGames: games.length };
+      return { matchweek: mw.id, source: football.secondary.name, games: games.length };
     });
   },
 

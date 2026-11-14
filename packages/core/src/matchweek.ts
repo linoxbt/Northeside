@@ -360,7 +360,7 @@ async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResu
 // ---------------------------------------------------------------- results
 
 /** FR-32: fetch both providers and store the comparison. Publishing reads this snapshot. */
-export async function fetchResults(ctx: CoreContext, id: number): Promise<CrossCheck> {
+export async function fetchResults(ctx: CoreContext, id: number): Promise<CrossCheck & { sources: { primary: string; secondary: string } }> {
   const football = need(ctx.football, "football data providers");
   const rows = await getFixtures(ctx, id);
   const fixtures = rows.map((r) => ({
@@ -376,10 +376,13 @@ export async function fetchResults(ctx: CoreContext, id: number): Promise<CrossC
   ]);
   const mw = await getMatchweek(ctx, id);
   const w = matchWindow(fixtures.map((f) => f.kickoff));
-  const check = crossCheck(fixtures, primary, secondary, {
-    lockTime: Math.floor(mw.lockTime.getTime() / 1000),
-    windowEnd: w.end,
-  });
+  const check = {
+    ...crossCheck(fixtures, primary, secondary, {
+      lockTime: Math.floor(mw.lockTime.getTime() / 1000),
+      windowEnd: w.end,
+    }),
+    sources: { primary: "football-data.org v4", secondary: football.secondary.name },
+  };
   await ctx.db
     .update(schema.matchweeks)
     .set({ resultsCheck: JSON.parse(JSON.stringify({ ...check, fetchedAt: ctx.now() }, bigintReplacer)) })
@@ -395,7 +398,8 @@ export interface ResultsOverride {
 export function evidenceDocument(id: number, check: unknown, results: CheckedFixture[] | ResultsOverride["results"], override?: ResultsOverride) {
   return {
     matchweekId: id,
-    sources: { primary: "football-data.org v4", secondary: "API-Football v3" },
+    // Older checks predate the stored source names; those all came from API-Football.
+    sources: (check as { sources?: { primary: string; secondary: string } } | null)?.sources ?? { primary: "football-data.org v4", secondary: "API-Football v3" },
     check,
     override: override ? { reason: override.reason } : null,
     results,

@@ -86,7 +86,7 @@ packages/chain      QIE chain definitions, rotating RPC transport, generated ABI
 packages/commitments  canonical encoding (golden vectors shared with forge)
 packages/merkle     StandardMerkleTree builders for all five trees
 packages/scoring    rules v1, ranking, host payouts (bigint)
-packages/football   football-data.org + API-Football clients, two-source cross-check
+packages/football   football-data.org + TheSportsDB (or API-Football) clients, two-source cross-check
 packages/db         Drizzle schema, migrations (RLS on), field encryption
 packages/core       services shared by web jobs and the CLI: indexer, pipeline, rewards, drip, identity
 apps/web            Next.js app: pages, /api/v1, cron jobs, share cards, PWA

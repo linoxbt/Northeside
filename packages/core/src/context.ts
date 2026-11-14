@@ -6,7 +6,7 @@ import {
   type Deployment,
 } from "@northeside/chain";
 import { FieldCrypto, getDb, type Database } from "@northeside/db";
-import { ApiFootballClient, FootballDataClient } from "@northeside/football";
+import { ApiFootballClient, FootballDataClient, TheSportsDbClient, type ResultsSource } from "@northeside/football";
 import {
   createPublicClient,
   createWalletClient,
@@ -54,7 +54,7 @@ export interface CoreContext {
   results?: Signer;
   attester?: Account;
   drip?: Signer;
-  football?: { primary: FootballDataClient; secondary: ApiFootballClient };
+  football?: { primary: FootballDataClient; secondary: ResultsSource };
   season: number;
   siteUrl: string;
   log: Logger;
@@ -91,6 +91,20 @@ export function telegramAlerter(env: Env, log: Logger) {
 }
 
 /** Build the context from environment variables. Only the keys present are loaded. */
+/**
+ * The second, independent results source. TheSportsDB (free public key) by default;
+ * RESULTS_SECONDARY=api-football uses API-Football, whose current season needs a paid plan.
+ */
+export function secondarySource(env: Env): ResultsSource {
+  const choice = (env.RESULTS_SECONDARY ?? "thesportsdb").toLowerCase();
+  if (choice === "api-football") {
+    if (!env.API_FOOTBALL_KEY) throw new Error("RESULTS_SECONDARY=api-football needs API_FOOTBALL_KEY");
+    return new ApiFootballClient({ apiKey: env.API_FOOTBALL_KEY, baseUrl: env.API_FOOTBALL_BASE_URL });
+  }
+  if (choice !== "thesportsdb") throw new Error(`RESULTS_SECONDARY must be thesportsdb or api-football, not ${choice}`);
+  return new TheSportsDbClient({ apiKey: env.THESPORTSDB_API_KEY, baseUrl: env.THESPORTSDB_BASE_URL });
+}
+
 export function createContextFromEnv(env: Env = process.env, overrides: Partial<CoreContext> = {}): CoreContext {
   const deployment = deploymentFromEnv(env);
   const chain = chainById(deployment.chainId);
@@ -109,13 +123,9 @@ export function createContextFromEnv(env: Env = process.env, overrides: Partial<
     results: signer(env.RESULTS_PRIVATE_KEY, chain, transport),
     attester: env.ATTESTER_PRIVATE_KEY ? privateKeyToAccount(env.ATTESTER_PRIVATE_KEY as `0x${string}`) : undefined,
     drip: signer(env.DRIP_PRIVATE_KEY, chain, transport),
-    football:
-      env.FOOTBALL_DATA_API_KEY && env.API_FOOTBALL_KEY
-        ? {
-            primary: new FootballDataClient({ apiKey: env.FOOTBALL_DATA_API_KEY, baseUrl: env.FOOTBALL_DATA_BASE_URL }),
-            secondary: new ApiFootballClient({ apiKey: env.API_FOOTBALL_KEY, baseUrl: env.API_FOOTBALL_BASE_URL }),
-          }
-        : undefined,
+    football: env.FOOTBALL_DATA_API_KEY
+      ? { primary: new FootballDataClient({ apiKey: env.FOOTBALL_DATA_API_KEY, baseUrl: env.FOOTBALL_DATA_BASE_URL }), secondary: secondarySource(env) }
+      : undefined,
     season: Number(env.SEASON ?? 2026),
     siteUrl: env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
     log,

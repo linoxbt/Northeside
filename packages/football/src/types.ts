@@ -21,6 +21,12 @@ export interface MatchResult {
   awayGoals: number | null;
 }
 
+/** A results provider used as the second, independent source in the cross-check. */
+export interface ResultsSource {
+  readonly name: string;
+  results(matchday: number, season: number): Promise<MatchResult[]>;
+}
+
 export type FetchLike = (input: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{
   ok: boolean;
   status: number;

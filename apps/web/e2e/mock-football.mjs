@@ -1,4 +1,4 @@
-// Minimal stand-in for football-data.org v4 and API-Football v3, for end-to-end runs.
+// Minimal stand-in for football-data.org v4, TheSportsDB v1 and API-Football v3, for end-to-end runs.
 import { createServer } from "node:http";
 
 export function startMockFootball(port = 4010) {
@@ -35,6 +35,33 @@ export function startMockFootball(port = 4010) {
             score: { fullTime: { home: r?.home ?? null, away: r?.away ?? null } },
           };
         }),
+      });
+    }
+    const tsdb = url.pathname.match(/^\/([^/]+)\/eventsround\.php$/);
+    if (tsdb) {
+      if (tsdb[1] !== "e2e") return send(403, { message: "bad key" });
+      if (url.searchParams.get("id") !== "4328") return send(200, { events: null });
+      const md = Number(url.searchParams.get("r"));
+      const fx = state.fixtures.get(md) ?? [];
+      const rs = state.results.get(md) ?? [];
+      return send(200, {
+        events: fx.length
+          ? fx.map((f) => {
+              const r = rs.find((x) => x.id === f.id);
+              const strStatus = !r ? "NS" : r.status === "FINISHED" ? "Match Finished" : r.status === "POSTPONED" ? "Match Postponed" : "NS";
+              const played = strStatus === "Match Finished";
+              return {
+                idEvent: String(7000 + f.id),
+                strHomeTeam: f.home,
+                strAwayTeam: f.away,
+                strTimestamp: f.utcDate.replace(/Z$/, "").replace(/\.\d+$/, ""),
+                intHomeScore: played ? String(r.home) : null,
+                intAwayScore: played ? String(r.away) : null,
+                strStatus,
+                strPostponed: strStatus === "Match Postponed" ? "yes" : "no",
+              };
+            })
+          : null,
       });
     }
     if (url.pathname === "/fixtures") {

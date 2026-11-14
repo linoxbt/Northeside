@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiFootballClient, FootballDataClient, apiFootballOk, changedKickoffs, crossCheck, teamKey, type FetchLike } from "../src";
+import { ApiFootballClient, FootballDataClient, TheSportsDbClient, apiFootballOk, changedKickoffs, crossCheck, teamKey, type FetchLike, type Fixture, type MatchResult } from "../src";
 
 const fdMatches = {
   matches: [
@@ -165,5 +165,65 @@ describe("apiFootballOk (final review M-4)", () => {
     const ok = { errors: [], response: [] };
     expect(apiFootballOk(ok)).toBe(ok);
     expect(apiFootballOk({ errors: {}, response: [] })).toEqual({ errors: {}, response: [] });
+  });
+});
+
+describe("TheSportsDB (default secondary source)", () => {
+  const ev = (o: Record<string, unknown>) => ({
+    idEvent: "2494105", strHomeTeam: "Manchester City", strAwayTeam: "Fulham", strTimestamp: "2026-11-21T12:30:00",
+    dateEvent: "2026-11-21", strTime: "12:30:00", intHomeScore: null, intAwayScore: null, strStatus: "NS", strPostponed: "no", ...o,
+  });
+
+  it("calls the public endpoint for the round and season, and reads UTC kickoffs", async () => {
+    const f = fakeFetch({ events: [ev({})] });
+    const [r] = await new TheSportsDbClient({ fetch: f }).results(11, 2026);
+    expect((f as unknown as { mock: { calls: string[][] } }).mock.calls[0]![0]).toBe(
+      "https://www.thesportsdb.com/api/v1/json/123/eventsround.php?id=4328&r=11&s=2026-2027",
+    );
+    expect(r).toEqual({ externalId: 2494105, home: "Manchester City", away: "Fulham", kickoff: Date.UTC(2026, 10, 21, 12, 30) / 1000, status: "pending", homeGoals: null, awayGoals: null });
+  });
+
+  it("maps finished, postponed and in-play games; finished needs both scores", async () => {
+    const f = fakeFetch({
+      events: [
+        ev({ idEvent: "1", strStatus: "Match Finished", intHomeScore: "2", intAwayScore: "1" }),
+        ev({ idEvent: "2", strStatus: "FT", intHomeScore: 0, intAwayScore: 0 }),
+        ev({ idEvent: "3", strStatus: "Match Postponed" }),
+        ev({ idEvent: "4", strPostponed: "yes" }),
+        ev({ idEvent: "5", strStatus: "2H", intHomeScore: "1", intAwayScore: "0" }),
+        ev({ idEvent: "6", strStatus: "FT", intHomeScore: "3", intAwayScore: null }),
+      ],
+    });
+    const rs = await new TheSportsDbClient({ fetch: f }).results(11, 2026);
+    expect(rs.map((r) => [r.status, r.homeGoals, r.awayGoals])).toEqual([
+      ["played", 2, 1], ["played", 0, 0], ["void", null, null], ["void", null, null], ["pending", null, null], ["pending", null, null],
+    ]);
+  });
+
+  it("returns no games when the round is unknown (events: null)", async () => {
+    expect(await new TheSportsDbClient({ fetch: fakeFetch({ events: null }) }).results(99, 2026)).toEqual([]);
+  });
+
+  it("cross-checks against football-data with this season's real team names", () => {
+    // Matchweek 11 of 2026-27 as each provider spells it (football-data shortName vs TheSportsDB).
+    const games: [string, string, string, string, string][] = [
+      ["Man City", "Fulham", "Manchester City", "Fulham", "2026-11-21T12:30:00Z"],
+      ["Chelsea", "Leeds United", "Chelsea", "Leeds United", "2026-11-21T15:00:00Z"],
+      ["Aston Villa", "Sunderland", "Aston Villa", "Sunderland", "2026-11-21T15:00:00Z"],
+      ["Bournemouth", "Nottingham", "Bournemouth", "Nottingham Forest", "2026-11-21T15:00:00Z"],
+      ["Tottenham", "Ipswich Town", "Tottenham Hotspur", "Ipswich Town", "2026-11-21T15:00:00Z"],
+      ["Coventry City", "Crystal Palace", "Coventry City", "Crystal Palace", "2026-11-21T15:00:00Z"],
+      ["Newcastle", "Arsenal", "Newcastle United", "Arsenal", "2026-11-21T17:30:00Z"],
+      ["Hull City", "Brighton Hove", "Hull City", "Brighton and Hove Albion", "2026-11-22T14:00:00Z"],
+      ["Liverpool", "Man United", "Liverpool", "Manchester United", "2026-11-22T16:30:00Z"],
+      ["Brentford", "Everton", "Brentford", "Everton", "2026-11-23T20:00:00Z"],
+    ];
+    const t = (iso: string) => Date.parse(iso) / 1000;
+    const fixtures: Fixture[] = games.map(([h, a, , , k], i) => ({ externalId: 100 + i, index: i, home: h, away: a, kickoff: t(k) }));
+    const primary: MatchResult[] = games.map(([h, a, , , k], i) => ({ externalId: 100 + i, home: h, away: a, kickoff: t(k), status: "played", homeGoals: i % 3, awayGoals: 1 }));
+    const secondary: MatchResult[] = games.map(([, , h, a, k], i) => ({ externalId: 900 + i, home: h, away: a, kickoff: t(k), status: "played", homeGoals: i % 3, awayGoals: 1 }));
+    const check = crossCheck(fixtures, primary, secondary);
+    expect(check.rows.filter((r) => r.state !== "agree")).toEqual([]);
+    expect(check.agreed).toBe(true);
   });
 });
