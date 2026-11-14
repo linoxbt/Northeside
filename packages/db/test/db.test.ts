@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as schema from "../src/schema";
 import { FieldCrypto } from "../src/crypto";
+import { applyMigrations } from "../src/apply-migrations";
+import { MIGRATIONS } from "../src/migrations.generated";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 const pg = new PGlite();
 const db = drizzle(pg, { schema });
@@ -60,6 +64,15 @@ describe("schema", () => {
     ).rejects.toThrow();
   });
 
+  it("enforces one drip per verified email, even after the user row changes", async () => {
+    const a = await user("drip-email-a");
+    const b = await user("drip-email-b");
+    await db.insert(schema.drips).values({ userId: a.id, wallet: "0xe1", deviceHash: "de1", emailHash: "same", amountWei: 1n });
+    await expect(
+      db.insert(schema.drips).values({ userId: b.id, wallet: "0xe2", deviceHash: "de2", emailHash: "same", amountWei: 1n }),
+    ).rejects.toThrow();
+  });
+
   it("enforces one drip per user, wallet and device", async () => {
     const u1 = await user("d1");
     const u2 = await user("d2");
@@ -84,6 +97,30 @@ describe("schema", () => {
     const row = { campaignId: 1, matchweekId: 12, personHash: "0xp", host: "0xh", leagueSlug: "lino" };
     await db.insert(schema.countablePlayers).values(row);
     await expect(db.insert(schema.countablePlayers).values({ ...row, host: "0xother" })).rejects.toThrow();
+  });
+});
+
+describe("embedded migrations", () => {
+  it("match the drizzle folder byte for byte (run `pnpm --filter @northeside/db generate`)", () => {
+    const journal = JSON.parse(readFileSync(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"));
+    expect(MIGRATIONS.map((m) => m.tag)).toEqual(journal.entries.map((e: { tag: string }) => e.tag));
+    for (const m of MIGRATIONS) {
+      const file = readFileSync(new URL(`../drizzle/${m.tag}.sql`, import.meta.url), "utf8");
+      expect(m.sql).toBe(file);
+      expect(m.hash).toBe(createHash("sha256").update(file).digest("hex"));
+    }
+  });
+
+  it("skip everything drizzle's migrator already applied (same hashes)", async () => {
+    expect(await applyMigrations(db)).toEqual({ applied: [], skipped: MIGRATIONS.map((m) => m.tag) });
+  });
+
+  it("apply a fresh database in order and are idempotent", async () => {
+    const fresh = drizzle(new PGlite(), { schema });
+    const first = await applyMigrations(fresh);
+    expect(first.applied).toEqual(MIGRATIONS.map((m) => m.tag));
+    expect((await applyMigrations(fresh)).applied).toEqual([]);
+    await fresh.insert(schema.appSettings).values({ key: "automation_paused", value: true });
   });
 });
 

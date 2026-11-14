@@ -7,6 +7,9 @@ import { HttpError, idempotent, json, limitWrites, requireSession, route } from 
 import { getCtx } from "@/lib/server/ctx";
 import { checkPayload, encryptPayload, getMatchweekRow, onChainCommitment } from "@/lib/server/services/predictions";
 
+/** Matchweek states in which a payload can still be stored and revealed. */
+const REVEALABLE = new Set(["open", "locked", "challenged"]);
+
 const body = z.object({ payload: z.unknown(), txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/) });
 
 /**
@@ -29,39 +32,60 @@ export const POST = route(async (req) => {
     const payload = checkPayload(s, input.payload, mw, Number(n));
     const txHash = input.txHash as Hex;
 
+    // Reveals and scores are fixed on-chain when results are proposed (audit B2). A payload that
+    // arrives later can no longer count, and accepting it would change the reveals the chain holds.
+    if (!REVEALABLE.has(mw.status)) {
+      throw new HttpError(409, "reveals_closed", "Results for this matchweek are already proposed; this seal can no longer be added");
+    }
+
     // Wait briefly for the commit to land; the indexer confirms it later if it is slow.
     const receipt = await ctx.publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 20_000 }).catch(() => null);
     if (receipt && receipt.status !== "success") throw new HttpError(400, "tx_failed", "The commit transaction failed");
     if (receipt && receipt.from.toLowerCase() !== s.wallet.toLowerCase()) throw new HttpError(403, "not_your_tx", "Transaction was sent by another wallet");
     if (receipt && receipt.to?.toLowerCase() !== ctx.deployment.matchweeks.toLowerCase()) throw new HttpError(400, "wrong_contract", "Transaction is not a commit");
 
-    let txStatus: "sent" | "confirmed" = "sent";
-    let version = 0;
-    if (receipt) {
-      const onChain = await onChainCommitment(s.wallet, mw.id);
-      if (onChain.commitment.toLowerCase() !== payload.commitment.toLowerCase()) {
-        throw new HttpError(409, "superseded", "A newer seal exists on-chain; this payload is not the latest");
-      }
-      txStatus = "confirmed";
-      version = onChain.version;
-    } else if (new Date() >= mw.lockTime) {
-      throw new HttpError(409, "locked", "This matchweek is locked");
+    // The chain decides which payload is real: a payload whose commitment is on-chain is confirmed
+    // (with or without a receipt yet); anything else is kept as pending beside the confirmed one.
+    const onChain = await onChainCommitment(s.wallet, mw.id);
+    const confirmed = onChain.commitment.toLowerCase() === payload.commitment.toLowerCase();
+    if (!confirmed && receipt) throw new HttpError(409, "superseded", "A newer seal exists on-chain; this payload is not the latest");
+    if (!confirmed && new Date() >= mw.lockTime) throw new HttpError(409, "locked", "This matchweek is locked");
+
+    const enc = encryptPayload(payload);
+    const base = { userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id };
+    const draft = { home: payload.home, away: payload.away };
+    if (confirmed) {
+      const values = {
+        payloadEnc: enc,
+        commitment: payload.commitment,
+        txHash,
+        txStatus: "confirmed" as const,
+        version: onChain.version,
+        sealedAt: new Date(),
+        draft,
+        pendingPayloadEnc: null,
+        pendingCommitment: null,
+        pendingTxHash: null,
+        revealedAt: null,
+        revealValid: null,
+        revealError: null,
+        updatedAt: new Date(),
+      };
+      await ctx.db
+        .insert(schema.predictions)
+        .values({ ...base, ...values })
+        .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: values });
+      return { ok: true, txStatus: "confirmed", version: onChain.version, commitment: payload.commitment };
     }
 
-    const values = {
-      payloadEnc: encryptPayload(payload),
-      commitment: payload.commitment,
-      txHash,
-      txStatus,
-      version,
-      sealedAt: receipt ? new Date() : null,
-      draft: { home: payload.home, away: payload.away },
-      updatedAt: new Date(),
-    };
+    // Not on-chain yet: never overwrite a confirmed payload with one whose tx may still revert.
+    const pending = { pendingPayloadEnc: enc, pendingCommitment: payload.commitment, pendingTxHash: txHash, draft, updatedAt: new Date() };
     await ctx.db
       .insert(schema.predictions)
-      .values({ userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id, ...values })
-      .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: values });
+      .values({ ...base, ...pending, txHash, txStatus: "sent" })
+      .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: pending });
+    const txStatus = "sent";
+    const version = 0;
     return { ok: true, txStatus, version, commitment: payload.commitment };
   });
   return json(result);

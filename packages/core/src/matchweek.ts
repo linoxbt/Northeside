@@ -11,7 +11,7 @@ import {
   type FixtureLeaf,
 } from "@northeside/merkle";
 import { RULES_V1_HASH, rank, scorePicks, type FixtureResult } from "@northeside/scoring";
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext } from "./context";
 import { audit, confirm } from "./ops";
@@ -164,6 +164,14 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
 export async function revealMatchweek(ctx: CoreContext, id: number) {
   const mw = await getMatchweek(ctx, id);
   if ((await chainNow(ctx)) < mw.lockTime) throw new Error(`matchweek ${id} is not locked yet`);
+  // Once results are proposed the reveals root is on-chain; the reveal set must not change (audit B2).
+  if (mw.status === "results_proposed" || mw.status === "finalized") {
+    return { matchweekId: id, skipped: "results already proposed; reveals are frozen" as const };
+  }
+  const chain = await onChainMatchweek(ctx, id);
+  if (chain.status === ChainStatus.ResultsProposed || chain.status === ChainStatus.Finalized) {
+    return { matchweekId: id, skipped: "results already proposed on-chain; reveals are frozen" as const };
+  }
 
   const pending = await ctx.db
     .select()
@@ -171,7 +179,7 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
     .where(
       and(
         eq(schema.predictions.matchweekId, id),
-        isNotNull(schema.predictions.payloadEnc),
+        or(isNotNull(schema.predictions.payloadEnc), isNotNull(schema.predictions.pendingPayloadEnc)),
         isNull(schema.predictions.revealedAt),
       ),
     );
@@ -179,28 +187,42 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
   let valid = 0;
   let invalid = 0;
   for (const p of pending) {
-    let payload: SealedPayload | null = null;
-    let error: string | null = null;
-    try {
-      payload = sealedPayloadSchema.parse(JSON.parse(ctx.crypto.decrypt(p.payloadEnc!, payloadAad(p.wallet, id))));
-      const [onChain] = await ctx.publicClient.readContract({
-        address: ctx.deployment.matchweeks,
-        abi: matchweeksAbi,
-        functionName: "commitmentOf",
-        args: [id, getAddress(p.wallet)],
-      });
-      const check = verifyPayload(payload, onChain);
-      if (!check.ok) error = check.reason;
-      else if (payload.matchweekId !== id || payload.player.toLowerCase() !== p.wallet.toLowerCase()) {
-        error = "payload is for another player or matchweek";
-      } else if (payload.chainId !== ctx.deployment.chainId || payload.matchweeks.toLowerCase() !== ctx.deployment.matchweeks.toLowerCase()) {
-        error = "payload is for another deployment";
-      } else if (payload.fixturesRoot.toLowerCase() !== (mw.fixturesRoot ?? "").toLowerCase()) {
-        error = "payload fixtures root does not match the matchweek";
+    const [onChain] = await ctx.publicClient.readContract({
+      address: ctx.deployment.matchweeks,
+      abi: matchweeksAbi,
+      functionName: "commitmentOf",
+      args: [id, getAddress(p.wallet)],
+    });
+    const check = (enc: string | null) => {
+      if (!enc) return { payload: null, error: "no payload stored" };
+      try {
+        const payload = sealedPayloadSchema.parse(JSON.parse(ctx.crypto.decrypt(enc, payloadAad(p.wallet, id))));
+        const v = verifyPayload(payload, onChain);
+        let error: string | null = null;
+        if (!v.ok) error = v.reason;
+        else if (payload.matchweekId !== id || payload.player.toLowerCase() !== p.wallet.toLowerCase()) {
+          error = "payload is for another player or matchweek";
+        } else if (payload.chainId !== ctx.deployment.chainId || payload.matchweeks.toLowerCase() !== ctx.deployment.matchweeks.toLowerCase()) {
+          error = "payload is for another deployment";
+        } else if (payload.fixturesRoot.toLowerCase() !== (mw.fixturesRoot ?? "").toLowerCase()) {
+          error = "payload fixtures root does not match the matchweek";
+        }
+        return { payload, error };
+      } catch (e) {
+        return { payload: null, error: e instanceof Error ? e.message : String(e) };
       }
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+    };
+    // The confirmed payload first; if it is not what the chain holds, a pending re-seal may be.
+    let result = check(p.payloadEnc);
+    let promote = false;
+    if (result.error !== null && p.pendingPayloadEnc) {
+      const pending = check(p.pendingPayloadEnc);
+      if (pending.error === null) {
+        result = pending;
+        promote = true;
+      }
     }
+    const { payload, error } = result;
     await ctx.db
       .update(schema.predictions)
       .set({
@@ -208,6 +230,9 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
         revealPayload: payload as unknown as object,
         revealValid: error === null,
         revealError: error,
+        ...(promote
+          ? { payloadEnc: p.pendingPayloadEnc, commitment: p.pendingCommitment, txHash: p.pendingTxHash, txStatus: "confirmed" as const, pendingPayloadEnc: null, pendingCommitment: null, pendingTxHash: null }
+          : {}),
         updatedAt: ctx.now(),
       })
       .where(eq(schema.predictions.id, p.id));
@@ -225,6 +250,14 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
     .where(eq(schema.matchweeks.id, id));
   if (invalid > 0) await ctx.alert(`matchweek ${id}: ${invalid} reveal(s) did not match their commitment`);
   return { matchweekId: id, revealed: pending.length, valid, invalid, revealsRoot: tree.root };
+}
+
+/** Players in the reveals tree stored at proposal, if that tree is the one on-chain. */
+function proposedPlayers(tree: unknown, storedRoot: string | null, chainRoot: string): Set<string> | undefined {
+  if (!tree || !storedRoot || storedRoot.toLowerCase() !== chainRoot.toLowerCase()) return undefined;
+  const values = (tree as { values?: { value: unknown[] }[] }).values;
+  if (!Array.isArray(values)) return undefined;
+  return new Set(values.map((v) => String(v.value[0]).toLowerCase()));
 }
 
 async function validReveals(ctx: CoreContext, id: number) {
@@ -253,8 +286,8 @@ async function buildRevealsFromDb(ctx: CoreContext, id: number) {
  * Score every valid reveal against `results` and build the reveals and scores trees. Both roots
  * are proposed with the results and sit through the dispute window (audit M-2).
  */
-async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResult[]) {
-  const reveals = await validReveals(ctx, id);
+async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResult[], onlyPlayers?: Set<string>) {
+  const reveals = (await validReveals(ctx, id)).filter((r) => !onlyPlayers || onlyPlayers.has(r.row.wallet.toLowerCase()));
   const scored = reveals.map(({ row, payload }) => ({
     id: row.wallet,
     predictionId: row.id,
@@ -264,7 +297,14 @@ async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResu
   const scoresTree = buildScoresTree(
     scored.map((s) => ({ player: s.player, matchweekId: id, points: s.points, exactScores: s.exactScores })),
   );
-  const revealsTree = await buildRevealsFromDb(ctx, id);
+  const revealsTree = buildRevealsTree(
+    reveals.map(({ payload }) => ({
+      player: payload.player as Address,
+      matchweekId: id,
+      predictionsHash: payload.predictionsHash as Hex,
+      salt: payload.salt as Hex,
+    })),
+  );
   return { scored, ranked: rank(scored), scoresTree, revealsTree };
 }
 
@@ -434,7 +474,11 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
     awayGoals: f.awayGoals ?? 0,
     status: f.status === "void" ? "void" : "played",
   }));
-  const { scored, ranked, scoresTree, revealsTree } = await scoreMatchweek(ctx, id, results);
+  // Score exactly the reveal set that was proposed (stored with the proposal), not whatever the
+  // predictions table holds now (audit B2).
+  const mwRow = await getMatchweek(ctx, id);
+  const proposed = proposedPlayers(mwRow.revealsTree, mwRow.revealsRoot, chain.revealsRoot);
+  const { scored, ranked, scoresTree, revealsTree } = await scoreMatchweek(ctx, id, results, proposed);
 
   if (chain.status !== ChainStatus.ResultsProposed && chain.status !== ChainStatus.Finalized) {
     throw new Error(`matchweek ${id} has no proposed results`);

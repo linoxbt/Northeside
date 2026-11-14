@@ -50,6 +50,8 @@ export const users = pgTable(
     attributedLeagueId: uuid("attributed_league_id"),
     attributionSource: text("attribution_source"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Bumped on sign-out-everywhere and deletion; sessions carrying an older version are rejected. */
+    sessionVersion: integer("session_version").notNull().default(0),
     createdAt: createdAt(),
   },
 );
@@ -91,6 +93,8 @@ export const drips = pgTable(
       .references(() => users.id),
     wallet: text("wallet").notNull(),
     deviceHash: text("device_hash").notNull(),
+    /** HMAC of the verified email. Kept after account deletion so a re-sign-up cannot drip again. */
+    emailHash: text("email_hash"),
     amountWei: uint256("amount_wei").notNull(),
     txHash: text("tx_hash"),
     status: text("status", { enum: ["pending", "sent", "confirmed", "failed"] }).notNull().default("pending"),
@@ -102,6 +106,7 @@ export const drips = pgTable(
     uniqueIndex("drips_user_uq").on(t.userId),
     uniqueIndex("drips_wallet_uq").on(t.wallet),
     uniqueIndex("drips_device_uq").on(t.deviceHash),
+    uniqueIndex("drips_email_uq").on(t.emailHash),
     index("drips_created_idx").on(t.createdAt),
   ],
 );
@@ -172,6 +177,14 @@ export const predictions = pgTable(
     /** AES-256-GCM ciphertext of the full sealed payload, salt included. Revealed only after lock. */
     payloadEnc: text("payload_enc"),
     commitment: text("commitment"),
+    /**
+     * A re-seal whose transaction had no receipt yet. Kept beside the confirmed payload so a reverted
+     * or dropped re-seal never replaces the payload that is actually on-chain; the reveal uses
+     * whichever matches the chain, and the indexer promotes it when its Committed event arrives.
+     */
+    pendingPayloadEnc: text("pending_payload_enc"),
+    pendingCommitment: text("pending_commitment"),
+    pendingTxHash: text("pending_tx_hash"),
     version: integer("version").notNull().default(0),
     txHash: text("tx_hash"),
     txStatus: text("tx_status", { enum: ["none", "sent", "confirmed", "failed"] }).notNull().default("none"),
@@ -295,6 +308,8 @@ export const rewardRoots = pgTable(
     reportUri: text("report_uri").notNull(),
     tree: jsonb("tree").notNull(),
     txHash: text("tx_hash"),
+    /** "pending" is written before postRoot is sent, so a crash after mining never loses the proofs. */
+    status: text("status", { enum: ["pending", "confirmed"] }).notNull().default("confirmed"),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.campaignId, t.matchweekId] })],
@@ -341,6 +356,7 @@ export const chainEvents = pgTable(
     eventName: text("event_name").notNull(),
     args: jsonb("args").notNull(),
     blockTime: timestamp("block_time", { withTimezone: true }),
+    blockHash: text("block_hash"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -349,6 +365,13 @@ export const chainEvents = pgTable(
     index("chain_events_block_idx").on(t.blockNumber),
   ],
 );
+
+/** Runtime switches the operator can flip without a redeploy (e.g. automation_paused). */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const indexerState = pgTable("indexer_state", {
   key: text("key").primaryKey(),
