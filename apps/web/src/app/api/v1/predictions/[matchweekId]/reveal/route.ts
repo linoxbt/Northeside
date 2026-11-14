@@ -17,7 +17,8 @@ export const POST = route(async (req, { params }: { params: Promise<{ matchweekI
   const id = Number((await params).matchweekId);
   const mw = await getMatchweekRow(id);
   if (new Date() < mw.lockTime) throw new HttpError(409, "not_locked", "Reveals open after lock");
-  if (mw.status !== "open" && mw.status !== "challenged") {
+  // "locked" is set by the first reveal pass after kickoff; uploads stay open until results are proposed.
+  if (mw.status !== "open" && mw.status !== "locked" && mw.status !== "challenged") {
     throw new HttpError(409, "reveals_closed", "Reveals closed when this matchweek's results were proposed");
   }
   const ctx = getCtx();
@@ -27,7 +28,7 @@ export const POST = route(async (req, { params }: { params: Promise<{ matchweekI
   if (onChain.commitment.toLowerCase() !== payload.commitment.toLowerCase()) {
     throw new HttpError(400, "mismatch", "This file does not match your on-chain commitment");
   }
-  const values = { payloadEnc: encryptPayload(payload), commitment: payload.commitment, version: onChain.version, txStatus: "confirmed" as const, revealedAt: null, revealValid: null, revealError: null, updatedAt: new Date() };
+  const values = { payloadEnc: encryptPayload(payload), commitment: payload.commitment, version: onChain.version, txStatus: "confirmed" as const, revealedAt: null, revealValid: null, revealError: null, pendingPayloadEnc: null, pendingCommitment: null, pendingTxHash: null, updatedAt: new Date() };
   await ctx.db
     .insert(schema.predictions)
     .values({ userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: id, ...values })

@@ -127,6 +127,11 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
           txHash,
           txStatus: "confirmed",
           sealedAt: at,
+          // A re-seal that was stored as pending is now on-chain: promote it to the confirmed payload.
+          payloadEnc: sql`CASE WHEN lower(${schema.predictions.pendingCommitment}) = ${lower(a.commitment)} THEN ${schema.predictions.pendingPayloadEnc} ELSE ${schema.predictions.payloadEnc} END`,
+          pendingPayloadEnc: sql`CASE WHEN lower(${schema.predictions.pendingCommitment}) = ${lower(a.commitment)} THEN NULL ELSE ${schema.predictions.pendingPayloadEnc} END`,
+          pendingTxHash: sql`CASE WHEN lower(${schema.predictions.pendingCommitment}) = ${lower(a.commitment)} THEN NULL ELSE ${schema.predictions.pendingTxHash} END`,
+          pendingCommitment: sql`CASE WHEN lower(${schema.predictions.pendingCommitment}) = ${lower(a.commitment)} THEN NULL ELSE ${schema.predictions.pendingCommitment} END`,
           updatedAt: new Date(),
         })
         .where(

@@ -77,7 +77,7 @@ export const JOBS = {
     const due = await ctx.db
       .select()
       .from(schema.matchweeks)
-      .where(and(inArray(schema.matchweeks.status, ["open", "locked", "results_proposed", "challenged"]), lte(schema.matchweeks.lockTime, ctx.now())));
+      .where(and(inArray(schema.matchweeks.status, ["open", "locked", "challenged"]), lte(schema.matchweeks.lockTime, ctx.now())));
     const out = [];
     for (const mw of due) out.push(await runJob(ctx, "reveal", `${mw.id}:${hourKey()}:${Math.floor(new Date().getMinutes() / 5)}`, () => revealMatchweek(ctx, mw.id)));
     return out;

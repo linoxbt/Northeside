@@ -251,6 +251,23 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     return payload;
   }
 
+  /** A re-seal whose tx had no receipt when the server got it: stored as pending only (audit B3). */
+  async function sealPending(key: Hex, mwId: number, home: number[], away: number[]) {
+    const [mw] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, mwId));
+    const player = acct(key).address;
+    const payload = buildSealedPayload(
+      { chainId: 31337, matchweeks: ctx.deployment.matchweeks, player, matchweekId: mwId, fixturesRoot: mw!.fixturesRoot as Hex },
+      { home, away },
+    );
+    const tx = await wallet(key).writeContract({ address: ctx.deployment.matchweeks, abi: matchweeksAbi, functionName: "commit", args: [mwId, payload.commitment] });
+    await pub.waitForTransactionReceipt({ hash: tx });
+    await ctx.db
+      .update(schema.predictions)
+      .set({ pendingPayloadEnc: ctx.crypto.encrypt(JSON.stringify(payload), payloadAad(player, mwId)), pendingCommitment: payload.commitment, pendingTxHash: tx })
+      .where(and(eq(schema.predictions.wallet, player.toLowerCase()), eq(schema.predictions.matchweekId, mwId)));
+    return payload;
+  }
+
   async function verify(key: Hex, userId: string) {
     const att = await issueAttestation(ctx, userId, acct(key).address, `qie-person:${userId}`);
     const tx = await wallet(key).writeContract({
@@ -354,7 +371,9 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       await createMatchweekOnChain(ctx, 12);
       await seal(KEYS.p1, u1.id, 12, [1, 1, 1], [0, 0, 0]);
       await seal(KEYS.p2, u2.id, 12, [0, 0, 0], [1, 1, 1]);
-      await seal(KEYS.p3, u3.id, 12, [2, 2, 2], [2, 2, 2]);
+      await seal(KEYS.p3, u3.id, 12, [0, 0, 0], [0, 0, 0]);
+      // p3 re-seals; the server only saw it as pending (no receipt yet). The chain holds the re-seal.
+      await sealPending(KEYS.p3, 12, [2, 2, 2], [2, 2, 2]);
       await advance(3 * 24 * 3600 + 30 * 3600);
       providers.results.set(
         12,
@@ -362,6 +381,26 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       );
       await fetchResults(ctx, 12);
       await publishResults(ctx, 12);
+      const [p3row] = await ctx.db
+        .select()
+        .from(schema.predictions)
+        .where(and(eq(schema.predictions.wallet, acct(KEYS.p3).address.toLowerCase()), eq(schema.predictions.matchweekId, 12)));
+      expect(p3row).toMatchObject({ revealValid: true, pendingPayloadEnc: null }); // the pending re-seal was promoted
+
+      // A payload arriving after the proposal must not change the frozen reveal set (audit B2).
+      const late = buildSealedPayload(
+        { chainId: 31337, matchweeks: ctx.deployment.matchweeks, player: acct(KEYS.host).address, matchweekId: 12, fixturesRoot: p3row!.revealPayload ? ((p3row!.revealPayload as { fixturesRoot: Hex }).fixturesRoot) : "0x" },
+        { home: [9, 9, 9], away: [0, 0, 0] },
+      );
+      await ctx.db.insert(schema.predictions).values({
+        userId: hostUser.id,
+        wallet: acct(KEYS.host).address.toLowerCase(),
+        matchweekId: 12,
+        payloadEnc: ctx.crypto.encrypt(JSON.stringify(late), payloadAad(acct(KEYS.host).address, 12)),
+        commitment: late.commitment,
+        txStatus: "sent",
+      });
+      expect(await revealMatchweek(ctx, 12)).toMatchObject({ skipped: expect.stringMatching(/frozen/) });
       await advance(12 * 3600 + 60);
       await finalizeAndScore(ctx, 12);
 
@@ -392,7 +431,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(s.sponsors).toBe(1);
       expect(s.qusdcSettled).toBe(2_000_000n);
       expect(s.revenue).toBe(10_000_000n);
-      expect(s.transactions.commits).toBe(7);
+      expect(s.transactions.commits).toBe(8);
 
       const proof = await proofData(ctx, 12);
       expect(proof?.commitments).toHaveLength(3);
