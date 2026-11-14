@@ -1,6 +1,6 @@
 import "server-only";
-import { bigintReplacer } from "@northeside/core";
-import { schema } from "@northeside/db";
+import { bigintReplacer, reportError } from "@northeside/core";
+import { safeEqual, schema } from "@northeside/db";
 import { sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -42,6 +42,7 @@ export function route<C>(fn: Handler<C>): Handler<C> {
         return json({ error: "launching_soon", message: "Northeside is launching on QIE mainnet; this API opens at launch." }, { status: 503 });
       }
       getCtx().log.error("unhandled API error", { url: req.url, error: e instanceof Error ? e.stack : String(e) });
+      await reportError(e, { url: new URL(req.url).pathname });
       return json({ error: "internal", message: "Something went wrong" }, { status: 500 });
     }
   };
@@ -55,7 +56,8 @@ export async function requireSession(): Promise<Session> {
 
 export async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // Netlify sets x-nf-client-connection-ip itself; client-sent x-forwarded-for can be forged (audit S8).
+  return h.get("x-nf-client-connection-ip") ?? h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 }
 
 /** Fixed-window rate limit stored in Postgres (no Redis in the MVP). */
@@ -71,6 +73,17 @@ export async function rateLimit(key: string, limit: number, windowSeconds: numbe
     })
     .returning({ count: schema.rateLimits.count });
   if ((row?.count ?? 0) > limit) throw new HttpError(429, "rate_limited", "Too many requests, slow down");
+}
+
+/** Counted quota: refuse when `limit` uses are already recorded in this window (does not count this call). */
+export async function quotaLeft(key: string, limit: number, windowSeconds: number) {
+  const { db } = getCtx();
+  const windowStart = new Date(Math.floor(Date.now() / (windowSeconds * 1000)) * windowSeconds * 1000);
+  const [row] = await db
+    .select({ count: schema.rateLimits.count })
+    .from(schema.rateLimits)
+    .where(sql`${schema.rateLimits.key} = ${key} and ${schema.rateLimits.windowStart} = ${windowStart}`);
+  if ((row?.count ?? 0) >= limit) throw new HttpError(429, "rate_limited", "Too many requests from this network today");
 }
 
 /** Rate-limit per user and per IP together. */
@@ -113,6 +126,6 @@ export async function idempotent(key: string | null, userId: string, routeName: 
 
 export function requireCron(req: Request) {
   const expected = process.env.CRON_SECRET;
-  const got = req.headers.get("authorization");
-  if (!expected || got !== `Bearer ${expected}`) throw new HttpError(401, "unauthorized", "Bad cron secret");
+  const got = req.headers.get("authorization") ?? "";
+  if (!expected || !safeEqual(got, `Bearer ${expected}`)) throw new HttpError(401, "unauthorized", "Bad cron secret");
 }

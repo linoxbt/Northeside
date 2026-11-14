@@ -105,6 +105,9 @@ importers:
       '@types/web-push':
         specifier: 3.6.4
         version: 3.6.4
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       postgres:
         specifier: 3.4.9
         version: 3.4.9

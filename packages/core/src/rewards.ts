@@ -218,13 +218,44 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
   });
   if (c.status !== CampaignStatus.Active) return { skipped: "campaign not active" };
   if (matchweekId < c.terms.firstMatchweek || matchweekId > c.terms.lastMatchweek) return { skipped: "matchweek out of range" };
-  const existing = await ctx.publicClient.readContract({
+  const onChainRoot = await ctx.publicClient.readContract({
     address: ctx.deployment.hostRewards,
     abi: hostRewardsAbi,
     functionName: "rootOf",
     args: [BigInt(campaignId), matchweekId],
   });
-  if (existing !== `0x${"0".repeat(64)}`) return { skipped: "root already posted", root: existing };
+  const ZERO = `0x${"0".repeat(64)}`;
+  const [stored] = await ctx.db
+    .select()
+    .from(schema.rewardRoots)
+    .where(and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId)));
+
+  // The tree and proofs are stored before the transaction is sent (audit B5), so every re-run can
+  // finish a post that was interrupted, without ever computing a second, different root.
+  if (stored) {
+    if (onChainRoot.toLowerCase() === stored.root.toLowerCase()) {
+      if (stored.status !== "confirmed") {
+        await ctx.db
+          .update(schema.rewardRoots)
+          .set({ status: "confirmed" })
+          .where(and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId)));
+      }
+      return { skipped: "root already posted", root: stored.root };
+    }
+    if (onChainRoot !== ZERO) {
+      const msg = `campaign ${campaignId} matchweek ${matchweekId}: on-chain root ${onChainRoot} differs from the stored root ${stored.root}`;
+      await ctx.alert(msg);
+      throw new Error(msg);
+    }
+    checkPostWindow(c.terms.expiry, ctx.now(), campaignId);
+    return sendRoot(ctx, operator, campaignId, matchweekId, stored.root as Hex, BigInt(stored.total), stored.reportUri);
+  }
+  if (onChainRoot !== ZERO) {
+    const msg = `campaign ${campaignId} matchweek ${matchweekId}: a root is on-chain but no proofs are stored; hosts cannot claim`;
+    await ctx.alert(msg);
+    throw new Error(msg);
+  }
+  checkPostWindow(c.terms.expiry, ctx.now(), campaignId);
 
   const candidates = await payoutCandidates(ctx, matchweekId);
   const result = computeHostPayouts(candidates, {
@@ -265,15 +296,9 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
   const reportHash = keccak256(toBytes(reportText));
   const reportUri = `${ctx.siteUrl}/api/v1/rewards/report/${campaignId}/${matchweekId}#keccak256=${reportHash}`;
 
-  const { request } = await ctx.publicClient.simulateContract({
-    account: operator.account,
-    address: ctx.deployment.hostRewards,
-    abi: hostRewardsAbi,
-    functionName: "postRoot",
-    args: [BigInt(campaignId), matchweekId, tree.root, result.total, reportUri],
-  });
-  const tx = await operator.writeContract(request);
-  await confirm(ctx, tx, `postRoot(${campaignId}, ${matchweekId})`);
+  // The contract caps claims at `total`; a total below the leaves would strand the last hosts.
+  const leafSum = result.payouts.reduce((a, p) => a + p.amount, 0n);
+  if (leafSum !== result.total) throw new Error(`reward tree leaves sum to ${leafSum}, not the total ${result.total}`);
 
   await ctx.db.transaction(async (db) => {
     await db.insert(schema.rewardRoots).values({
@@ -283,7 +308,7 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
       total: result.total,
       reportUri,
       tree: toJson({ tree: tree.dump(), reportText }),
-      txHash: tx,
+      status: "pending",
     });
     await db.insert(schema.rewardLeaves).values(
       result.payouts.map((p, i) => ({
@@ -302,8 +327,41 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
         .onConflictDoNothing();
     }
   });
-  await audit(ctx, "operator", "post-reward-root", { campaignId, matchweekId, root: tree.root, total: result.total, hosts: result.payouts.length }, tx);
-  return { campaignId, matchweekId, root: tree.root, total: result.total, hosts: result.payouts.length, txHash: tx };
+  const sent = await sendRoot(ctx, operator, campaignId, matchweekId, tree.root, result.total, reportUri);
+  return { ...sent, hosts: result.payouts.length };
+}
+
+/**
+ * HostRewards cannot replace a root after the campaign expires (audit S3), so never post one that
+ * could not be corrected during the 24-hour review delay.
+ */
+const POST_ROOT_MARGIN_SECONDS = 26 * 3600;
+function checkPostWindow(expiry: bigint, now: Date, campaignId: number) {
+  if (BigInt(Math.floor(now.getTime() / 1000)) + BigInt(POST_ROOT_MARGIN_SECONDS) > expiry) {
+    throw new Error(`campaign ${campaignId} expires within ${POST_ROOT_MARGIN_SECONDS / 3600} h; a root posted now could not be corrected, so it is not posted`);
+  }
+}
+
+async function sendRoot(ctx: CoreContext, operator: NonNullable<CoreContext["operator"]>, campaignId: number, matchweekId: number, root: Hex, total: bigint, reportUri: string) {
+  const { request } = await ctx.publicClient.simulateContract({
+    account: operator.account,
+    address: ctx.deployment.hostRewards,
+    abi: hostRewardsAbi,
+    functionName: "postRoot",
+    args: [BigInt(campaignId), matchweekId, root, total, reportUri],
+  });
+  const tx = await operator.writeContract(request);
+  await ctx.db
+    .update(schema.rewardRoots)
+    .set({ txHash: tx })
+    .where(and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId)));
+  await confirm(ctx, tx, `postRoot(${campaignId}, ${matchweekId})`);
+  await ctx.db
+    .update(schema.rewardRoots)
+    .set({ status: "confirmed" })
+    .where(and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId)));
+  await audit(ctx, "operator", "post-reward-root", { campaignId, matchweekId, root, total }, tx);
+  return { campaignId, matchweekId, root, total, txHash: tx };
 }
 
 /** Post roots for every active campaign that covers this matchweek. */
@@ -315,4 +373,23 @@ export async function postRewardRootsForMatchweek(ctx: CoreContext, matchweekId:
     out.push(await postRewardRoot(ctx, c.id, matchweekId));
   }
   return out;
+}
+
+/**
+ * FR-25: return a campaign's unused money after expiry (anyone may trigger it on-chain; it always
+ * goes to the sponsor's refund recipient). From expiry: the unallocated budget. From the claim
+ * deadline: everything left, and the campaign closes.
+ */
+export async function refundCampaign(ctx: CoreContext, signer: Signer, campaignId: number) {
+  const { request, result } = await ctx.publicClient.simulateContract({
+    account: signer.account,
+    address: ctx.deployment.hostRewards,
+    abi: hostRewardsAbi,
+    functionName: "refund",
+    args: [BigInt(campaignId)],
+  });
+  const tx = await signer.writeContract(request);
+  await confirm(ctx, tx, `refund(${campaignId})`);
+  await audit(ctx, "operator", "refund", { campaignId, amount: result }, tx);
+  return { campaignId, amount: result, txHash: tx };
 }

@@ -392,7 +392,7 @@ async function main() {
   const fin = finRun[0]?.detail ?? {};
   check(finRun[0]?.status === "ok" && fin.players === 2, "automation finalized with 2 scored players");
   check(Array.isArray(await cronJob("post-reward-roots")), "reward-root step runs (no campaigns yet)");
-  for (let i = 0; i < 4; i++) await rpc("evm_mine");
+  for (let i = 0; i < 7; i++) await rpc("evm_mine");
   await cli(env, "index");
 
   // ---------------------------------------------------------------- read side, through the UI

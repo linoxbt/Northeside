@@ -82,7 +82,9 @@ export const POST = route(async (req) => {
   }
   if (!userId && privy) {
     const [byDid] = await ctx.db.select().from(schema.users).where(eq(schema.users.privyDid, privy.did));
-    userId = byDid?.id ?? null;
+    userId = byDid && !byDid.deletedAt ? byDid.id : null;
+    // The same 3-wallet limit applies when a wallet is linked through the email account (audit S6).
+    if (userId && (await walletsOf(userId)).length >= 3) throw new HttpError(400, "too_many_wallets", "An account can link up to 3 wallets");
   }
   if (!userId) {
     const [created] = await ctx.db.insert(schema.users).values({}).returning();
@@ -109,10 +111,16 @@ export const POST = route(async (req) => {
       .where(eq(schema.users.id, userId));
   }
 
-  if (input.ref) await joinLeague(userId, input.ref, input.source ?? "direct").catch(() => null);
+  const [user] = await ctx.db
+    .select({ adultConfirmedAt: schema.users.adultConfirmedAt, sessionVersion: schema.users.sessionVersion, deletedAt: schema.users.deletedAt })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
+  if (!user || user.deletedAt) throw new HttpError(403, "account_deleted", "This account was deleted");
+  // Joining a league waits for the 18+ confirmation (FR-34); the invite is remembered in the browser.
+  if (input.ref && user.adultConfirmedAt) await joinLeague(userId, input.ref, input.source ?? "direct").catch(() => null);
   await ctx.db.insert(schema.notificationPrefs).values({ userId }).onConflictDoNothing();
 
-  await setSessionCookie({ userId, wallet: getAddress(wallet) });
+  await setSessionCookie({ userId, wallet: getAddress(wallet), sv: user.sessionVersion });
   return json({ ok: true, userId, wallet: getAddress(wallet) });
 });
 

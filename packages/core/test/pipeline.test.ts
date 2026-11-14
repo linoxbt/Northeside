@@ -23,7 +23,7 @@ import {
   type PublicClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
+import { erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
 import { FieldCrypto, schema, type Database } from "@northeside/db";
 import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from "@northeside/football";
@@ -33,6 +33,8 @@ import {
   requestDrip,
   finalizeAndScore,
   refreshFixtures,
+  notifyJob,
+  refundCampaign,
   fetchResults,
   fundCampaign,
   importFixtures,
@@ -122,8 +124,8 @@ async function advance(seconds: number) {
   clock = await chainNow();
 }
 
-/** The indexer waits 3 confirmations; mine past them before indexing. */
-async function mine(blocks = 4) {
+/** The indexer waits 6 confirmations by default; mine past them before indexing. */
+async function mine(blocks = 7) {
   const test = createTestClient({ chain: local, mode: "anvil", transport: http(RPC) });
   await test.mine({ blocks });
 }
@@ -407,6 +409,28 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       await advance(12 * 3600 + 60);
       await finalizeAndScore(ctx, 12);
 
+      // FR-29: results notice with rank change, only to reachable users, never twice.
+      for (const u of [u1, u2, u3]) await ctx.db.insert(schema.notificationPrefs).values({ userId: u.id }).onConflictDoNothing();
+      await ctx.db.update(schema.notificationPrefs).set({ telegramChatId: "555" }).where(eq(schema.notificationPrefs.userId, u1.id));
+      const sentTexts: string[] = [];
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = (async (url: string, init?: { body?: string }) => {
+        if (String(url).includes("api.telegram.org")) {
+          sentTexts.push(JSON.parse(init?.body ?? "{}").text);
+          return new Response("{}", { status: 200 });
+        }
+        return realFetch(url as never, init as never);
+      }) as typeof fetch;
+      try {
+        const env = { TELEGRAM_BOT_TOKEN: "t" };
+        const first = await notifyJob(ctx, env);
+        expect(first.results).toBe(1); // u1 only: the others have no channel
+        expect(sentTexts[0]).toMatch(/Matchweek 12 results are in\. \d+ points, ranked #\d+/);
+        expect((await notifyJob(ctx, env)).results).toBe(0);
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+
       // Returning + verified: p1 and p2 count; p3 is unverified. 2 players x 1 QUSDC.
       const root = await postRewardRoot(ctx, campaign.id, 12);
       expect(root).toMatchObject({ total: 2_000_000n, hosts: 1 });
@@ -440,17 +464,25 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(proof?.commitments).toHaveLength(3);
       expect(proof?.reveals.every((r) => r.valid)).toBe(true);
       expect(proof?.rewardLeaves[0]?.claimTx).toBe(claimTx);
+
+      // FR-25: after expiry the unallocated budget (90 - 2 allocated) goes back to the sponsor.
+      await advance(31 * 24 * 3600);
+      const before = await pub.readContract({ address: ctx.deployment.qusdc, abi: erc20Abi, functionName: "balanceOf", args: [acct(KEYS.sponsor).address] });
+      const refund = await refundCampaign(ctx, wallet(KEYS.sponsor), campaign.id);
+      expect(refund.amount).toBe(88_000_000n);
+      const after = await pub.readContract({ address: ctx.deployment.qusdc, abi: erc20Abi, functionName: "balanceOf", args: [acct(KEYS.sponsor).address] });
+      expect(after - before).toBe(88_000_000n);
     },
     120_000,
   );
   it("gas drip: once per email, wallet and device; empty wallets only; daily cap", async () => {
     const dctx = { ...ctx, drip: wallet(KEYS.deployer) };
     const cfg = { amountWei: parseEther("0.01"), dailyCapWei: parseEther("0.025") };
-    const fresh = async (verified = true) => {
+    const fresh = async (verified = true, emailHash: string = `email-${Math.random()}`) => {
       const k = generatePrivateKey();
-      const [u] = await ctx.db.insert(schema.users).values({ emailVerified: verified }).returning();
+      const [u] = await ctx.db.insert(schema.users).values({ emailVerified: verified, emailHash }).returning();
       await ctx.db.insert(schema.wallets).values({ address: acct(k).address.toLowerCase(), userId: u!.id, kind: "embedded" });
-      return { userId: u!.id, wallet: acct(k).address };
+      return { userId: u!.id, wallet: acct(k).address, emailHash };
     };
 
     const a = await fresh();
@@ -470,8 +502,13 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     await expect(requestDrip(dctx, cfg, { ...g, deviceId: "device-g", emailVerified: true })).rejects.toMatchObject({ code: "has_balance" });
     // someone else's wallet is refused
     const other = await fresh();
-    await expect(requestDrip(dctx, cfg, { userId: a.userId, wallet: other.wallet, deviceId: "device-o", emailVerified: true })).rejects.toBeInstanceOf(DripRefused);
-    await expect(requestDrip(dctx, cfg, { userId: a.userId, wallet: other.wallet, deviceId: "device-o", emailVerified: true })).rejects.toMatchObject({ code: "not_your_wallet" });
+    await expect(requestDrip(dctx, cfg, { userId: a.userId, wallet: other.wallet, deviceId: "device-o", emailVerified: true, emailHash: a.emailHash })).rejects.toBeInstanceOf(DripRefused);
+    await expect(requestDrip(dctx, cfg, { userId: a.userId, wallet: other.wallet, deviceId: "device-o", emailVerified: true, emailHash: a.emailHash })).rejects.toMatchObject({ code: "not_your_wallet" });
+
+    // the same email after deleting the account (email unlinked from the user row) cannot drip again
+    await ctx.db.update(schema.users).set({ emailHash: null, deletedAt: new Date() }).where(eq(schema.users.id, a.userId));
+    const again = await fresh(true, a.emailHash);
+    await expect(requestDrip(dctx, cfg, { ...again, deviceId: "device-again", emailVerified: true })).rejects.toMatchObject({ code: "already_dripped" });
 
     const d = await fresh();
     await requestDrip(dctx, cfg, { ...d, deviceId: "device-d", emailVerified: true });

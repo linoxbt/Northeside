@@ -11,3 +11,5 @@
 
 [functions]
   directory = "apps/web/netlify/functions"
+  # ops-worker imports the TypeScript workspace packages; esbuild bundles them.
+  node_bundler = "esbuild"

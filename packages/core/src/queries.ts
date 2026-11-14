@@ -172,7 +172,10 @@ export async function proofData(ctx: CoreContext, id: number) {
         .where(and(eq(schema.predictions.matchweekId, id), isNotNull(schema.predictions.revealedAt)))
     : [];
 
-  const roots = await ctx.db.select().from(schema.rewardRoots).where(eq(schema.rewardRoots.matchweekId, id));
+  const roots = await ctx.db
+    .select()
+    .from(schema.rewardRoots)
+    .where(and(eq(schema.rewardRoots.matchweekId, id), eq(schema.rewardRoots.status, "confirmed")));
   const leaves = await ctx.db.select().from(schema.rewardLeaves).where(eq(schema.rewardLeaves.matchweekId, id));
 
   return {

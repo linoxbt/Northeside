@@ -3,7 +3,7 @@ import { backendConfigured } from "@/lib/server/configured";
 import { JOBS, type JobName } from "@/lib/server/jobs";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 90;
+export const maxDuration = 60;
 
 /** GET /api/v1/cron/:job, called by Vercel Cron (or the GitHub Actions fallback) with CRON_SECRET. */
 export const GET = route(async (req, { params }: { params: Promise<{ job: string }> }) => {

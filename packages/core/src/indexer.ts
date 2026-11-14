@@ -5,7 +5,8 @@ import { decodeEventLog, getAddress, type Abi, type Log } from "viem";
 import { bigintReplacer, type CoreContext } from "./context";
 
 const INDEXER_KEY = "main";
-const CONFIRMATIONS = 3n;
+/** Blocks to wait before indexing; override with INDEXER_CONFIRMATIONS. */
+const confirmations = () => BigInt(process.env.INDEXER_CONFIRMATIONS ?? 6);
 
 export interface IndexResult {
   from: bigint;
@@ -42,9 +43,11 @@ export async function indexChain(
   ]);
 
   const [state] = await db.select().from(schema.indexerState).where(eq(schema.indexerState.key, INDEXER_KEY));
+  await checkForReorg(ctx);
   const from = state ? state.lastBlock + 1n : deployment.deployedAtBlock;
   // cacheTime 0: viem caches eth_blockNumber for ~4s by default, which would index a stale head.
   const head = await publicClient.getBlockNumber({ cacheTime: 0 });
+  const CONFIRMATIONS = confirmations();
   const safeHead = head > CONFIRMATIONS ? head - CONFIRMATIONS : 0n;
   if (from > safeHead) return { from, to: from - 1n, events: 0, caughtUp: true };
 
@@ -69,6 +72,10 @@ export async function indexChain(
       throw e;
     }
 
+    // Decode and fetch block data first, then store events, apply projections and advance the
+    // cursor in one transaction: a failure leaves nothing half-applied, so a retry re-projects
+    // (audit B11).
+    const batch: { log: Log; d: Decoded; blockTime: Date; blockHash: string }[] = [];
     for (const log of logs) {
       const abi = abis.get(log.address.toLowerCase());
       if (!abi || log.blockNumber === null || log.logIndex === null || !log.transactionHash) continue;
@@ -78,35 +85,61 @@ export async function indexChain(
         const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
         blockTimes.set(log.blockNumber, new Date(Number(block.timestamp) * 1000));
       }
-      const blockTime = blockTimes.get(log.blockNumber)!;
-      const inserted = await db
-        .insert(schema.chainEvents)
-        .values({
-          chainId: deployment.chainId,
-          blockNumber: log.blockNumber,
-          logIndex: log.logIndex,
-          txHash: log.transactionHash,
-          address: getAddress(log.address),
-          eventName: d.eventName,
-          args: JSON.parse(JSON.stringify(d.args, bigintReplacer)),
-          blockTime,
-        })
-        .onConflictDoNothing()
-        .returning({ txHash: schema.chainEvents.txHash });
-      if (inserted.length > 0) {
-        events++;
-        await project(ctx, d, log.transactionHash, blockTime);
-      }
+      batch.push({ log, d, blockTime: blockTimes.get(log.blockNumber)!, blockHash: log.blockHash ?? "" });
     }
 
-    await db
-      .insert(schema.indexerState)
-      .values({ key: INDEXER_KEY, lastBlock: end })
-      .onConflictDoUpdate({ target: schema.indexerState.key, set: { lastBlock: end, updatedAt: new Date() } });
+    await db.transaction(async (tx) => {
+      const txCtx = { ...ctx, db: tx as unknown as CoreContext["db"] };
+      for (const { log, d, blockTime, blockHash } of batch) {
+        const inserted = await tx
+          .insert(schema.chainEvents)
+          .values({
+            chainId: deployment.chainId,
+            blockNumber: log.blockNumber!,
+            logIndex: log.logIndex!,
+            txHash: log.transactionHash!,
+            address: getAddress(log.address),
+            eventName: d.eventName,
+            args: JSON.parse(JSON.stringify(d.args, bigintReplacer)),
+            blockTime,
+            blockHash: blockHash || null,
+          })
+          .onConflictDoNothing()
+          .returning({ txHash: schema.chainEvents.txHash });
+        if (inserted.length > 0) {
+          events++;
+          await project(txCtx, d, log.transactionHash!, blockTime);
+        }
+      }
+      await tx
+        .insert(schema.indexerState)
+        .values({ key: INDEXER_KEY, lastBlock: end })
+        .onConflictDoUpdate({ target: schema.indexerState.key, set: { lastBlock: end, updatedAt: new Date() } });
+    });
     cursor = end + 1n;
   }
 
   return { from, to, events, caughtUp: to === safeHead };
+}
+
+/**
+ * The newest stored event's block must still be on the canonical chain. If it is not, a reorg went
+ * deeper than CONFIRMATIONS: stop and alert rather than build on events that no longer exist.
+ */
+async function checkForReorg(ctx: CoreContext) {
+  const [latest] = await ctx.db
+    .select({ blockNumber: schema.chainEvents.blockNumber, blockHash: schema.chainEvents.blockHash })
+    .from(schema.chainEvents)
+    .where(sql`${schema.chainEvents.blockHash} is not null`)
+    .orderBy(sql`${schema.chainEvents.blockNumber} desc`)
+    .limit(1);
+  if (!latest?.blockHash) return;
+  const block = await ctx.publicClient.getBlock({ blockNumber: latest.blockNumber });
+  if (block.hash?.toLowerCase() !== latest.blockHash.toLowerCase()) {
+    const msg = `indexer: block ${latest.blockNumber} hash changed (reorg beyond ${confirmations()} confirmations); indexing stopped`;
+    await ctx.alert(msg);
+    throw new Error(msg);
+  }
 }
 
 const lower = (a: unknown) => String(a).toLowerCase();
