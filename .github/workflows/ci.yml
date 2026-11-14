@@ -42,6 +42,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # anvil + contract artifacts so the end-to-end pipeline test runs instead of skipping
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: v1.7.1 }
+      - run: forge build
+        working-directory: contracts
       - run: pnpm -r typecheck
       - run: pnpm test
 
@@ -53,11 +58,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @northeside/web lint
+      - run: pnpm --filter @northeside/web typecheck
+      - run: pnpm --filter @northeside/web test
       - run: pnpm --filter @northeside/web build
         env:
           NEXT_PUBLIC_CHAIN_ID: "1990"
           NEXT_PUBLIC_MATCHWEEKS_ADDRESS: "0x0000000000000000000000000000000000000001"
           NEXT_PUBLIC_HOST_REWARDS_ADDRESS: "0x0000000000000000000000000000000000000002"
           NEXT_PUBLIC_IDENTITY_ADDRESS: "0x0000000000000000000000000000000000000003"
-          NEXT_PUBLIC_QUSDC_ADDRESS: "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5"
+          NEXT_PUBLIC_QUSDC_ADDRESS: "0x0000000000000000000000000000000000000004" # placeholder; real addresses come from Netlify

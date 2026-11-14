@@ -9,7 +9,7 @@
 | Commitment replayed on another chain/deployment | chain id and contract address inside the hash | `CommitmentLib` |
 | Wrong match result | two providers must agree; override needs a written reason published with the evidence; 12-hour challenge window | `packages/football/crosscheck.ts`, `publishResults` |
 | Evidence or reports edited after the fact | the on-chain URI carries `#keccak256=` of the exact bytes served | `publishResults`, `postRewardRoot` |
-| Operator or results key leaked | separate roles and keys; admin key cold; no function moves sponsor funds except to hosts with proofs, the treasury fee at funding, or back to the sponsor; pause | `HostRewards` |
+| Operator or results key leaked | separate roles and keys (production-only Netlify secrets); admin key cold; no function moves sponsor funds except to hosts with proofs, the treasury fee at funding, or back to the sponsor; 24 h review delay, replaceRoot/voidRoot (v1.1); admin revokes roles, then pauses; only the admin can unpause (v1.1) | `HostRewards` |
 | Over-posted reward root | per-matchweek claims capped at the posted total; total allocations capped at the budget | `HostRewards.claim/postRoot`, invariant-tested |
 | Sybil wallets farming host payouts | only QIE Pass-verified persons count, once per person, and only if they also played an earlier matchweek | `packages/scoring/payouts.ts` |
 | Fake or reused Merkle proofs | campaign id, matchweek and host inside every leaf; one claim per leaf | `HostRewards.leafHash` |
@@ -20,7 +20,7 @@
 | Wrong reveals or scores root | proposed with the results and challengeable for 12 hours; `finalize` only confirms | `NorthesideMatchweeks.proposeResults`, audit M-2 |
 | Results proposed before games end | `resultsNotBefore` = last kickoff + buffer | audit L-1 |
 | Wrong reward root | 24-hour `CLAIM_DELAY` before claims; `replaceRoot` while nothing is claimed | audit I-1, L-3 |
-| Gas drip drained by bots | one drip per verified email, wallet and device (HMAC); empty wallets only; daily cap with auto-pause and alerts; IP + user rate limits | `packages/core/src/drip.ts` |
+| Gas drip drained by bots | one drip per verified email, wallet and device (HMAC); empty wallets only; daily cap (requests refused once reached) and a low-balance alert at one day of cap; one drip per email survives account deletion; per-network daily cap; IP + user rate limits | `packages/core/src/drip.ts` |
 | Sign-in replay | EIP-4361 message bound to domain and chain, 10-minute MACed nonce, single use | `/api/v1/session` |
 | Telegram spoofing | webhook secret header compared in constant time; Mini App `initData` HMAC-validated server-side | `/api/v1/telegram/*` |
 | Data breach | no PII on-chain; email and QIE Pass reference encrypted; RLS on every table so Supabase's anon API sees nothing | migrations `0001_rls` |
@@ -37,7 +37,10 @@ QUSDC. The admin (cold key) can raise them with `setCaps` after an independent r
 - [x] Slither with no unexplained medium/high findings (`.github/workflows/ci.yml`).
 - [ ] Testnet dry run of the whole weekly cycle with the real keys and roles.
 - [ ] Admin key on a hardware wallet; confirm it holds `DEFAULT_ADMIN_ROLE` and nothing on a server does.
+- [ ] Challenger role on two keys independent of the admin; pauser on a key separate from the operator.
+- [ ] Deploy contracts v1.1 (see `docs/AUDIT.md`, second review).
 
 ## Reporting
 
-Email security@northeside.app. Please do not open public issues for vulnerabilities.
+Report privately through GitHub's "Report a vulnerability" (Security tab of this repository). Please
+do not open public issues for vulnerabilities.

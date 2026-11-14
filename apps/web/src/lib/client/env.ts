@@ -26,8 +26,4 @@ export function txUrl(hash: string) {
   const base = chain.blockExplorers?.default.url;
   return base ? `${base}/tx/${hash}` : "#";
 }
-export function addressUrl(a: string) {
-  const base = chain.blockExplorers?.default.url;
-  return base ? `${base}/address/${a}` : "#";
-}
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

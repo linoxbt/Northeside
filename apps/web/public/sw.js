@@ -1,6 +1,6 @@
 /* Northeside service worker: offline shell and web push. Kept minimal on purpose. */
-const CACHE = "northeside-v1";
-const SHELL = ["/", "/rules", "/icon.svg"];
+const CACHE = "northeside-v2";
+const SHELL = ["/", "/how-it-works", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

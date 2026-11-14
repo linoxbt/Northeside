@@ -7,7 +7,6 @@
     "dev": "next dev",
     "build": "node scripts/bundle-worker.mjs && next build",
     "start": "next start",
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "e2e": "playwright test --trace off",

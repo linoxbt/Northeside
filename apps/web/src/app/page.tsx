@@ -1,5 +1,7 @@
 import { stats as getStats } from "@northeside/core";
 import Link from "next/link";
+import { formatQusdc } from "@/lib/money";
+import { prefetchFor } from "@/lib/routes";
 import type { ReactNode } from "react";
 import { CtaBand } from "@/components/cta-band";
 import { HeroScatter, PayoutArt, PersonArt, SealArt, SourcesArt } from "@/components/illustrations";
@@ -34,7 +36,7 @@ export default async function Landing() {
         <HeroScatter />
         <Container className="relative pb-16 pt-20 text-center sm:pb-24 sm:pt-28">
           <Link href="/how-it-works" className="mx-auto mb-8 inline-flex animate-rise items-center gap-2 rounded-full border border-line bg-white py-1.5 pl-1.5 pr-3.5 text-[13px] text-ink-2 hover:border-line-strong">
-            <span className="whitespace-nowrap rounded-full bg-ink px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{live ? "Live on QIE" : "Launching on QIE"}</span>
+            <span className="whitespace-nowrap rounded-full bg-ink px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{live && mw ? "Live on QIE" : "Launching on QIE"}</span>
             <span className="whitespace-nowrap sm:hidden">Free, every matchweek</span>
             <span className="hidden whitespace-nowrap sm:inline">Free to play, every Premier League matchweek</span>
             <Chevron />
@@ -94,7 +96,7 @@ export default async function Landing() {
             <Stat value={s ? s.activatedWallets.toLocaleString("en-GB") : "—"} label="Activated wallets" />
             <Stat value={s ? s.verifiedPersons.toLocaleString("en-GB") : "—"} label="Verified persons" />
             <Stat value={latest?.returningRate != null ? `${Math.round(latest.returningRate * 100)}%` : "—"} label="Returning rate" />
-            <Stat value={s ? `$${(Number(s.qusdcSettled) / 1e6).toLocaleString("en-GB", { maximumFractionDigits: 0 })}` : "—"} label="QUSDC to hosts" />
+            <Stat value={s ? formatQusdc(s.qusdcSettled, 0) : "—"} label="QUSDC to hosts" />
           </dl>
           <div className="mt-12">
             <ArrowLink href="/stats">See live stats</ArrowLink>
@@ -142,7 +144,7 @@ export default async function Landing() {
             <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
               {mw.fixtures.map((f) => (
                 <li key={f.index} className="w-[260px] shrink-0 snap-start">
-                  <Link href="/play" className="block rounded-[var(--radius-card)] border border-line bg-white p-5 transition-colors hover:border-line-strong">
+                  <Link href="/play" prefetch={false} className="block rounded-[var(--radius-card)] border border-line bg-white p-5 transition-colors hover:border-line-strong">
                     <p className="eyebrow">{wat(f.kickoff, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WAT</p>
                     <p className="mt-5 text-[19px] tracking-[-0.02em]">{f.home}</p>
                     <p className="text-[19px] tracking-[-0.02em] text-muted">{f.away}</p>
@@ -195,7 +197,9 @@ function ProductPreview({ mw }: { mw: PublicMatchweek | null }) {
       <div className="grid gap-2 md:grid-cols-[1.4fr_1fr]">
         <div className="rounded-[16px] border border-line bg-white">
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <p className="text-[15px] tracking-[-0.01em]">Matchweek {mw?.id ?? 11}</p>
+            <p className="text-[15px] tracking-[-0.01em]">
+              Matchweek {mw?.id ?? 11} <span className="text-muted">· example picks</span>
+            </p>
             <span className="rounded-full bg-amber-100 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.06em] text-amber-800">
               {mw ? (mw.status === "open" ? `Locks ${wat(mw.lockTime, { weekday: "short", hour: "2-digit", minute: "2-digit" })} WAT` : "Locked") : "Example"}
             </span>
@@ -241,7 +245,7 @@ function ProductPreview({ mw }: { mw: PublicMatchweek | null }) {
 
 function AudienceCard({ href, icon, title, body }: { href: string; icon: ReactNode; title: string; body: string }) {
   return (
-    <Link href={href} className="group relative rounded-[var(--radius-card)] border border-line bg-white p-6 transition-colors hover:border-line-strong">
+    <Link href={href} prefetch={prefetchFor(href)} className="group relative rounded-[var(--radius-card)] border border-line bg-white p-6 transition-colors hover:border-line-strong">
       <div className="mb-6 text-ink sm:mb-10">{icon}</div>
       <Chevron className="absolute right-6 top-6 text-muted transition-transform group-hover:translate-x-0.5" />
       <p className="text-[20px] tracking-[-0.02em]">{title}</p>

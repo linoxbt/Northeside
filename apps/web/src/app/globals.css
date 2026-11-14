@@ -16,7 +16,7 @@
   --color-muted: #6b6f76;
   --color-accent: #19e07a;
   --color-accent-ink: #04140b;
-  --color-accent-deep: #0b8a4a;
+  --color-accent-deep: #097a41; /* 5.4:1 on white, 5.0:1 on subtle (WCAG AA) */
   --color-warn: #b45309;
   --color-bad: #c62828;
 
@@ -83,8 +83,10 @@ body {
 }
 
 :focus-visible {
+  /* Dark ring with a light halo: visible on white pages and on the dark sign-in and notice too. */
   outline: 2px solid var(--color-ink);
-  outline-offset: 3px;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px #ffffff;
   border-radius: 6px;
 }
 

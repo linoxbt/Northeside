@@ -1,7 +1,7 @@
 import { erc20Abi, hostRewardsAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
 import { buildHostRewardsTree } from "@northeside/merkle";
-import { computeHostPayouts, type PayoutCandidate } from "@northeside/scoring";
+import { computeHostPayouts, countablePersons, type PayoutCandidate } from "@northeside/scoring";
 import { and, eq, inArray, lt, or } from "drizzle-orm";
 import {
   decodeEventLog,
@@ -278,10 +278,12 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
       countablePlayers: p.countablePlayers,
     })),
   );
-  const persons = candidates
-    .filter((x) => x.personHash && x.sealedEarlierMatchweek && (!row.leagues || row.leagues.includes(x.leagueSlug)))
-    .map((x) => ({ personHash: x.personHash!, host: x.host, leagueSlug: x.leagueSlug }));
-  const uniquePersons = [...new Map(persons.map((p) => [p.personHash.toLowerCase(), p])).values()];
+  // The same person -> host assignment the payout used (one function, so report and money agree).
+  const uniquePersons = [...countablePersons(candidates, row.leagues ? new Set(row.leagues) : undefined).values()].map((x) => ({
+    personHash: x.personHash!,
+    host: x.host,
+    leagueSlug: x.leagueSlug,
+  }));
   const report = {
     campaignId,
     matchweekId,

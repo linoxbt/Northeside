@@ -1,3 +1,4 @@
+import { contactHref } from "@/lib/contact";
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/cta-band";
 import { PayoutArt, PersonArt } from "@/components/illustrations";
@@ -33,7 +34,7 @@ export default function SponsorsPage() {
           title="Pay for fans who come back."
           lede="Northeside campaigns pay league hosts for verified people who play week after week. Not impressions, not clicks: real, returning football fans, counted onchain."
         >
-          <ButtonLink href="mailto:sponsors@northeside.app?subject=Northeside%20campaign" variant="primary" arrow>
+          <ButtonLink href={contactHref("Northeside sponsor campaign")} variant="primary" arrow>
             Start a campaign
           </ButtonLink>
           <ButtonLink href="/legal/sponsor-terms" variant="secondary">

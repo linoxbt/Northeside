@@ -4,6 +4,7 @@
 //   DATABASE_ADMIN_URL=postgres://postgres@127.0.0.1:54329/postgres node apps/web/e2e/run.mjs
 //
 // Options: SKIP_BUILD=1, LOCK_IN=240 (seconds until the first kickoff), OUT=<dir for screenshots>.
+import { gzipSync } from "node:zlib";
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -186,12 +187,17 @@ async function signInWithQie(page) {
   await link.waitFor({ timeout: 30_000 });
   await link.click();
   await page.waitForURL(/\/sign-in\?next=/, { timeout: 30_000 });
-  // Either the wallet list, or (wallet already connected) the "Sign in" button for the signature.
+  // Either the wallet list, or (the wallet reconnected by itself) the "Sign in" button for the
+  // signature; the screen swaps between them as wagmi reconnects, so click whichever is showing.
   const qie = page.getByRole("button", { name: "Continue with QIE Wallet" });
   const sign = page.getByRole("button", { name: "Sign in", exact: true });
-  await qie.or(sign).first().waitFor({ timeout: 30_000 });
-  await ((await sign.isVisible()) ? sign : qie).click();
-  await page.waitForURL((u) => u.pathname === back, { timeout: 60_000 });
+  for (let i = 0; i < 120; i++) {
+    if (new URL(page.url()).pathname === back) return;
+    if (await sign.isVisible().catch(() => false)) await sign.click({ timeout: 2_000 }).catch(() => {});
+    else if (await qie.isVisible().catch(() => false)) await qie.click({ timeout: 2_000 }).catch(() => {});
+    await sleep(500);
+  }
+  throw new Error(`sign-in did not return to ${back}`);
 }
 
 async function playerSeals(browser, keyIndex, name, picks) {
@@ -429,7 +435,13 @@ async function main() {
   const payload = await page.locator("details pre").first().innerText();
   await page.getByLabel("Payload JSON").fill(payload);
   await page.getByRole("button", { name: "Recompute in my browser" }).click();
-  check(await page.getByText("Match: these picks are exactly what was sealed before lock.").isVisible(), "in-browser verifier recomputes the commitment");
+  const matched = await page
+    .getByText("Match: these picks are exactly what was sealed before lock.")
+    .waitFor({ timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  check(matched, "in-browser verifier recomputes the commitment");
+  check(await page.getByText("source          = QIE chain (eth_call)").isVisible(), "verifier reads the commitment from the chain itself, not Northeside's index");
   await page.screenshot({ path: join(OUT, "proof.png"), fullPage: true });
 
   await page.goto(APP + "/play?mw=11");
@@ -460,6 +472,18 @@ async function main() {
   check(new URL(p2.url()).pathname === "/sign-in" && new URL(p2.url()).searchParams.get("next") === "/play", "signed-out Play redirects to sign-in and back");
   check(await p2.getByRole("button", { name: /Continue with/ }).first().isVisible(), "sign-in page offers the wallet");
   log(`sign-in route JS transferred: ${(jsBytes / 1024).toFixed(0)} KB`);
+
+  // Spec NFR: the player route's bundle under 250 KB gzipped. Measured as the scripts the
+  // server-rendered /play HTML loads for a signed-in player; the wallet code (seal bar) is a
+  // separate, lazily loaded chunk (audit P1).
+  {
+    const html = await ada.page.evaluate(() => fetch("/play").then((r) => r.text()));
+    const srcs = [...new Set([...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]))];
+    let gz = 0;
+    for (const src of srcs) gz += gzipSync(Buffer.from(await (await fetch(new URL(src, APP))).arrayBuffer())).length;
+    log(`player route bundle: ${(gz / 1024).toFixed(0)} KB gzipped across ${srcs.length} scripts`);
+    check(gz < 250 * 1024, `player route bundle under 250 KB gzipped (${(gz / 1024).toFixed(0)} KB)`);
+  }
 
   await browser.close();
   log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`);

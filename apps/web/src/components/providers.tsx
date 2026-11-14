@@ -2,61 +2,16 @@
 
 import { PrivyProvider, useConnectWallet, useCreateWallet, useExportWallet, useLoginWithEmail, usePrivy, useWallets } from "@privy-io/react-auth";
 import { WagmiProvider as PrivyWagmiProvider, createConfig as createPrivyConfig, useSetActiveWallet } from "@privy-io/wagmi";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { WagmiProvider, createConfig, useAccount } from "wagmi";
 import { injected } from "wagmi/connectors";
+import { AuthBridgeContext, noop, type AuthBridge } from "./auth-bridge";
 import { chain, publicEnv, transport } from "@/lib/client/env";
 
-export interface AuthBridge {
-  privyEnabled: boolean;
-  ready: boolean;
-  /** Signed in with Privy (email). The app session is separate: it needs the wallet signature. */
-  authenticated: boolean;
-  emailLogin(): void;
-  /** Inline email sign-in: send a one-time code, then submit it. */
-  sendEmailCode(email: string): Promise<void>;
-  loginWithEmailCode(code: string): Promise<void>;
-  /** Privy: open the connect-wallet modal (detected wallets first, e.g. QIE Wallet). */
-  connectExternalWallet(): void;
-  /** The user's Privy embedded wallet, once created. */
-  embeddedAddress: string | null;
-  /** Create the embedded wallet if Privy did not on login, and make it the active wallet. */
-  ensureEmbeddedWallet(): Promise<void>;
-  /** FR-04: Privy's export modal for the embedded wallet's private key. */
-  exportWallet(): Promise<void>;
-  getAccessToken(): Promise<string | null>;
-  isEmbedded(address?: string): boolean;
-  logout(): Promise<void>;
-  email: string | null;
-}
-
-const unavailable = async () => {
-  throw new Error("Email sign-in is not available yet");
-};
-
-const noop: AuthBridge = {
-  privyEnabled: false,
-  ready: true,
-  authenticated: false,
-  emailLogin: () => {},
-  sendEmailCode: unavailable,
-  loginWithEmailCode: unavailable,
-  connectExternalWallet: () => {},
-  embeddedAddress: null,
-  ensureEmbeddedWallet: unavailable,
-  exportWallet: unavailable,
-  getAccessToken: async () => null,
-  isEmbedded: () => false,
-  logout: async () => {},
-  email: null,
-};
-
-const AuthBridgeContext = createContext<AuthBridge>(noop);
-export const useAuthBridge = () => useContext(AuthBridgeContext);
+export { useAuthBridge, type AuthBridge } from "./auth-bridge";
 
 function PrivyBridge({ children }: { children: ReactNode }) {
-  const { ready, authenticated, login, getAccessToken, logout, user } = usePrivy();
+  const { ready, authenticated, getAccessToken, logout } = usePrivy();
   const { wallets } = useWallets();
   const { sendCode, loginWithCode } = useLoginWithEmail();
   const { setActiveWallet } = useSetActiveWallet();
@@ -77,7 +32,6 @@ function PrivyBridge({ children }: { children: ReactNode }) {
       privyEnabled: true,
       ready,
       authenticated,
-      emailLogin: () => login({ loginMethods: ["email"] }),
       sendEmailCode: (email) => sendCode({ email }),
       loginWithEmailCode: (code) => loginWithCode({ code }),
       connectExternalWallet: () => connectWallet({ walletList: ["detected_ethereum_wallets", "metamask", "coinbase_wallet", "wallet_connect"] }),
@@ -94,52 +48,52 @@ function PrivyBridge({ children }: { children: ReactNode }) {
       isEmbedded: (address) =>
         !!address && wallets.some((w) => w.walletClientType === "privy" && w.address.toLowerCase() === address.toLowerCase()),
       logout,
-      email: user?.email?.address ?? null,
     }),
-    [ready, authenticated, login, getAccessToken, logout, user, wallets, embedded, sendCode, loginWithCode, connectWallet, createWallet, exportWallet, setActiveWallet],
+    [ready, authenticated, getAccessToken, logout, wallets, embedded, sendCode, loginWithCode, connectWallet, createWallet, exportWallet, setActiveWallet],
   );
   return <AuthBridgeContext.Provider value={value}>{children}</AuthBridgeContext.Provider>;
 }
 
-export function Providers({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, refetchOnWindowFocus: false, retry: 1 } } }),
-  );
+/**
+ * Wallet providers (Privy + wagmi), mounted only by the pages that sign or send transactions
+ * (the (wallet) route group), so marketing pages do not ship wallet code (audit P1). The react-query
+ * client comes from the root QueryProvider.
+ */
+// Created once per page load: a new config on every render resets wagmi's connection state
+// (the seal bar re-renders on every pick change).
+const privyWagmiConfig = publicEnv.privyAppId ? createPrivyConfig({ chains: [chain], transports: { [chain.id]: transport() } }) : null;
+const privyConfig = {
+  defaultChain: chain,
+  supportedChains: [chain],
+  loginMethods: ["email", "wallet"] as ("email" | "wallet")[],
+  appearance: { theme: "dark" as const, accentColor: "#3ddc97" as `#${string}`, walletChainType: "ethereum-only" as const },
+  embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" as const }, showWalletUIs: false },
+};
+const injectedConfig = publicEnv.privyAppId
+  ? null
+  : createConfig({
+      chains: [chain],
+      transports: { [chain.id]: transport() },
+      connectors: [injected()],
+      multiInjectedProviderDiscovery: true, // EIP-6963: QIE Wallet announces itself as me.qiewallet
+      ssr: true,
+    });
 
-  if (publicEnv.privyAppId) {
-    const config = createPrivyConfig({ chains: [chain], transports: { [chain.id]: transport() } });
+export function WalletProviders({ children }: { children: ReactNode }) {
+  if (publicEnv.privyAppId && privyWagmiConfig) {
+    const config = privyWagmiConfig;
     return (
-      <PrivyProvider
-        appId={publicEnv.privyAppId}
-        config={{
-          defaultChain: chain,
-          supportedChains: [chain],
-          loginMethods: ["email", "wallet"],
-          appearance: { theme: "dark", accentColor: "#3ddc97", walletChainType: "ethereum-only" },
-          embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, showWalletUIs: false },
-        }}
-      >
-        <QueryClientProvider client={queryClient}>
-          <PrivyWagmiProvider config={config}>
-            <PrivyBridge>{children}</PrivyBridge>
-          </PrivyWagmiProvider>
-        </QueryClientProvider>
+      <PrivyProvider appId={publicEnv.privyAppId} config={privyConfig}>
+        <PrivyWagmiProvider config={config}>
+          <PrivyBridge>{children}</PrivyBridge>
+        </PrivyWagmiProvider>
       </PrivyProvider>
     );
   }
 
-  const config = createConfig({
-    chains: [chain],
-    transports: { [chain.id]: transport() },
-    connectors: [injected()],
-    multiInjectedProviderDiscovery: true, // EIP-6963: QIE Wallet announces itself as me.qiewallet
-    ssr: true,
-  });
   return (
-    <QueryClientProvider client={queryClient}>
-      <WagmiProvider config={config}>
-        <AuthBridgeContext.Provider value={noop}>{children}</AuthBridgeContext.Provider>
-      </WagmiProvider>
-    </QueryClientProvider>
+    <WagmiProvider config={injectedConfig!}>
+      <AuthBridgeContext.Provider value={noop}>{children}</AuthBridgeContext.Provider>
+    </WagmiProvider>
   );
 }

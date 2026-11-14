@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { prefetchFor } from "@/lib/routes";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 
 type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "inverse";
@@ -28,7 +29,7 @@ export function ButtonLink({
   ...rest
 }: { href: string; variant?: Variant; className?: string; children: ReactNode; arrow?: boolean } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href">) {
   return (
-    <Link href={href} {...rest} className={`${base} ${variants[variant]} ${className}`}>
+    <Link href={href} prefetch={prefetchFor(href)} {...rest} className={`${base} ${variants[variant]} ${className}`}>
       {children}
       {arrow ? <Chevron /> : null}
     </Link>

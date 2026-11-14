@@ -1,3 +1,5 @@
+import { contactText } from "./contact";
+
 export const LEGAL_VERSION = "1.0 · 12 November 2026 · pending review by Nigerian counsel before launch";
 
 export interface LegalSection {
@@ -13,7 +15,7 @@ export interface LegalDoc {
   sections: LegalSection[];
 }
 
-const CONTACT = "privacy@northeside.app";
+const CONTACT = contactText;
 
 export const LEGAL: Record<string, LegalDoc> = {
   terms: {
@@ -25,7 +27,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "who",
         heading: "Who we are and these terms",
         body: [
-          "Northeside (\"we\", \"us\") runs the website northeside.app, its Telegram Mini App and the related smart contracts on QIE mainnet. By signing in or sealing a prediction you agree to these terms, the Privacy notice and the Cookie policy.",
+          "Northeside (\"we\", \"us\") runs the website at northeside.netlify.app, its Telegram Mini App and the related smart contracts on QIE mainnet. By signing in or sealing a prediction you agree to these terms, the Privacy notice and the Cookie policy.",
           "We may update these terms. The version and date are shown at the top. If a change materially affects you, we will tell you in the app before it applies; continuing to play after that means you accept it.",
         ],
       },
@@ -98,7 +100,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         heading: "Law and contact",
         body: [
           "These terms are governed by the laws of the Federal Republic of Nigeria.",
-          `Questions: hello@northeside.app. Privacy: ${CONTACT}.`,
+          `Questions and privacy requests: ${CONTACT}.`,
         ],
       },
     ],

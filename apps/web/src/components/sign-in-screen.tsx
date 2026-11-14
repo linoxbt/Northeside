@@ -4,25 +4,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { useAuthBridge } from "./providers";
+import { useAuthBridge } from "./auth-bridge";
 import { Mark } from "./ui";
 import { chain, isPreview, short } from "@/lib/client/env";
-import { useSession, useSignIn } from "@/lib/client/session";
-
-/**
- * Only same-origin paths, so ?next= cannot send people to another site. Parsed with URL, because
- * browsers treat "/\\evil.com" like "//evil.com" (audit S4).
- */
-export function safeNext(raw: string | null, origin = typeof window === "undefined" ? "https://northeside.invalid" : window.location.origin) {
-  if (!raw || /[\\\u0000-\u001f]/.test(raw)) return "/play";
-  try {
-    const u = new URL(raw, origin);
-    if (u.origin !== origin || u.pathname.startsWith("/sign-in")) return "/play";
-    return `${u.pathname}${u.search}${u.hash}`;
-  } catch {
-    return "/play";
-  }
-}
+import { safeNext } from "@/lib/safe-next";
+import { useSession } from "@/lib/client/session";
+import { useSignIn } from "@/lib/client/sign-in-hooks";
 
 /** Plain-language messages for the errors people actually hit. */
 function friendly(e: unknown): string {

@@ -34,8 +34,10 @@ export async function sendEmail(env: Env, to: string, m: Message) {
 
 export async function sendWebPush(env: Env, subscription: unknown, m: Message) {
   if (!env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return false;
-  const contact = env.EMAIL_FROM?.match(/<(.+)>/)?.[1] ?? "ops@northeside.app";
-  setVapidDetails(`mailto:${contact}`, env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+  // VAPID subject: a mailto: we own, else the site URL (web-push accepts https: subjects).
+  const email = env.EMAIL_FROM?.match(/<(.+)>/)?.[1] ?? env.NEXT_PUBLIC_CONTACT_EMAIL;
+  const subject = email ? `mailto:${email}` : (env.NEXT_PUBLIC_SITE_URL ?? "https://northeside.netlify.app");
+  setVapidDetails(subject, env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
   await sendNotification(subscription as PushSubscription, JSON.stringify(m));
   return true;
 }

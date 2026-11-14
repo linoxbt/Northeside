@@ -1,14 +1,33 @@
 import { proofData } from "@northeside/core";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { formatUnits } from "viem";
 import type { ReactNode } from "react";
 import { Container, ExtLink, PageHeader, Pill } from "@/components/ui";
 import { VerifyWidget } from "@/components/verify-widget";
 import { safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
+import { schema } from "@northeside/db";
+import { desc, ne } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Proof", description: "Every commitment, reveal, result and payout root for a Northeside matchweek, with explorer links." };
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const id = (await params).id;
+  return {
+    title: `Proof · Matchweek ${id}`,
+    description: `Every commitment, reveal, result and payout root for Northeside matchweek ${id}, with explorer links.`,
+    alternates: { canonical: `/proof/${id}` },
+  };
+}
+
+const PAGE = 100;
+/** QUSDC base units to text without floating point (audit B16). */
+const qusdc = (v: bigint | string | number) => {
+  const [w, f = ""] = formatUnits(BigInt(v), 6).split(".");
+  return `${w}.${f.padEnd(2, "0").slice(0, 2)}`;
+};
 
 const explorer = () => getCtx().chain.blockExplorers?.default.url ?? "";
 const tx = (h: string | null) => (h ? <ExtLink href={`${explorer()}/tx/${h}`}>{`${h.slice(0, 10)}…`}</ExtLink> : <span className="text-muted">—</span>);
@@ -36,8 +55,9 @@ function Block({ title, children, right }: { title: string; children: ReactNode;
   );
 }
 
-export default async function ProofPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProofPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ page?: string }> }) {
   const id = Number((await params).id);
+  const pageNo = Math.max(1, Number((await searchParams).page ?? 1) || 1);
   if (!Number.isInteger(id)) notFound();
   const data = await safely(() => proofData(getCtx(), id), null);
   if (!data) notFound();
@@ -45,6 +65,18 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
   const m = data.matchweek;
   const onChain = Object.fromEntries(data.commitments.map((c) => [c.player.toLowerCase(), c.commitment]));
   const verified = data.reveals.filter((r) => r.valid).length;
+  // Long matchweeks are paginated so the page stays light at thousands of players (audit P4).
+  const pages = Math.max(1, Math.ceil(data.commitments.length / PAGE));
+  const shown = data.commitments.slice((pageNo - 1) * PAGE, pageNo * PAGE);
+  const others = await safely(
+    () =>
+      ctx.db
+        .select({ id: schema.matchweeks.id })
+        .from(schema.matchweeks)
+        .where(ne(schema.matchweeks.status, "draft"))
+        .orderBy(desc(schema.matchweeks.id)),
+    [] as { id: number }[],
+  );
 
   return (
     <Container className="pb-24">
@@ -58,6 +90,21 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
           </>
         }
       />
+
+      {others.length > 1 ? (
+        <nav aria-label="Matchweeks" className="mb-8 flex flex-wrap gap-2">
+          {others.map((o) => (
+            <Link
+              key={o.id}
+              href={`/proof/${o.id}`}
+              aria-current={o.id === m.id ? "page" : undefined}
+              className={`rounded-full px-4 py-2 text-[14px] ${o.id === m.id ? "bg-ink text-white" : "border border-line text-ink-2 hover:border-line-strong"}`}
+            >
+              MW {o.id}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
 
       <dl className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-4">
         {[
@@ -119,7 +166,7 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
       <Block title="Commitments" right={!data.revealed ? <Pill>Picks revealed at lock</Pill> : null}>
         <ul className="max-h-[640px] overflow-auto rounded-[var(--radius-card)] border border-line bg-white">
           {data.commitments.length === 0 ? <li className="px-5 py-10 text-center text-muted">No seals yet.</li> : null}
-          {data.commitments.map((c) => {
+          {shown.map((c) => {
             const r = data.reveals.find((x) => x.wallet.toLowerCase() === c.player.toLowerCase());
             return (
               <li key={c.player} className="space-y-2 border-b border-line px-5 py-4 last:border-0">
@@ -154,6 +201,18 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
             );
           })}
         </ul>
+        {pages > 1 ? (
+          <nav aria-label="Commitment pages" className="mt-4 flex flex-wrap items-center gap-2 text-[14px]">
+            <span className="text-muted">
+              {(pageNo - 1) * PAGE + 1}–{Math.min(pageNo * PAGE, data.commitments.length)} of {data.commitments.length}
+            </span>
+            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+              <Link key={n} href={`/proof/${m.id}?page=${n}`} aria-current={n === pageNo ? "page" : undefined} className={`rounded-full px-3 py-1.5 ${n === pageNo ? "bg-ink text-white" : "border border-line"}`}>
+                {n}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
       </Block>
 
       {data.revealed ? (
@@ -166,7 +225,7 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
               </a>{" "}
               and compares it to what was sealed on QIE before kickoff.
             </p>
-            <VerifyWidget onChain={onChain} />
+            <VerifyWidget onChain={onChain} rpcUrl={ctx.chain.rpcUrls.default.http[0]!} contract={ctx.deployment.matchweeks} />
           </div>
         </Block>
       ) : null}
@@ -176,7 +235,7 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
           <div className="space-y-3 text-[15px]">
             {data.rewardRoots.map((r) => (
               <p key={r.campaignId}>
-                Campaign {r.campaignId}: <Hash v={r.root} /> · {(Number(r.total) / 1e6).toFixed(2)} QUSDC · {tx(r.txHash)} · <ExtLink href={r.reportUri}>report</ExtLink>
+                Campaign {r.campaignId}: <Hash v={r.root} /> · {qusdc(r.total)} QUSDC · {tx(r.txHash)} · <ExtLink href={r.reportUri}>report</ExtLink>
               </p>
             ))}
             <ul className="divide-y divide-line rounded-[var(--radius-card)] border border-line bg-white text-[14px]">
@@ -184,7 +243,7 @@ export default async function ProofPage({ params }: { params: Promise<{ id: stri
                 <li key={`${l.campaignId}-${l.host}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
                   <span className="font-mono text-[12px]">{l.host}</span>
                   <span>
-                    {(Number(l.amount) / 1e6).toFixed(2)} QUSDC · {l.countablePlayers} verified returning players · {l.claimTx ? <>claimed {tx(l.claimTx)}</> : "unclaimed"}
+                    {qusdc(l.amount)} QUSDC · {l.countablePlayers} verified returning players · {l.claimTx ? <>claimed {tx(l.claimTx)}</> : "unclaimed"}
                   </span>
                 </li>
               ))}
