@@ -118,7 +118,7 @@ export default async function Landing() {
             <ul className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
               {mw.fixtures.map((f) => (
                 <li key={f.index} className="w-[260px] shrink-0 snap-start">
-                  <Link href="/play" prefetch={false} className="block rounded-[var(--radius-card)] border border-line bg-white p-5 transition-colors hover:border-line-strong">
+                  <Link href={`/match/${mw.id}/${f.index}`} prefetch={false} className="block rounded-[var(--radius-card)] border border-line bg-white p-5 transition-colors hover:border-line-strong">
                     <p className="eyebrow">{wat(f.kickoff, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WAT</p>
                     <p className="mt-5 text-[19px] tracking-[-0.02em]">{f.home}</p>
                     <p className="text-[19px] tracking-[-0.02em] text-muted">{f.away}</p>

@@ -36,6 +36,7 @@ import {
   challengeView,
   crowdView,
   liveView,
+  matchView,
   DripRefused,
   requestDrip,
   finalizeAndScore,
@@ -381,6 +382,13 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(live11!.me!.fixtures[1]).toEqual({ index: 1, points: 12, bonus: 1, exact: true, banker: true });
       expect(live11!.table.map((r) => [r.name, r.points, r.me])).toEqual([["Bo", 14, true], ["Ada", 10, false], ["Cy", 2, false]]);
       expect(live11!.fixtures.map((f) => f.state)).toEqual(["ft", "ft", "void"]);
+      // Match page for Everton v Liverpool: final score, crowd market, popular scorelines, Bo's Banker.
+      const m = await matchView(ctx, 11, 1, { userId: u2.id });
+      expect(m).toMatchObject({ home: "Everton", away: "Liverpool", state: "ft", score: { home: 0, away: 2 }, locked: true, finalized: true });
+      expect(m!.crowd).toMatchObject({ players: 3, shown: true, home: 1, draw: 1, away: 1 });
+      expect(m!.crowd.scorelines).toHaveLength(3);
+      expect(m!.mine).toEqual({ home: 0, away: 2, banker: true, sealed: true, points: { index: 1, points: 12, bonus: 1, exact: true, banker: true } });
+      expect(await matchView(ctx, 11, 9)).toBeNull();
 
       // Head-to-head after the final whistle: Bo 14 v Ada 10, picks and Bankers shown.
       const h2h = await challengeView(ctx, ch.code, u1.id);

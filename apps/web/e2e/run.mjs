@@ -436,6 +436,11 @@ async function main() {
 
   await page.goto(`${APP}/proof/11`);
   check((await page.getByText("reveal verified").count()) === 2, "Proof page shows 2 verified reveals");
+  // Match page: final score, crowd market and earlier meetings area for Everton v Liverpool.
+  await page.goto(`${APP}/match/11/1`, { waitUntil: "networkidle" });
+  check((await page.getByText("Crowd market").count()) === 1 && (await page.getByText("Full time").count()) >= 1, "match page shows the final score and the crowd market");
+  await page.screenshot({ path: join(OUT, "match.png"), fullPage: true });
+  await page.goto(`${APP}/proof/11`, { waitUntil: "networkidle" });
   await page.locator("details summary").first().click();
   const payload = await page.locator("details pre").first().innerText();
   await page.getByLabel("Payload JSON").fill(payload);
