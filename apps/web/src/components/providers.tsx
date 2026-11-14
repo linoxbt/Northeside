@@ -66,7 +66,7 @@ const privyConfig = {
   defaultChain: chain,
   supportedChains: [chain],
   loginMethods: ["email", "wallet"] as ("email" | "wallet")[],
-  appearance: { theme: "dark" as const, accentColor: "#3ddc97" as `#${string}`, walletChainType: "ethereum-only" as const },
+  appearance: { theme: "light" as const, accentColor: "#0a0b0d" as `#${string}`, walletChainType: "ethereum-only" as const },
   embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" as const }, showWalletUIs: false },
 };
 const injectedConfig = publicEnv.privyAppId

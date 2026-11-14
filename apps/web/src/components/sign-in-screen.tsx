@@ -23,15 +23,15 @@ function friendly(e: unknown): string {
 
 const pill =
   "inline-flex min-h-[52px] w-full items-center justify-center gap-3 rounded-full px-6 text-[16px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-const primary = `${pill} bg-white text-[#0a0b0d] hover:bg-white/90`;
-const secondary = `${pill} border border-white/15 bg-white/[0.03] text-white hover:bg-white/[0.08]`;
+const primary = `${pill} bg-ink text-white hover:bg-ink-2`;
+const secondary = `${pill} border border-line-strong bg-white text-ink hover:bg-subtle`;
 const field =
-  "min-h-[52px] w-full rounded-full border border-white/15 bg-white/[0.03] px-6 text-[16px] text-white outline-none transition-colors placeholder:text-white/35 focus:border-white/60";
-const link = "text-white/90 underline decoration-white/40 underline-offset-4 hover:decoration-white";
+  "min-h-[52px] w-full rounded-full border border-line-strong bg-white px-6 text-[16px] text-ink outline-none transition-colors placeholder:text-muted focus:border-ink";
+const link = "text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink";
 
 export function SignInScreen() {
   return (
-    <div className="flex min-h-dvh flex-col bg-[#0a0b0d] text-white [color-scheme:dark]">
+    <div className="flex min-h-dvh flex-col bg-white text-ink">
       <header className="mx-auto flex w-full max-w-6xl items-center px-5 py-5 sm:px-8 sm:py-7">
         <Link href="/" className="inline-flex items-center gap-2.5" aria-label="Northeside home">
           <Mark size={28} />
@@ -49,7 +49,7 @@ function Intro({ children }: { children?: ReactNode }) {
   return (
     <div className="text-center">
       <h1 className="text-[34px] font-medium leading-[1.08] tracking-[-0.04em] sm:text-[44px]">Call the score. Seal it.</h1>
-      <p className="mx-auto mt-4 max-w-[400px] text-[17px] leading-7 text-white/60">
+      <p className="mx-auto mt-4 max-w-[400px] text-[17px] leading-7 text-muted">
         Sign in to seal your Premier League predictions on QIE before kickoff, join your league and keep every receipt.
       </p>
       {children}
@@ -61,7 +61,7 @@ function Preview() {
   return (
     <>
       <Intro />
-      <p className="mt-10 rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center text-[15px] leading-6 text-white/70">
+      <p className="mt-10 rounded-2xl border border-line bg-subtle p-5 text-center text-[15px] leading-6 text-ink-2">
         Sign-in opens with the first live matchweek.
       </p>
       <Link href="/how-it-works" className={`${secondary} mt-6`}>
@@ -190,7 +190,7 @@ function Live() {
 
   if (session.isLoading || (signedIn && !linking)) {
     return (
-      <div className="flex flex-col items-center gap-4 py-16 text-white/60" role="status">
+      <div className="flex flex-col items-center gap-4 py-16 text-muted" role="status">
         <Spinner />
         {signedIn ? "Taking you back…" : "Loading…"}
       </div>
@@ -201,7 +201,7 @@ function Live() {
     return (
       <>
         <Intro />
-        <div className="mt-12 flex flex-col items-center gap-4 text-center text-[16px] text-white/70" role="status" aria-live="polite">
+        <div className="mt-12 flex flex-col items-center gap-4 text-center text-[16px] text-ink-2" role="status" aria-live="polite">
           <Spinner />
           {step === "setting-up" ? "Setting up your account…" : bridge.isEmbedded(address) ? "Signing you in…" : "Confirm the sign-in message in your wallet. It is free and sends no transaction."}
         </div>
@@ -215,7 +215,7 @@ function Live() {
       <>
         <Intro />
         <div className="mt-10 space-y-4 text-center">
-          <p className="text-[15px] leading-6 text-white/70">Your email is confirmed, but your Northeside wallet is taking longer than usual to set up.</p>
+          <p className="text-[15px] leading-6 text-ink-2">Your email is confirmed, but your Northeside wallet is taking longer than usual to set up.</p>
           <button
             type="button"
             className={primary}
@@ -227,7 +227,7 @@ function Live() {
           >
             Try again
           </button>
-          <button type="button" className="text-[14px] text-white/55 hover:text-white" onClick={() => void bridge.logout().then(() => setStep("start"))}>
+          <button type="button" className="text-[14px] text-muted hover:text-ink" onClick={() => void bridge.logout().then(() => setStep("start"))}>
             Start over with a different email
           </button>
         </div>
@@ -250,7 +250,7 @@ function Live() {
         </button>
       ))}
       {injectedWallets.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center text-[15px] leading-6 text-white/70">
+        <div className="rounded-2xl border border-line bg-subtle p-5 text-center text-[15px] leading-6 text-ink-2">
           No wallet found in this browser. Install{" "}
           <a className={link} href="https://www.qie.digital/" target="_blank" rel="noreferrer">
             QIE Wallet
@@ -265,9 +265,9 @@ function Live() {
     <>
       <Intro>
         {linking ? (
-          <p className="mt-8 text-[15px] text-white/60">Connect the wallet you want to add, then sign the message. Up to 3 wallets per account.</p>
+          <p className="mt-8 text-[15px] text-muted">Connect the wallet you want to add, then sign the message. Up to 3 wallets per account.</p>
         ) : (
-          <p className="mt-8 text-[15px] text-white/60">
+          <p className="mt-8 text-[15px] text-muted">
             New to Northeside? Signing in creates your account.{" "}
             <Link href="/how-it-works" className={`${link} whitespace-nowrap`}>
               How it works
@@ -279,13 +279,13 @@ function Live() {
       <div className="mt-10">
         {isConnected && address && !signedIn && !wantSignIn.current && !bridge.isEmbedded(address) ? (
           <div className="mb-6 space-y-3">
-            <p className="text-center text-[15px] leading-6 text-white/60">
-              Connected as <span className="font-mono text-white">{short(address)}</span>. Sign a message to prove it is you. It is free and sends no transaction.
+            <p className="text-center text-[15px] leading-6 text-muted">
+              Connected as <span className="font-mono text-ink">{short(address)}</span>. Sign a message to prove it is you. It is free and sends no transaction.
             </p>
             <button type="button" className={primary} disabled={signing} onClick={() => void signIn()}>
               {signing ? "Waiting for your signature…" : "Sign in"}
             </button>
-            <button type="button" className="w-full text-center text-[14px] text-white/50 hover:text-white" onClick={() => disconnect()}>
+            <button type="button" className="w-full text-center text-[14px] text-muted hover:text-ink" onClick={() => disconnect()}>
               Use a different wallet
             </button>
           </div>
@@ -350,15 +350,15 @@ function Live() {
         {isConnected && address && !signedIn && !bridge.isEmbedded(address) && !linking ? null : bridge.privyEnabled && !linking ? (
           showWallets ? (
             <>
-              <div className="my-7 flex items-center gap-4 text-[15px] text-white/45" aria-hidden>
-                <span className="h-px flex-1 bg-white/12" />
+              <div className="my-7 flex items-center gap-4 text-[15px] text-muted" aria-hidden>
+                <span className="h-px flex-1 bg-line" />
                 or
-                <span className="h-px flex-1 bg-white/12" />
+                <span className="h-px flex-1 bg-line" />
               </div>
               <div className="space-y-3">{walletButtons}</div>
             </>
           ) : (
-            <button type="button" className="mt-6 w-full text-center text-[14px] text-white/55 hover:text-white" onClick={() => setShowWallets(true)}>
+            <button type="button" className="mt-6 w-full text-center text-[14px] text-muted hover:text-ink" onClick={() => setShowWallets(true)}>
               Use a crypto wallet instead
             </button>
           )
@@ -368,7 +368,7 @@ function Live() {
 
         {shownError ? <ErrorLine text={shownError} /> : null}
 
-        <p className="mt-8 text-center text-[13px] leading-6 text-white/55">
+        <p className="mt-8 text-center text-[13px] leading-6 text-muted">
           By continuing you confirm you are 18 or older and accept the{" "}
           <Link href="/legal/terms" className={link}>
             Terms of use
@@ -393,7 +393,7 @@ function ErrorLine({ text }: { text: string }) {
 }
 
 function Spinner() {
-  return <span aria-hidden className="size-6 animate-spin rounded-full border-2 border-white/20 border-t-white" />;
+  return <span aria-hidden className="size-6 animate-spin rounded-full border-2 border-current/20 border-t-current" />;
 }
 
 function WalletGlyph() {
