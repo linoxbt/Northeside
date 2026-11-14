@@ -22,7 +22,8 @@ import {INorthesideMatchweeks} from "./interfaces/INorthesideMatchweeks.sol";
 ///      unpause (a leaked pauser or operator key cannot undo an emergency pause), the admin can
 ///      revoke roles, and launch caps bound exposure.
 ///
-///      Accounting per campaign:  budget = gross - fee;  claimed <= allocated <= budget.
+///      Accounting per campaign:  budget = gross - fee;  claimed <= allocated;  allocated + refunded <= budget
+///      while the campaign is active.
 ///      Over all campaigns: token.balanceOf(this) >= sum(budget - claimed - refunded); equality
 ///      unless someone sends tokens here directly (those are not recoverable).
 contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
@@ -276,7 +277,9 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         bytes32 oldRoot = rootOf[id][matchweekId];
         if (root == oldRoot) revert InvalidParams();
         uint256 allocated = uint256(c.allocated) - allocatedFor[id][matchweekId] + total;
-        if (allocated > c.budget) revert OverBudget();
+        // After expiry the unallocated budget may already have been refunded: a correction can only
+        // use what is still in the campaign, never another campaign's escrow.
+        if (allocated + c.refunded > c.budget) revert OverBudget();
 
         rootOf[id][matchweekId] = root;
         rootPostedAt[id][matchweekId] = uint64(block.timestamp);

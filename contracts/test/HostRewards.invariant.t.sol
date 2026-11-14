@@ -282,6 +282,23 @@ contract HostRewardsInvariantTest is HostRewardsFixture {
         invariant_deadlineNeverBeforeBase();
     }
 
+    /// @notice Final review H-1: refund at expiry, then a larger correction, then claims. The
+    ///         correction must not be able to allocate money that was already refunded.
+    function test_handler_refundThenReplaceHigher() public {
+        handler.createAndFundWithExpiry(100e6, 0, 0); // expires in 3 days
+        handler.postRoot(0, 1e6, 1e6, 1e6, false);
+        handler.warp(2 days);
+        handler.warp(2 days); // past expiry, inside the claim period
+        handler.refund(0); // 97 QUSDC unallocated goes back
+        assertEq(handler.refunds(), 1, "refunded");
+        handler.replaceRoot(0, 30e6, 30e6, 30e6); // must revert: only 3 QUSDC left in the campaign
+        assertEq(handler.replaced(), 0, "over-allocation refused");
+        handler.warp(1 days);
+        for (uint256 i = 0; i < 3; ++i) handler.claim(i);
+        invariant_balanceEqualsLiability();
+        invariant_accountingOrder();
+    }
+
     /// @notice claimed <= allocated <= budget, and refunds never dip into claimed money.
     function invariant_accountingOrder() public view {
         uint256 n = rewards.campaignCount();
@@ -290,6 +307,9 @@ contract HostRewardsInvariantTest is HostRewardsFixture {
             assertLe(c.claimed, c.allocated, "claimed <= allocated");
             assertLe(c.allocated, c.budget, "allocated <= budget");
             assertLe(uint256(c.claimed) + c.refunded, c.budget, "claimed + refunded <= budget");
+            if (c.status == HostRewards.CampaignStatus.Active) {
+                assertLe(uint256(c.allocated) + c.refunded, c.budget, "allocated + refunded <= budget");
+            }
             if (c.status == HostRewards.CampaignStatus.Closed) {
                 assertEq(uint256(c.claimed) + c.refunded, c.budget, "closed campaigns are fully settled");
             }
