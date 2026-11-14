@@ -5,6 +5,7 @@ import {
   EMPTY_ROOT,
   buildFixturesTree,
   buildHostRewardsTree,
+  buildNsdRewardsTree,
   buildResultsTree,
   buildRevealsTree,
   buildScoresTree,
@@ -67,5 +68,24 @@ describe("other trees", () => {
 
   it("an empty tree gets the sentinel root", () => {
     expect(buildRevealsTree([]).root).toBe(EMPTY_ROOT);
+  });
+});
+
+const goldenNsd = JSON.parse(
+  readFileSync(new URL("../../../contracts/test/fixtures/golden-vectors.json", import.meta.url), "utf8"),
+).nsdRewardLeaf;
+
+describe("$NSD rewards tree", () => {
+  it("leaf hash matches NSDRewards.leafHash (golden vector shared with forge)", () => {
+    const tree = buildNsdRewardsTree([{ matchweekId: goldenNsd.matchweekId, wallet: goldenNsd.wallet as Address, amount: BigInt(goldenNsd.amount) }]);
+    expect(tree.leafHash(0)).toBe(goldenNsd.leaf);
+  });
+
+  it("every proof verifies; a changed amount does not", () => {
+    const leaves = Array.from({ length: 5 }, (_, i) => ({ matchweekId: 11, wallet: `0x${String(i + 1).padStart(40, "0")}` as Address, amount: BigInt(i + 1) * 10n ** 18n }));
+    const tree = buildNsdRewardsTree(leaves);
+    leaves.forEach((_, i) => expect(verifyProof(tree.root, tree.leafHash(i), tree.proof(i))).toBe(true));
+    const forged = buildNsdRewardsTree([{ ...leaves[0]!, amount: 999n * 10n ** 18n }]).leafHash(0);
+    expect(verifyProof(tree.root, forged, tree.proof(0))).toBe(false);
   });
 });

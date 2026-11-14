@@ -7,6 +7,9 @@ export interface Deployment {
   identity: Address;
   qusdc: Address;
   deployedAtBlock: bigint;
+  /** $NSD token and rewards pool; absent until they are deployed. */
+  nsdToken?: Address;
+  nsdRewards?: Address;
 }
 
 type Env = Record<string, string | undefined>;
@@ -39,6 +42,8 @@ export function deploymentFromEnv(env: Env): Deployment {
     identity: addr("NEXT_PUBLIC_IDENTITY_ADDRESS", "IDENTITY_ADDRESS"),
     qusdc: addr("NEXT_PUBLIC_QUSDC_ADDRESS", "QUSDC_ADDRESS"),
     deployedAtBlock: BigInt(deployedAt ?? "0"),
+    ...(pick("NEXT_PUBLIC_NSD_TOKEN_ADDRESS", "NSD_TOKEN_ADDRESS") ? { nsdToken: addr("NEXT_PUBLIC_NSD_TOKEN_ADDRESS", "NSD_TOKEN_ADDRESS") } : {}),
+    ...(pick("NEXT_PUBLIC_NSD_REWARDS_ADDRESS", "NSD_REWARDS_ADDRESS") ? { nsdRewards: addr("NEXT_PUBLIC_NSD_REWARDS_ADDRESS", "NSD_REWARDS_ADDRESS") } : {}),
   };
 }
 

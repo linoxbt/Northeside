@@ -21,6 +21,10 @@ import {
   revealMatchweek,
   refundCampaign,
   resetVoidedRewardRoot,
+  nsdConfigFromEnv,
+  computeNsdRewards,
+  postNsdRoot,
+  resetVoidedNsdRoot,
   setAutomationPaused,
   automationPaused,
   bigintReplacer,
@@ -53,6 +57,11 @@ Host rewards
   fund-campaign <id>                   fund from SPONSOR_PRIVATE_KEY (operator-assisted or self-funded)
   post-reward-root <campaign> <mw>     compute payouts and post the root (never within 26 h of expiry)
   reset-reward-root <campaign> <mw>    after an admin voidRoot: forget the stored tree so a fresh root is computed
+
+$NSD rewards (NSD_REWARDS_ADDRESS; schedule from NSD_POOL_PER_MATCHWEEK / NSD_POSITIONS_BPS)
+  nsd preview <mw>                     who would earn what for a finalized matchweek (no transaction)
+  nsd post <mw>                        compute, store and post the matchweek's $NSD root
+  nsd reset <mw>                       after an admin voidRoot: forget the stored tree
   refund <campaign>                    return unused money to the sponsor's refund recipient (after expiry)
 
 Operations
@@ -138,6 +147,15 @@ async function main() {
     }
     case "post-reward-root":
       return out(await postRewardRoot(ctx, int(a.positional[0], "campaign"), int(a.positional[1], "mw")));
+    case "nsd": {
+      const sub = a.positional[0];
+      const mwId = int(a.positional[1], "mw");
+      const cfg = nsdConfigFromEnv(process.env);
+      if (sub === "preview") return out(await computeNsdRewards(ctx, mwId, cfg.schedule));
+      if (sub === "post") return out(await postNsdRoot(ctx, mwId, cfg));
+      if (sub === "reset") return out(await resetVoidedNsdRoot(ctx, mwId));
+      throw new Error("nsd <preview|post|reset> <mw>");
+    }
     case "reset-reward-root":
       return out(await resetVoidedRewardRoot(ctx, int(a.positional[0], "campaign"), int(a.positional[1], "mw")));
     case "index":

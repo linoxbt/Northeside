@@ -42,6 +42,7 @@ export const WORKER_SCHEDULE: [JobName, number][] = [
   ["publish-results", 10 * 60_000],
   ["finalize", 10 * 60_000],
   ["post-reward-roots", 10 * 60_000],
+  ["post-nsd-roots", 10 * 60_000],
   ["notify", 15 * 60_000],
   ["drip-health", 10 * 60_000],
   ["check-providers", 60 * 60_000], // runJob keys it to one call per 6-hour block

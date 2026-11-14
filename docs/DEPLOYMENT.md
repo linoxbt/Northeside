@@ -204,6 +204,7 @@ scheduled function `cron-ops`. Each start makes one pass of every job (about 15 
 | `publish-results` | when both providers agree (fresh check) and the chain allows it (last kickoff + `RESULTS_BUFFER_SECONDS`, default 3 h): closes reveals, scores, and proposes the results, reveals and scores roots |
 | `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks (also for a matchweek finalized by hand or first seen by the indexer) |
 | `post-reward-roots` | posts each active campaign's host payout root; hosts can claim 24 h later |
+| `post-nsd-roots` | off unless `NSD_REWARDS_ENABLED=1`: posts each finalized matchweek's $NSD root (see docs/NSD.md) |
 
 Needs a person:
 

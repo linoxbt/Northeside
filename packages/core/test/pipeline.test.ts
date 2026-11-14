@@ -23,7 +23,7 @@ import {
   type PublicClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
+import { erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi, nsdRewardsAbi, nsdTokenAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
 import { rulesVersion } from "@northeside/scoring";
 import { FieldCrypto, schema, type Database } from "@northeside/db";
@@ -31,6 +31,9 @@ import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from
 import {
   createCampaign,
   createJobs,
+  computeNsdRewards,
+  postNsdRoot,
+  nsdClaimsFor,
   createChallenge,
   acceptChallenge,
   challengeView,
@@ -180,6 +183,20 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       2_000_000_000n,
     ]);
     const identity = await deploy("IdentityAdapter.sol/IdentityAdapter.json", [acct(KEYS.admin).address, acct(KEYS.attester).address]);
+    // $NSD: fixed supply to the deployer, a rewards pool funded with 1,000,000 NSD.
+    const nsdToken = await deploy("NorthesideToken.sol/NorthesideToken.json", ["Northeside", "NSD", 100_000_000n * 10n ** 18n, acct(KEYS.deployer).address]);
+    const nsdRewards = await deploy("NSDRewards.sol/NSDRewards.json", [
+      acct(KEYS.admin).address,
+      acct(KEYS.operator).address,
+      acct(KEYS.admin).address,
+      nsdToken,
+      matchweeks,
+      identity,
+      100_000n * 10n ** 18n,
+    ]);
+    await pub.waitForTransactionReceipt({
+      hash: await deployer.writeContract({ address: nsdToken, abi: nsdTokenAbi, functionName: "transfer", args: [nsdRewards, 1_000_000n * 10n ** 18n] }),
+    });
     const mint = artifact("MockERC20.sol/MockERC20.json");
     await pub.waitForTransactionReceipt({
       hash: await deployer.writeContract({ address: qusdc, abi: mint.abi, functionName: "mint", args: [acct(KEYS.sponsor).address, 1_000_000_000n] }),
@@ -195,7 +212,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     ctx = {
       db,
       chain: local,
-      deployment: { chainId: 31337, matchweeks, hostRewards, identity, qusdc, deployedAtBlock: 0n },
+      deployment: { chainId: 31337, matchweeks, hostRewards, identity, qusdc, deployedAtBlock: 0n, nsdToken, nsdRewards },
       publicClient: pub,
       crypto: new FieldCrypto(Buffer.alloc(32, 9).toString("base64")),
       pepper: `0x${"77".repeat(32)}`,
@@ -396,6 +413,32 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(h2h!.challenger.picks).toEqual({ home: [1, 0, 2], away: [0, 2, 2], banker: 1 });
       expect(h2h!.opponent!.fixtures[0]).toMatchObject({ points: 10, banker: true });
       await expect(createChallenge(ctx, u1.id, 11)).rejects.toThrow(/not open|locked/);
+
+      // $NSD rewards for matchweek 11: verified people only. Bo (14) and Ada (10) are verified; Cy is
+      // not and earns nothing. Pool 10,000 NSD split 50/30/20 by position.
+      const E = 10n ** 18n;
+      const nsdCfg = { enabled: true, schedule: { poolPerMatchweek: 10_000n * E, positionsBps: [5000, 3000, 2000] } };
+      const winners = await computeNsdRewards(ctx, 11, nsdCfg.schedule);
+      expect(winners.map((w) => [w.wallet, w.rank, w.amount])).toEqual([
+        [acct(KEYS.p2).address, 1, 5_000n * E],
+        [acct(KEYS.p1).address, 2, 3_000n * E],
+      ]);
+      const posted = await postNsdRoot(ctx, 11, nsdCfg);
+      expect(posted).toMatchObject({ matchweekId: 11, total: 8_000n * E, winners: 2 });
+      expect(await postNsdRoot(ctx, 11, nsdCfg)).toMatchObject({ skipped: "root already posted" }); // idempotent
+      const claims = await nsdClaimsFor(ctx, [acct(KEYS.p2).address]);
+      expect(claims).toHaveLength(1);
+      expect(claims[0]).toMatchObject({ matchweekId: 11, amount: (5_000n * E).toString(), rank: 1, claimed: false });
+      await advance(24 * 3600 + 60); // NSDRewards.CLAIM_DELAY
+      const nsdClaimTx = await wallet(KEYS.p2).writeContract({
+        address: ctx.deployment.nsdRewards!,
+        abi: nsdRewardsAbi,
+        functionName: "claim",
+        args: [11, acct(KEYS.p2).address, 5_000n * E, claims[0]!.proof as Hex[]],
+      });
+      expect((await pub.waitForTransactionReceipt({ hash: nsdClaimTx })).status).toBe("success");
+      expect(await pub.readContract({ address: ctx.deployment.nsdToken!, abi: nsdTokenAbi, functionName: "balanceOf", args: [acct(KEYS.p2).address] })).toBe(5_000n * E);
+      expect((await nsdClaimsFor(ctx, [acct(KEYS.p2).address]))[0]!.claimed).toBe(true);
 
       // A second wallet of the same person sealing later (with a better score) does not count twice (audit B9).
       await ctx.db.insert(schema.predictions).values({

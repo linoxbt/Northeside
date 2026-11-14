@@ -11,6 +11,7 @@ export const LEAF_TYPES = {
   reveals: ["address", "uint32", "bytes32", "bytes32"],
   scores: ["address", "uint32", "uint16", "uint8"],
   hostRewards: ["uint256", "uint32", "address", "uint128", "uint32"],
+  nsdRewards: ["uint32", "address", "uint128"],
 } as const;
 
 /** Root used when a tree would be empty (e.g. no reveals). The contract rejects a zero root. */
@@ -47,6 +48,12 @@ export interface ScoreLeaf {
   matchweekId: number;
   points: number;
   exactScores: number;
+}
+
+export interface NsdRewardLeaf {
+  matchweekId: number;
+  wallet: Address;
+  amount: bigint;
 }
 
 export interface HostRewardLeaf {
@@ -114,6 +121,9 @@ export const buildHostRewardsTree = (leaves: HostRewardLeaf[]) =>
     l.amount,
     l.countablePlayers,
   ]);
+
+export const buildNsdRewardsTree = (leaves: NsdRewardLeaf[]) =>
+  build(leaves, LEAF_TYPES.nsdRewards, (l) => [l.matchweekId, getAddress(l.wallet), l.amount]);
 
 /** Verify a proof exactly as OpenZeppelin MerkleProof does on-chain. */
 export function verifyProof(root: Hex, leafHash: Hex, proof: Hex[]): boolean {

@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { Hex } from "viem";
 import { safeGas } from "@/lib/client/gas";
+import { NsdRewards } from "./nsd-rewards";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { txError } from "@/lib/client/tx-errors";
 import { useAuthBridge } from "./auth-bridge";
@@ -105,6 +106,7 @@ export function Profile() {
 
   return (
     <div className="space-y-4">
+      <NsdRewards />
       <Card className="space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="display text-[36px] sm:text-[44px]">Your profile</h1>

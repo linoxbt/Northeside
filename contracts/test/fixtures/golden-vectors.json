@@ -63,5 +63,12 @@
       "predictionsHash": "0xfccd96bd075421c2e00d9e09fd3f2d082b2e79ec9be6bbc4a4b705d1dca3cff4",
       "commitment": "0x3ca7b9fa846258805005bd289b9d77872728b23c4565391eee43e9c987b752e3"
     }
+  },
+  "nsdRewardLeaf": {
+    "comment": "NSDRewards.leafHash = keccak256(bytes.concat(keccak256(abi.encode(uint32 matchweekId, address wallet, uint128 amount)))) (generated with cast)",
+    "matchweekId": 11,
+    "wallet": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "amount": "2500000000000000000000",
+    "leaf": "0x5f416a6536786c6583845ce47109921861c8e59568b4738e26dd9ae0b1ef9893"
   }
 }
