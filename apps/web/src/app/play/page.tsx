@@ -19,9 +19,9 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
   }
   const mw = await safely(() => (mwParam && /^\d+$/.test(mwParam) ? getById(Number(mwParam)) : getCurrent()), null);
   return (
-    <Container className="pb-24">
+    <Container wide className="pb-24">
       {mw ? (
-        <div className="mx-auto max-w-2xl pt-10 sm:pt-14">
+        <div className="pt-6 sm:pt-8">
           <MatchweekView mw={mw} />
         </div>
       ) : (
