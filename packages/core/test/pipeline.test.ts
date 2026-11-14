@@ -417,8 +417,14 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       // $NSD rewards for matchweek 11: verified people only. Bo (14) and Ada (10) are verified; Cy is
       // not and earns nothing. Pool 10,000 NSD split 50/30/20 by position.
       const E = 10n ** 18n;
-      const nsdCfg = { enabled: true, schedule: { poolPerMatchweek: 10_000n * E, positionsBps: [5000, 3000, 2000] } };
-      const winners = await computeNsdRewards(ctx, 11, nsdCfg.schedule);
+      // Season = matchweeks 11-12: weekly pool 10,000 (50/30/20), finale 6,000 (60/40) plus rollover.
+      const nsdCfg = {
+        enabled: true,
+        schedule: { poolPerMatchweek: 10_000n * E, positionsBps: [5000, 3000, 2000] },
+        season: { firstMatchweek: 11, lastMatchweek: 12, finalePool: 6_000n * E, finaleBps: [6000, 4000] },
+      };
+      expect(await computeNsdRewards(ctx, 10, nsdCfg)).toEqual([]); // outside the season: nothing
+      const winners = await computeNsdRewards(ctx, 11, nsdCfg);
       expect(winners.map((w) => [w.wallet, w.rank, w.amount])).toEqual([
         [acct(KEYS.p2).address, 1, 5_000n * E],
         [acct(KEYS.p1).address, 2, 3_000n * E],
@@ -603,6 +609,27 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(proof?.commitments).toHaveLength(3);
       expect(proof?.reveals.every((r) => r.valid)).toBe(true);
       expect(proof?.rewardLeaves[0]?.claimTx).toBe(claimTx);
+
+      // $NSD for matchweek 12, the season's last: weekly + finale + rollover, one leaf per person.
+      // Weekly: Ada 18 pts -> 5,000; Bo scored 0 -> nothing (you must score to earn); 2nd and 3rd unused.
+      // Rollover: MW11 3rd (2,000) + MW12 2nd and 3rd (5,000) = 7,000. Finale pool 6,000 + 7,000 = 13,000.
+      // Season table: Ada 10 + 18 = 28 (1st, 60% = 7,800), Bo 14 + 0 = 14 (2nd, 40% = 5,200).
+      const finale = await computeNsdRewards(ctx, 12, nsdCfg);
+      expect(finale.map((w) => [w.wallet, w.weekly, w.finale, w.seasonRank, w.amount])).toEqual([
+        [acct(KEYS.p1).address, 5_000n * E, 7_800n * E, 1, 12_800n * E],
+        [acct(KEYS.p2).address, 0n, 5_200n * E, 2, 5_200n * E],
+      ]);
+      expect(await postNsdRoot(ctx, 12, nsdCfg)).toMatchObject({ matchweekId: 12, total: 18_000n * E, winners: 2 });
+      const boFinale = (await nsdClaimsFor(ctx, [acct(KEYS.p2).address])).find((c) => c.matchweekId === 12)!;
+      await advance(24 * 3600 + 60);
+      const finaleTx = await wallet(KEYS.p2).writeContract({
+        address: ctx.deployment.nsdRewards!,
+        abi: nsdRewardsAbi,
+        functionName: "claim",
+        args: [12, acct(KEYS.p2).address, 5_200n * E, boFinale.proof as Hex[]],
+      });
+      expect((await pub.waitForTransactionReceipt({ hash: finaleTx })).status).toBe("success");
+      expect(await pub.readContract({ address: ctx.deployment.nsdToken!, abi: nsdTokenAbi, functionName: "balanceOf", args: [acct(KEYS.p2).address] })).toBe(10_200n * E);
 
       // FR-25: after expiry the unallocated budget (90 - 2 allocated) goes back to the sponsor.
       await advance(31 * 24 * 3600);

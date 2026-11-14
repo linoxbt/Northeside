@@ -151,7 +151,7 @@ async function main() {
       const sub = a.positional[0];
       const mwId = int(a.positional[1], "mw");
       const cfg = nsdConfigFromEnv(process.env);
-      if (sub === "preview") return out(await computeNsdRewards(ctx, mwId, cfg.schedule));
+      if (sub === "preview") return out(await computeNsdRewards(ctx, mwId, cfg));
       if (sub === "post") return out(await postNsdRoot(ctx, mwId, cfg));
       if (sub === "reset") return out(await resetVoidedNsdRoot(ctx, mwId));
       throw new Error("nsd <preview|post|reset> <mw>");

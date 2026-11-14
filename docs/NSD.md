@@ -35,9 +35,10 @@ vector shared with TypeScript, and the end-to-end pipeline on a local chain
 1. Only finalized matchweeks; only wallets verified on the IdentityAdapter.
 2. One entry per person: their first-sealed verified wallet.
 3. Ranked among verified people by points, then exact scores (shared ranks, no random tie-breaks).
-4. The pool (`NSD_POOL_PER_MATCHWEEK`) is shared by position (`NSD_POSITIONS_BPS`, default 1st 20%,
-   2nd 12%, 3rd 8%, 4th–10th 4% each, 11th–30th 1.6% each). Tied players split the positions they
-   occupy; amounts round down; unused shares stay in the pool.
+4. Season 1 (docs/TOKENOMICS.md): matchweeks 11–21 only; 24,000 NSD a week by position (1st 20%,
+   2nd 12%, 3rd 8%, 4th–10th 4% each, 11th–30th 1.6% each); with matchweek 21 a 36,000 NSD finale
+   for the season table plus every weekly share nobody earned. You must score to earn. Tied players
+   split the positions they occupy; amounts round down; each person gets one leaf per matchweek.
 5. The tree and proofs are stored before `postRoot` is sent; the report behind each root is public
    at `/api/v1/nsd/report/:matchweek`.
 
