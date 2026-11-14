@@ -19,6 +19,31 @@ export const NAV = [
   { href: "/docs", label: "Docs" },
 ];
 
+/** Drawer items: what the phone bottom bar (Matches, Live, My slips, Table, Profile) does not cover. */
+const MENU = [
+  {
+    title: "Play",
+    items: [
+      { href: "/leagues", label: "Leagues", icon: "M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8M21 20v-2a4 4 0 0 0-3-3.9M16 2.1a4 4 0 0 1 0 7.8" },
+      { href: "/host", label: "Host a league", icon: "M5 21V4M5 4h12l-3 4 3 4H5" },
+    ],
+  },
+  {
+    title: "Trust",
+    items: [
+      { href: "/proof", label: "Proof", icon: "M12 3l8 4v5c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V7zM9 12l2 2 4-4" },
+      { href: "/stats", label: "Live stats", icon: "M5 20V10M12 20V4M19 20v-7" },
+    ],
+  },
+  {
+    title: "Info",
+    items: [
+      { href: "/docs", label: "How it works", icon: "M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 7h6M8 11h6" },
+      { href: "/about", label: "About", icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01" },
+    ],
+  },
+];
+
 function AnnouncementBar() {
   const mw = useQuery({
     queryKey: ["mw-current"],
@@ -152,25 +177,69 @@ export function SiteHeader() {
               onClick={() => setMenu((m) => !m)}
             >
               <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                {menu ? <path d="M5 5l10 10M15 5 5 15" strokeLinecap="round" /> : <path d="M3 6h14M3 14h14" strokeLinecap="round" />}
+                <path d="M3 6h14M3 14h14" strokeLinecap="round" />
               </svg>
             </button>
           </div>
         </div>
       </header>
       {menu ? (
-        <div ref={menuRef} id="mobile-menu" className="fixed inset-x-0 bottom-0 top-14 z-30 overflow-y-auto bg-white lg:hidden">
-          <nav aria-label="Mobile" className="px-5 py-6">
-            {[...NAV, { href: "/host", label: "Host a league" }, { href: "/proof", label: "Proof" }, { href: "/stats", label: "Live stats" }, { href: "/about", label: "About" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
-              <Link key={n.href} href={n.href} prefetch={prefetchFor(n.href)} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
-                {n.label}
-                <Chevron className="size-4 text-muted" />
-              </Link>
-            ))}
-            <ButtonLink href="/" variant="accent" className="mt-8 w-full" arrow>
-              Matches
-            </ButtonLink>
-          </nav>
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button type="button" aria-label="Close menu" tabIndex={-1} className="absolute inset-0 bg-ink/40" onClick={() => setMenu(false)} />
+          <div
+            ref={menuRef}
+            id="mobile-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
+            className="absolute inset-y-0 right-0 flex w-[78%] max-w-[300px] flex-col overflow-y-auto bg-white shadow-[0_0_40px_rgba(10,11,13,0.25)]"
+          >
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
+              {account ? (
+                <Link href="/me" prefetch={false} className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-medium text-accent">{account.slice(0, 1).toUpperCase()}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[14px] font-medium">{account}</span>
+                    <span className="block text-[12px] text-muted">View profile</span>
+                  </span>
+                </Link>
+              ) : (
+                <Link href={`/sign-in?next=${encodeURIComponent(path)}`} prefetch={false} className="inline-flex h-9 items-center rounded-full bg-accent px-4 text-[13px] font-medium text-accent-ink">
+                  Join free / Sign in
+                </Link>
+              )}
+              <button type="button" aria-label="Close menu" onClick={() => setMenu(false)} className="flex size-8 items-center justify-center rounded-full text-muted hover:bg-subtle hover:text-ink">
+                <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path d="M5 5l10 10M15 5 5 15" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <nav aria-label="Mobile" className="flex-1 space-y-4 px-2 py-3">
+              {MENU.map((group) => (
+                <div key={group.title}>
+                  <p className="px-2 pb-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">{group.title}</p>
+                  <ul>
+                    {group.items.map((it) => (
+                      <li key={it.href}>
+                        <Link
+                          href={it.href}
+                          prefetch={false}
+                          aria-current={active(it.href) ? "page" : undefined}
+                          className={`flex h-10 items-center gap-3 rounded-lg px-2 text-[14px] transition-colors ${active(it.href) ? "bg-subtle font-medium" : "hover:bg-subtle"}`}
+                        >
+                          <svg viewBox="0 0 24 24" className="size-[18px] shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d={it.icon} />
+                          </svg>
+                          {it.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+            <p className="border-t border-line px-4 py-3 text-[11px] text-muted">Free to play · 18+</p>
+          </div>
         </div>
       ) : null}
     </>
