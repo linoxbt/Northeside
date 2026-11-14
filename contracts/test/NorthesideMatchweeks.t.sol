@@ -169,7 +169,7 @@ contract NorthesideMatchweeksTest is Base {
         vm.prank(alice);
         mw.commit(ID, keccak256("a"));
 
-        vm.prank(pauser);
+        vm.prank(admin);
         mw.unpause();
         vm.prank(alice);
         mw.commit(ID, keccak256("a"));
@@ -388,6 +388,17 @@ contract NorthesideMatchweeksTest is Base {
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
         vm.prank(operator);
         mw.createMatchweek(31, FIXTURES, lockTime, lockTime - 1, 10, RULES);
+    }
+
+    /// @dev Audit L-1: only the admin can unpause.
+    function test_unpause_onlyAdmin() public {
+        vm.prank(pauser);
+        mw.pause();
+        vm.expectRevert();
+        vm.prank(pauser);
+        mw.unpause();
+        vm.prank(admin);
+        mw.unpause();
     }
 
     /// @dev Audit L-2: a dispute window needs at least one real challenger who is not the results key.

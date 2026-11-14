@@ -174,7 +174,8 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
         _pause();
     }
 
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    /// @notice Admin only, so a leaked pauser key cannot undo an emergency pause.
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
 

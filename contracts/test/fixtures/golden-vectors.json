@@ -1,13 +1,35 @@
 {
-  "description": "Golden vectors shared by forge tests (test/Commitment.t.sol) and Vitest (packages/commitments). Generated with cast; any change to the canonical encoding must update both sides.",
+  "description": "Golden vectors shared by forge tests (test/NorthesideMatchweeks.t.sol and test/IdentityAdapter.t.sol) and Vitest (packages/commitments). Generated with cast; any change to the canonical encoding must update both sides.",
   "commitment": {
     "chainId": 1990,
     "matchweeksContract": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     "player": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     "matchweekId": 11,
     "fixturesRoot": "0x1111111111111111111111111111111111111111111111111111111111111111",
-    "home": [2, 1, 0, 3, 1, 2, 0, 1, 2, 1],
-    "away": [1, 1, 0, 2, 0, 2, 1, 0, 3, 0],
+    "home": [
+      2,
+      1,
+      0,
+      3,
+      1,
+      2,
+      0,
+      1,
+      2,
+      1
+    ],
+    "away": [
+      1,
+      1,
+      0,
+      2,
+      0,
+      2,
+      1,
+      0,
+      3,
+      0
+    ],
     "salt": "0x4242424242424242424242424242424242424242424242424242424242424242",
     "predictionsHash": "0xfa61aa58ff916dea0a1f8867c21c48358c74b4fc9020bb3ff00c25cac70fd692",
     "commitment": "0x0639aa0bd046ece58f43455acb28452abf44f14924186ea05ae33f28f577bc44",
@@ -20,5 +42,15 @@
     "amount": "2500000",
     "countablePlayers": 25,
     "leaf": "0x7fe9820cce734a58dc4617c73ed67f4a053295972f019755c929f240f0bd288f"
+  },
+  "identityAttestation": {
+    "chainId": 1990,
+    "verifyingContract": "0x7Bdef3854f9bC0B25271Cee756274fEb3d33eAA9",
+    "wallet": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "personHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "nonce": "3",
+    "deadline": "1800000000",
+    "structHash": "0x67be88c5653a4c5af17702ca563b0a1ae342ed28edb67b21ad867eae504fdf9b",
+    "digest": "0x776b769c0152a84ecd5e22f20a39ee5fa5b5723ac50925ba9a72e1d5c92d6113"
   }
 }

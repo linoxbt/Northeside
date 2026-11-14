@@ -617,7 +617,7 @@ contract HostRewardsTest is HostRewardsFixture {
             uint256(rewards.campaign(id).status), uint256(HostRewards.CampaignStatus.Active), "still open"
         );
 
-        vm.prank(pauser);
+        vm.prank(admin);
         rewards.unpause();
         uint256 extended = rewards.claimDeadline(id);
         assertEq(extended, deadline + pausedFor, "extension kept after unpause");
@@ -635,7 +635,7 @@ contract HostRewardsTest is HostRewardsFixture {
         vm.prank(pauser);
         rewards.pause();
         vm.warp(block.timestamp + 5 days);
-        vm.prank(pauser);
+        vm.prank(admin);
         rewards.unpause();
         uint256 id = _createFunded(100 * ONE, 0);
         assertEq(
@@ -684,6 +684,79 @@ contract HostRewardsTest is HostRewardsFixture {
         vm.expectRevert(abi.encodeWithSelector(HostRewards.AlreadyClaimedFrom.selector, id, 11));
         vm.prank(operator);
         rewards.replaceRoot(id, 11, other.root, other.total, "ipfs://other");
+    }
+
+    /// @dev Audit S3 / PoC: a bad root posted shortly before expiry stays fixable during its review delay.
+    function test_badRootNearExpiry_canBeReplacedOrVoided() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory bad = _twoHostTree(id, 11, 90 * ONE, 1 * ONE);
+        Tree memory good = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        vm.warp(uint256(expiry) - 1 hours);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, bad.root, bad.total, "ipfs://bad");
+        vm.warp(uint256(expiry) + 1 hours); // expired, still inside the review delay
+
+        // operator can replace it after expiry
+        vm.prank(operator);
+        rewards.replaceRoot(id, 11, good.root, good.total, "ipfs://good");
+        assertEq(rewards.campaign(id).allocated, 10 * ONE, "allocation corrected after expiry");
+
+        // the admin can void it outright; the allocation becomes refundable
+        vm.prank(admin);
+        rewards.voidRoot(id, 11);
+        assertEq(rewards.rootOf(id, 11), bytes32(0), "root removed");
+        assertEq(rewards.campaign(id).allocated, 0, "allocation released");
+        vm.warp(block.timestamp + 1 days);
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.NoRoot.selector, id, 11));
+        rewards.claim(id, 11, hostA, 90 * ONE, 25, Merkle.proof(bad.leaves, 0));
+        assertEq(rewards.refund(id), 100 * ONE, "whole budget back to the sponsor");
+    }
+
+    function test_voidRoot_guards() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        Tree memory t = _twoHostTree(id, 11, 7 * ONE, 3 * ONE);
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.NoRoot.selector, id, 11));
+        vm.prank(admin);
+        rewards.voidRoot(id, 11);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        // only the admin
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                operator,
+                rewards.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        vm.prank(operator);
+        rewards.voidRoot(id, 11);
+        // not once someone has claimed
+        vm.warp(block.timestamp + 1 days);
+        rewards.claim(id, 11, hostA, 7 * ONE, 25, Merkle.proof(t.leaves, 0));
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.AlreadyClaimedFrom.selector, id, 11));
+        vm.prank(admin);
+        rewards.voidRoot(id, 11);
+        // and not after the claim deadline
+        vm.warp(rewards.claimDeadline(id));
+        vm.expectRevert(abi.encodeWithSelector(HostRewards.ClaimPeriodOver.selector, id));
+        vm.prank(operator);
+        rewards.replaceRoot(id, 11, keccak256("x"), ONE, "ipfs://x");
+    }
+
+    /// @dev Audit L-1: a leaked pauser (operator) key cannot undo an emergency pause.
+    function test_unpause_onlyAdmin() public {
+        vm.prank(pauser);
+        rewards.pause();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, rewards.DEFAULT_ADMIN_ROLE()
+            )
+        );
+        vm.prank(pauser);
+        rewards.unpause();
+        vm.prank(admin);
+        rewards.unpause();
+        assertFalse(rewards.paused(), "admin unpaused");
     }
 
     function test_replaceRoot_guards() public {
