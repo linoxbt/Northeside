@@ -10,7 +10,7 @@
     "dev": "pnpm --filter @northeside/web dev",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r --filter ./packages/* --filter ./ops/* test",
+    "test": "pnpm -r --filter \"./packages/*\" --filter \"./ops/*\" test",
     "test:contracts": "pnpm --filter @northeside/contracts test",
     "cli": "pnpm --filter @northeside/cli exec tsx src/index.ts"
   },
