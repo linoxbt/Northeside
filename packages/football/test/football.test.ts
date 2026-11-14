@@ -118,6 +118,25 @@ describe("crossCheck", () => {
     const s = [{ externalId: 9, home: "Arsenal", away: "Chelsea", kickoff: 0, status: "played" as const, homeGoals: 1, awayGoals: 0 }];
     expect(crossCheck(fixtures, p, s)).toMatchObject({ agreed: false, rows: [{ state: "pending" }] });
   });
+
+  it("voids a game rescheduled outside the matchweek instead of blocking (FR-09)", () => {
+    const fixtures = [{ externalId: 1, index: 0, home: "Arsenal", away: "Chelsea", kickoff: 1000 }];
+    const p = [{ externalId: 1, home: "Arsenal", away: "Chelsea", kickoff: 9_000_000, status: "pending" as const, homeGoals: null, awayGoals: null }];
+    const s = [{ externalId: 9, home: "Arsenal", away: "Chelsea", kickoff: 9_000_000, status: "pending" as const, homeGoals: null, awayGoals: null }];
+    const c = crossCheck(fixtures, p, s, { windowEnd: 200_000 });
+    expect(c.agreed).toBe(true);
+    expect(c.results[0]).toMatchObject({ status: "void", homeGoals: 0, awayGoals: 0, reason: "rescheduled outside the matchweek" });
+    // without the window the same game still blocks
+    expect(crossCheck(fixtures, p, s).agreed).toBe(false);
+  });
+
+  it("voids a game that kicked off before the on-chain lock, even if played", () => {
+    const fixtures = [{ externalId: 1, index: 0, home: "Arsenal", away: "Chelsea", kickoff: 5000 }];
+    const p = [{ externalId: 1, home: "Arsenal", away: "Chelsea", kickoff: 1000, status: "played" as const, homeGoals: 2, awayGoals: 0 }];
+    const s = [{ externalId: 9, home: "Arsenal", away: "Chelsea", kickoff: 1000, status: "played" as const, homeGoals: 2, awayGoals: 0 }];
+    expect(crossCheck(fixtures, p, s, { lockTime: 5000 }).results[0]).toMatchObject({ status: "void", reason: "kicked off before the on-chain lock" });
+    expect(crossCheck(fixtures, p, s, { lockTime: 1000 }).results[0]).toMatchObject({ status: "played", homeGoals: 2 });
+  });
 });
 
 describe("crossCheck fallback", () => {

@@ -12,4 +12,4 @@ export default async () => {
   return new Response(null, { status: 204 });
 };
 
-export const config = { schedule: "0 6 * * *" };
+export const config = { schedule: "7 */6 * * *" };
