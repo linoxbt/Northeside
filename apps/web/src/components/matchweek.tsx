@@ -108,7 +108,8 @@ const fmtDay = (iso: string, local: boolean) =>
 const fmtTime = (iso: string, local: boolean) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(local ? {} : WAT) });
 
-function Stepper({ value, onChange, disabled, label }: { value: number | null; onChange(v: number): void; disabled: boolean; label: string }) {
+function Stepper({ value, onChange, disabled, label, compact }: { value: number | null; onChange(v: number): void; disabled: boolean; label: string; compact?: boolean }) {
+  const btn = compact ? "size-8 text-base" : "size-11 text-lg";
   return (
     <div className="flex items-center gap-1" role="group" aria-label={label}>
       <button
@@ -116,11 +117,11 @@ function Stepper({ value, onChange, disabled, label }: { value: number | null; o
         aria-label={`${label}: one less`}
         disabled={disabled || (value ?? 0) <= 0}
         onClick={() => onChange(Math.max(0, (value ?? 0) - 1))}
-        className="size-11 rounded-full border border-line text-lg transition-colors hover:border-ink disabled:opacity-25"
+        className={`${btn} rounded-full border border-line transition-colors hover:border-ink disabled:opacity-25`}
       >
         −
       </button>
-      <output aria-live="polite" className={`w-9 text-center text-[26px] tracking-[-0.04em] tabular-nums ${value === null ? "text-line-strong" : ""}`}>
+      <output aria-live="polite" className={`${compact ? "w-6 text-[20px]" : "w-9 text-[26px]"} text-center tracking-[-0.04em] tabular-nums ${value === null ? "text-line-strong" : ""}`}>
         {value ?? "–"}
       </output>
       <button
@@ -128,7 +129,7 @@ function Stepper({ value, onChange, disabled, label }: { value: number | null; o
         aria-label={`${label}: one more`}
         disabled={disabled || (value ?? -1) >= 9}
         onClick={() => onChange(Math.min(9, value === null ? 0 : value + 1))}
-        className="size-11 rounded-full border border-line text-lg transition-colors hover:border-ink disabled:opacity-25"
+        className={`${btn} rounded-full border border-line transition-colors hover:border-ink disabled:opacity-25`}
       >
         +
       </button>
@@ -272,147 +273,269 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   const finalized = mw.status === "finalized";
   const results = mw.fixtures.every((f) => f.status !== "scheduled");
 
+  const anyLive = !!live.data?.fixtures.some((x) => x.state === "live" || x.state === "ht");
+  const [tab, setTab] = useState<string>("all");
+  const visibleDays = days
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((f) => {
+        if (tab === "all") return true;
+        if (tab === "live") {
+          const st = live.data?.fixtures.find((x) => x.index === f.index)?.state;
+          return st === "live" || st === "ht";
+        }
+        return g.day === tab;
+      }),
+    }))
+    .filter((g) => g.items.length > 0);
+
+  /** Tapping 1 / X / 2 sets a typical score for that result unless your pick already says it. */
+  const pickOutcome = useCallback(
+    (i: number, o: "home" | "draw" | "away") => {
+      setPicks((p) => {
+        if (outcomeOf(p.home[i] ?? null, p.away[i] ?? null) === o) return p;
+        const [h, a] = o === "home" ? [1, 0] : o === "draw" ? [1, 1] : [0, 1];
+        const next = { ...p, home: p.home.map((x, j) => (j === i ? h : x)), away: p.away.map((x, j) => (j === i ? a : x)) };
+        persist(next);
+        return next;
+      });
+      track("outcome_tapped", { matchweek_id: mw.id });
+    },
+    [mw.id, persist],
+  );
+
+  // Most a slip can score if every pick is exact: 5 each, plus the crowd bonus for that result, Banker x2.
+  const maxPoints = useMemo(() => {
+    let total = 0;
+    picks.home.forEach((h, i) => {
+      const a = picks.away[i] ?? null;
+      const o = outcomeOf(h ?? null, a);
+      if (!o) return;
+      const cf = crowd.data?.shown ? crowd.data.fixtures.find((x) => x.index === i) : undefined;
+      const bonus = v2 && cf ? crowdBonus(cf[o], cf.home + cf.draw + cf.away) : 0;
+      total += (5 + bonus) * (v2 && picks.banker === i ? 2 : 1);
+    });
+    return total;
+  }, [picks, crowd.data, v2]);
+
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3 pb-2">
-        <div>
-          <p className="eyebrow mb-3">Premier League {mw.season}/{String((mw.season + 1) % 100).padStart(2, "0")}</p>
-          <h1 className="display text-[44px] sm:text-[56px]">Matchweek {mw.id}</h1>
+    <div className="space-y-4">
+      {/* Dashboard header */}
+      <header className="rounded-[20px] bg-ink p-4 text-white sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-white/50">
+              Premier League {mw.season}/{String((mw.season + 1) % 100).padStart(2, "0")}
+            </p>
+            <h1 className="mt-1 text-[28px] font-medium tracking-[-0.03em] sm:text-[34px]">Matchweek {mw.id}</h1>
+          </div>
+          <div className="text-right">
+            {open ? (
+              <>
+                <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-white/50">Locks in</p>
+                <p className="font-mono text-[22px] tabular-nums text-accent">{countdown}</p>
+              </>
+            ) : anyLive ? (
+              <span className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 font-mono text-[12px] font-medium">
+                <span className="size-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+                LIVE
+              </span>
+            ) : (
+              <span className="rounded-full bg-white/10 px-3 py-1 font-mono text-[12px]">{finalized ? "FINAL" : "LOCKED"}</span>
+            )}
+          </div>
         </div>
-        {open ? (
-          <Pill tone="warn">Locks in {countdown}</Pill>
-        ) : finalized ? (
-          <Pill tone="good">Final</Pill>
-        ) : (
-          <Pill>Locked</Pill>
-        )}
+        <div className="mt-4 flex flex-wrap gap-2 font-mono text-[11px] uppercase tracking-[0.06em]">
+          <span className="rounded-full bg-white/10 px-2.5 py-1">{n} games</span>
+          <span className="rounded-full bg-white/10 px-2.5 py-1">{crowd.data?.players ?? 0} sealed</span>
+          <span className="rounded-full bg-white/10 px-2.5 py-1">{v2 ? "Banker ×2 · beat the crowd" : "Exact 5 · result 2"}</span>
+          <a href={`/proof/${mw.id}`} className="rounded-full bg-white/10 px-2.5 py-1 hover:bg-white/20">
+            Proof ↗
+          </a>
+        </div>
       </header>
 
       {!user ? <SignInPanel /> : <AdultGate />}
 
-      {live.data?.started ? <LiveCentre live={live.data} /> : null}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        {/* Match board */}
+        <section className="min-w-0 space-y-3">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {[["all", "All"], ...days.map((g) => [g.day, g.day] as const), ...(anyLive ? [["live", "● Live"] as const] : [])].map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setTab(k)}
+                aria-pressed={tab === k}
+                className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] font-medium transition-colors ${tab === k ? "bg-ink text-white" : "border border-line bg-white text-ink-2 hover:border-ink"}`}
+              >
+                {label}
+              </button>
+            ))}
+            {open && user ? (
+              <button type="button" onClick={quickPick} className="ml-auto h-9 shrink-0 rounded-full bg-accent px-3.5 text-[13px] font-medium text-accent-ink hover:brightness-95">
+                Quick pick
+              </button>
+            ) : null}
+          </div>
 
-      {open && user ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[14px] text-muted">
-            {v2 ? "Tap ★ to make one game your Banker (points ×2)." : null}
-            {crowd.data && !crowd.data.shown ? ` Crowd odds at ${crowd.data.minPlayers} players (${crowd.data.players} so far).` : null}
-          </p>
-          <button type="button" onClick={quickPick} className="inline-flex min-h-10 items-center rounded-full border border-line-strong px-4 text-[14px] font-medium hover:bg-subtle">
-            Quick pick
-          </button>
-        </div>
-      ) : null}
+          <Card className="overflow-hidden p-0 sm:p-0">
+            <div className="hidden grid-cols-[52px_minmax(0,1fr)_210px_260px] items-center gap-3 border-b border-line bg-subtle px-4 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted md:grid">
+              <span>Time</span>
+              <span>Match</span>
+              <span className="text-center">1 · X · 2 {crowd.data?.shown ? "crowd" : ""}</span>
+              <span className="pr-[72px] text-right">Your score</span>
+            </div>
+            <ol>
+              {visibleDays.map((g) => (
+                <li key={g.day}>
+                  <h3 className="border-b border-line bg-subtle/60 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{g.day}</h3>
+                  <ul className="divide-y divide-line">
+                    {g.items.map((f) => {
+                      const h = shown.home[f.index] ?? null;
+                      const a = shown.away[f.index] ?? null;
+                      const lf = live.data?.fixtures.find((x) => x.index === f.index);
+                      const mineF = live.data?.me?.fixtures.find((x) => x.index === f.index);
+                      const isBanker = v2 && (shown.banker ?? null) === f.index;
+                      const cf = crowd.data?.shown ? crowd.data.fixtures.find((x) => x.index === f.index) : undefined;
+                      const state = f.status === "void" ? "void" : lf && lf.state !== "scheduled" ? lf.state : f.status === "played" ? "ft" : "scheduled";
+                      const score = lf && lf.state !== "scheduled" ? `${lf.home}–${lf.away}` : `${f.homeGoals}–${f.awayGoals}`;
+                      const editable = open && !!user;
+                      return (
+                        <li key={f.index} className={`px-4 py-3 ${isBanker ? "bg-accent/5" : ""}`}>
+                          <div className="grid grid-cols-[44px_minmax(0,1fr)] items-center gap-3 md:grid-cols-[52px_minmax(0,1fr)_210px_260px]">
+                            <div className="font-mono text-[12px] leading-4 text-muted">
+                              {state === "scheduled" ? (
+                                fmtTime(f.kickoff, mounted)
+                              ) : state === "void" ? (
+                                <span className="text-warn">VOID</span>
+                              ) : state === "live" ? (
+                                <span className="font-medium text-red-600">LIVE</span>
+                              ) : (
+                                <span>{state === "ht" ? "HT" : "FT"}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="flex items-center justify-between gap-2 truncate text-[15px] tracking-[-0.01em]">
+                                <span className="truncate">{f.home}</span>
+                                {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[14px] font-medium">{score.split("–")[0]}</b> : null}
+                              </p>
+                              <p className="flex items-center justify-between gap-2 truncate text-[15px] tracking-[-0.01em]">
+                                <span className="truncate">{f.away}</span>
+                                {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[14px] font-medium">{score.split("–")[1]}</b> : null}
+                              </p>
+                            </div>
+                            <div className="col-span-2 md:col-span-1">
+                              <OddsButtons c={cf} pick={outcomeOf(h, a)} v2={v2} disabled={!editable} onPick={(o) => pickOutcome(f.index, o)} />
+                            </div>
+                            <div className="col-span-2 flex items-center justify-between gap-2 md:col-span-1 md:justify-end">
+                              <div className="flex items-center gap-1">
+                                <Stepper compact label={`${f.home} goals`} value={h} disabled={!editable} onChange={(v) => update("home", f.index, v)} />
+                                <span className="text-muted">:</span>
+                                <Stepper compact label={`${f.away} goals`} value={a} disabled={!editable} onChange={(v) => update("away", f.index, v)} />
+                              </div>
+                              <div className="flex w-[64px] items-center justify-end gap-1">
+                                {mineF ? (
+                                  <span className={`font-mono text-[13px] font-bold ${mineF.points ? "text-accent-deep" : "text-muted"}`}>
+                                    +{mineF.points}
+                                  </span>
+                                ) : null}
+                                {v2 && (open || isBanker) ? (
+                                  <button
+                                    type="button"
+                                    aria-pressed={isBanker}
+                                    aria-label={`Banker: ${f.home} v ${f.away}`}
+                                    title="Banker: this game's points count double"
+                                    disabled={!editable}
+                                    onClick={() => toggleBanker(f.index)}
+                                    className={`flex size-8 items-center justify-center rounded-full text-[15px] transition-colors disabled:cursor-default ${
+                                      isBanker ? "bg-ink text-accent" : "border border-line text-muted hover:border-ink hover:text-ink"
+                                    }`}
+                                  >
+                                    ★
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          </Card>
 
-      <Card className="overflow-hidden p-0 sm:p-0">
-        <ol className="divide-y divide-line">
-          {days.map((g) => (
-            <li key={g.day}>
-              <h3 className="eyebrow bg-subtle px-4 py-2.5 sm:px-5">{g.day}</h3>
-              <ul className="divide-y divide-line">
-                {g.items.map((f) => {
-                  const h = shown.home[f.index] ?? null;
-                  const a = shown.away[f.index] ?? null;
-                  const lf = live.data?.fixtures.find((x) => x.index === f.index);
-                  const mineF = live.data?.me?.fixtures.find((x) => x.index === f.index);
-                  const isBanker = v2 && (shown.banker ?? null) === f.index;
-                  const cf = crowd.data?.shown ? crowd.data.fixtures.find((x) => x.index === f.index) : undefined;
-                  const state = f.status === "void" ? "void" : lf && lf.state !== "scheduled" ? lf.state : f.status === "played" ? "ft" : "scheduled";
-                  const score = lf && lf.state !== "scheduled" ? `${lf.home}–${lf.away}` : `${f.homeGoals}–${f.awayGoals}`;
+          {unsealed ? (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warn/40 bg-warn/5 px-4 py-3 text-[14px]">
+              <p>
+                <b className="font-medium">Unsealed changes.</b> Re-seal before kickoff to keep them.
+              </p>
+              <button type="button" className="underline underline-offset-4" onClick={() => setPicks({ home: [...sealedPicks!.home], away: [...sealedPicks!.away], banker: sealedPicks!.banker ?? null })}>
+                Undo my changes
+              </button>
+            </div>
+          ) : null}
+          {saveFailed ? <p className="text-center text-[13px] text-warn">Draft saved on this device; syncing to your account will retry.</p> : null}
+        </section>
+
+        {/* Slip and side panels. On phones the panels flow under the board and the Seal bar stays pinned. */}
+        <aside className="contents lg:sticky lg:top-20 lg:block lg:space-y-4">
+          {live.data?.started ? (
+            <div className="max-lg:order-first">
+              <LiveCentre live={live.data} />
+            </div>
+          ) : null}
+
+          {open ? (
+            <Card className="hidden space-y-3 lg:block">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[18px] tracking-[-0.02em]">Your slip</h2>
+                <span className="rounded-full bg-ink px-2.5 py-0.5 font-mono text-[12px] text-white">
+                  {picked}/{n}
+                </span>
+              </div>
+              <ul className="max-h-[300px] space-y-1.5 overflow-y-auto text-[13px]">
+                {mw.fixtures.map((f) => {
+                  const h = picks.home[f.index];
+                  const a = picks.away[f.index];
+                  const set = h !== null && h !== undefined && a !== null && a !== undefined;
                   return (
-                    <li key={f.index} className="px-4 py-4 sm:px-5">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <p className="min-w-0 flex-1 truncate text-[17px] tracking-[-0.02em]">{f.home}</p>
-                        <p className="shrink-0 font-mono text-[12px] text-muted">{fmtTime(f.kickoff, mounted)}</p>
-                        <p className="min-w-0 flex-1 truncate text-right text-[17px] tracking-[-0.02em]">{f.away}</p>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <Stepper label={`${f.home} goals`} value={h} disabled={!open || !user} onChange={(v) => update("home", f.index, v)} />
-                        {state === "void" ? (
-                          <Pill tone="warn">Void</Pill>
-                        ) : state !== "scheduled" ? (
-                          <p className="flex flex-col items-center whitespace-nowrap text-center text-sm leading-5">
-                            <span>
-                            {state === "live" ? (
-                              <span className="mr-1 inline-flex items-center gap-1 font-mono text-[11px] font-medium text-red-600">
-                                <span className="size-1.5 animate-pulse rounded-full bg-red-600" aria-hidden />
-                                LIVE
-                              </span>
-                            ) : (
-                              <span className="mr-1 font-mono text-[11px] text-muted">{state === "ht" ? "HT" : "FT"}</span>
-                            )}
-                            <b className="font-medium tabular-nums">{score}</b>
-                            </span>
-                            {mineF ? (
-                              <span className={`text-[13px] font-bold ${mineF.points ? "text-accent-deep" : "text-muted"}`}>
-                                +{mineF.points}
-                                {mineF.banker ? " ×2" : ""}
-                              </span>
-                            ) : null}
-                          </p>
-                        ) : (
-                          <span className="font-mono text-[12px] uppercase tracking-[0.08em] text-muted">vs</span>
-                        )}
-                        <Stepper label={`${f.away} goals`} value={a} disabled={!open || !user} onChange={(v) => update("away", f.index, v)} />
-                      </div>
-                      {cf || (v2 && (open || isBanker)) ? (
-                        <div className="mt-3 flex items-center gap-2">
-                          {cf ? <CrowdBar c={cf} pick={outcomeOf(h, a)} v2={v2} /> : <div className="flex-1" />}
-                          {v2 && (open || isBanker) ? (
-                            <button
-                              type="button"
-                              aria-pressed={isBanker}
-                              aria-label={`Banker: ${f.home} v ${f.away}`}
-                              disabled={!open || !user}
-                              onClick={() => toggleBanker(f.index)}
-                              className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[12px] font-medium transition-colors disabled:cursor-default ${
-                                isBanker ? "bg-ink text-white" : "border border-line text-muted hover:border-ink hover:text-ink disabled:hover:border-line disabled:hover:text-muted"
-                              }`}
-                            >
-                              ★ {isBanker ? "Banker ×2" : "Banker"}
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
+                    <li key={f.index} className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 ${v2 && picks.banker === f.index ? "bg-accent/10" : "bg-subtle"}`}>
+                      <span className="min-w-0 truncate">
+                        {f.home} v {f.away}
+                      </span>
+                      <span className="shrink-0 font-mono">
+                        {set ? `${h}–${a}` : "–"}
+                        {v2 && picks.banker === f.index ? " ★" : ""}
+                      </span>
                     </li>
                   );
                 })}
               </ul>
-            </li>
-          ))}
-        </ol>
-      </Card>
+              <div className="flex items-center justify-between border-t border-line pt-3 text-[14px]">
+                <span className="text-muted">Max points</span>
+                <b className="font-mono text-[20px] font-medium tabular-nums">{maxPoints}</b>
+              </div>
+            </Card>
+          ) : null}
 
-      {unsealed ? (
-        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warn/40 bg-warn/5 px-4 py-3 text-[14px]">
-          <p>
-            <b className="font-medium">Unsealed changes.</b> Your sealed picks have not changed. Re-seal before the first kickoff to keep these.
+          {user && user.adultConfirmed && open ? (
+            <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} version={v2 ? 2 : 1} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
+          ) : null}
+
+          {user && user.adultConfirmed && open ? <ChallengeButton mwId={mw.id} /> : null}
+
+          {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
+
+          <p className="text-center text-[13px] text-muted">
+            <a className="underline underline-offset-4" href="/docs">
+              How scoring works
+            </a>
           </p>
-          <button type="button" className="underline underline-offset-4" onClick={() => setPicks({ home: [...sealedPicks!.home], away: [...sealedPicks!.away], banker: sealedPicks!.banker ?? null })}>
-            Undo my changes
-          </button>
-        </div>
-      ) : null}
-      {saveFailed ? <p className="text-center text-[13px] text-warn">Your draft is saved on this device but could not be saved to your account. It will retry.</p> : null}
-
-      {user && user.adultConfirmed && open ? (
-        <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} version={v2 ? 2 : 1} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
-      ) : null}
-
-      {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
-
-      {user && user.adultConfirmed && open ? <ChallengeButton mwId={mw.id} /> : null}
-
-      <p className="pt-2 text-center text-[14px] text-muted">
-        {v2 ? "Exact 5 · result 2 · beat the crowd up to +3 · Banker ×2 · " : "Exact score 5 points · right result 2 · "}
-        <a className="underline underline-offset-4" href="/docs">
-          how it works
-        </a>{" "}
-        ·{" "}
-        <a className="underline underline-offset-4" href={`/proof/${mw.id}`}>
-          proof
-        </a>
-      </p>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -447,31 +570,52 @@ function ChallengeButton({ mwId }: { mwId: number }) {
   );
 }
 
-/** Betting-style crowd line: 1 (home) · X (draw) · 2 (away), with the bonus a right call would earn. */
-function CrowdBar({ c, pick, v2 }: { c: { home: number; draw: number; away: number }; pick: "home" | "draw" | "away" | null; v2: boolean }) {
-  const total = c.home + c.draw + c.away;
-  if (total === 0) return <div className="flex-1" />;
+/**
+ * Betting-board result buttons: 1 (home) · X (draw) · 2 (away). They show the crowd split once
+ * enough players have sealed, and the bonus a right call earns; tapping one sets a typical score.
+ */
+function OddsButtons({
+  c,
+  pick,
+  v2,
+  disabled,
+  onPick,
+}: {
+  c?: { home: number; draw: number; away: number };
+  pick: "home" | "draw" | "away" | null;
+  v2: boolean;
+  disabled: boolean;
+  onPick(o: "home" | "draw" | "away"): void;
+}) {
+  const total = c ? c.home + c.draw + c.away : 0;
   const items = [
-    ["home", "1", c.home],
-    ["draw", "X", c.draw],
-    ["away", "2", c.away],
+    ["home", "1"],
+    ["draw", "X"],
+    ["away", "2"],
   ] as const;
   return (
-    <div className="flex min-w-0 flex-1 gap-1" aria-label="Crowd odds">
-      {items.map(([k, label, count]) => {
-        const pct = Math.round((count * 100) / total);
-        const bonus = v2 ? crowdBonus(count, total) : 0;
+    <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Result">
+      {items.map(([k, label]) => {
+        const count = c ? c[k] : 0;
+        const pct = c && total ? `${Math.round((count * 100) / total)}%` : "–";
+        const bonus = v2 && c ? crowdBonus(count, total) : 0;
         const mine = pick === k;
         return (
-          <div
+          <button
             key={k}
-            className={`flex h-8 min-w-0 flex-1 items-center justify-between gap-1 rounded-lg px-2 text-[12px] tabular-nums ${mine ? "bg-ink text-white" : "bg-subtle text-ink-2"}`}
-            title={`${count} of ${total} players`}
+            type="button"
+            disabled={disabled}
+            aria-pressed={mine}
+            onClick={() => onPick(k)}
+            title={c ? `${count} of ${total} players` : "Crowd odds appear once 5 players have sealed"}
+            className={`flex h-10 min-w-0 items-center justify-between gap-1 rounded-lg px-2.5 text-[13px] tabular-nums transition-colors disabled:cursor-default ${
+              mine ? "bg-ink text-white" : "bg-subtle text-ink hover:bg-line disabled:hover:bg-subtle"
+            }`}
           >
-            <span className="font-mono">{label}</span>
-            <span>{pct}%</span>
+            <span className={`font-mono text-[12px] ${mine ? "text-white/60" : "text-muted"}`}>{label}</span>
+            <span className="font-medium">{pct}</span>
             {bonus ? <span className={`font-mono text-[10px] ${mine ? "text-accent" : "text-accent-deep"}`}>+{bonus}</span> : null}
-          </div>
+          </button>
         );
       })}
     </div>

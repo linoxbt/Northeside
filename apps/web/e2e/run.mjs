@@ -222,6 +222,10 @@ async function playerSeals(browser, keyIndex, name, picks) {
     for (let k = 0; k <= goals; k++) await page.getByRole("button", { name: `${label}: one more` }).click();
   }
   await page.screenshot({ path: join(OUT, `${name}-picks.png`), fullPage: true });
+  // The matchweek dashboard on a desktop screen too (slip panel beside the board).
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.screenshot({ path: join(OUT, `${name}-picks-desktop.png`), fullPage: true });
+  await page.setViewportSize({ width: 412, height: 915 });
   await page.getByRole("button", { name: "Seal predictions" }).click();
   await page.getByText(/Sealed · v1/).waitFor({ timeout: 60_000 });
   if (name === "Ada") {
