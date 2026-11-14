@@ -31,6 +31,10 @@ abstract contract Base {
         }
     }
 
+    function assertGe(uint256 a, uint256 b, string memory what) internal pure {
+        if (a < b) revert(string.concat(what, ": ", vm.toString(a), " < ", vm.toString(b)));
+    }
+
     function assertLe(uint256 a, uint256 b, string memory what) internal pure {
         if (a > b) revert(string.concat(what, ": ", vm.toString(a), " > ", vm.toString(b)));
     }

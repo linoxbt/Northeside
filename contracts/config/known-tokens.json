@@ -1,0 +1,4 @@
+{
+  "comment": "Token addresses the deploy script refuses to deviate from, per chain id. QUSDC on QIE mainnet verified 2026-11-12 (symbol QUSDC, 6 decimals).",
+  "1990": { "QUSDC": "0x3F43DA82eC9A4f5285F10FaF1F26EcA7319E5DA5" }
+}

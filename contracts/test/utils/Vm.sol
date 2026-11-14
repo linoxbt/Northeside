@@ -40,6 +40,12 @@ interface Vm {
     function writeJson(string calldata json, string calldata path) external;
     function createDir(string calldata path, bool recursive) external;
     function chainId(uint256 newChainId) external;
+    function setEnv(string calldata name, string calldata value) external;
+    function readFile(string calldata path) external view returns (string memory data);
+    function parseJsonAddress(string calldata json, string calldata key) external pure returns (address);
+    function keyExistsJson(string calldata json, string calldata key) external view returns (bool);
+    function parseJsonBytes32(string calldata json, string calldata key) external pure returns (bytes32);
+    function parseJsonUint(string calldata json, string calldata key) external pure returns (uint256);
 }
 
 address constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));

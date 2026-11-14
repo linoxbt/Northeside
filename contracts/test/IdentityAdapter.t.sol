@@ -189,4 +189,52 @@ contract IdentityAdapterTest is Base {
         vm.prank(w1);
         id.invalidateNonce(w1);
     }
+
+    /// @dev Shared EIP-712 vector (G11): the TypeScript signer (packages/core attestationTypedData)
+    ///      and this contract hash the same attestation to the same digest.
+    function test_golden_attestationDigest() public {
+        string memory json = vm.readFile("./test/fixtures/golden-vectors.json");
+        address verifying = vm.parseJsonAddress(json, ".identityAttestation.verifyingContract");
+        address wallet = vm.parseJsonAddress(json, ".identityAttestation.wallet");
+        bytes32 person = vm.parseJsonBytes32(json, ".identityAttestation.personHash");
+        uint256 nonce = vm.parseJsonUint(json, ".identityAttestation.nonce");
+        uint64 deadline = uint64(vm.parseJsonUint(json, ".identityAttestation.deadline"));
+        uint256 chain = vm.parseJsonUint(json, ".identityAttestation.chainId");
+
+        bytes32 structHash = keccak256(abi.encode(id.ATTESTATION_TYPEHASH(), wallet, person, nonce, deadline));
+        assertEq(structHash, vm.parseJsonBytes32(json, ".identityAttestation.structHash"), "struct hash");
+        bytes32 domain = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256("Northeside Identity"),
+                keccak256("1"),
+                chain,
+                verifying
+            )
+        );
+        assertEq(
+            keccak256(abi.encodePacked("\x19\x01", domain, structHash)),
+            vm.parseJsonBytes32(json, ".identityAttestation.digest"),
+            "digest matches TypeScript"
+        );
+        // and the contract's own digest uses exactly this formula for its own address and chain
+        bytes32 own = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256("Northeside Identity"),
+                keccak256("1"),
+                block.chainid,
+                address(id)
+            )
+        );
+        assertEq(
+            id.attestationDigest(wallet, person, nonce, deadline),
+            keccak256(abi.encodePacked("\x19\x01", own, structHash)),
+            "contract formula"
+        );
+    }
 }

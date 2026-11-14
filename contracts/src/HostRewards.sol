@@ -17,8 +17,10 @@ import {INorthesideMatchweeks} from "./interfaces/INorthesideMatchweeks.sol";
 ///      a host claim with a valid proof against a posted root, or a refund to the campaign's refund
 ///      recipient. Trust model, stated plainly: the OPERATOR role decides who is in a root, so a
 ///      compromised operator key could post a root paying itself up to the remaining budget of each
-///      active campaign. Mitigations: the CLAIM_DELAY review window (pause or replace a bad root
-///      before anyone can claim), the admin can revoke the role, and launch caps bound exposure.
+///      active campaign. Mitigations: the CLAIM_DELAY review window (during which the admin can
+///      voidRoot, or the operator replaceRoot, any bad root, even after expiry), only the admin can
+///      unpause (a leaked pauser or operator key cannot undo an emergency pause), the admin can
+///      revoke roles, and launch caps bound exposure.
 ///
 ///      Accounting per campaign:  budget = gross - fee;  claimed <= allocated <= budget.
 ///      Over all campaigns: token.balanceOf(this) >= sum(budget - claimed - refunded); equality
@@ -109,6 +111,9 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         bytes32 root,
         uint128 total,
         string reportURI
+    );
+    event RootVoided(
+        uint256 indexed id, uint32 indexed matchweekId, bytes32 oldRoot, uint128 releasedAllocation
     );
     event Claimed(
         uint256 indexed id,
@@ -264,13 +269,12 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         string calldata reportURI
     ) external onlyRole(OPERATOR_ROLE) {
         Campaign storage c = _campaigns[id];
-        _checkRootTarget(id, c, matchweekId);
+        // Unlike postRoot this also works after expiry, until the claim deadline: a root posted just
+        // before expiry must still be correctable during its review delay.
+        _checkCorrectable(id, c, matchweekId);
+        if (root == bytes32(0) || total == 0 || bytes(reportURI).length == 0) revert InvalidParams();
         bytes32 oldRoot = rootOf[id][matchweekId];
-        if (oldRoot == bytes32(0)) revert NoRoot(id, matchweekId);
-        if (claimedFor[id][matchweekId] != 0) revert AlreadyClaimedFrom(id, matchweekId);
-        if (root == bytes32(0) || root == oldRoot || total == 0 || bytes(reportURI).length == 0) {
-            revert InvalidParams();
-        }
+        if (root == oldRoot) revert InvalidParams();
         uint256 allocated = uint256(c.allocated) - allocatedFor[id][matchweekId] + total;
         if (allocated > c.budget) revert OverBudget();
 
@@ -280,6 +284,21 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         c.allocated = uint128(allocated);
 
         emit RootReplaced(id, matchweekId, oldRoot, root, total, reportURI);
+    }
+
+    /// @notice Admin backstop for a bad root nobody has claimed from yet: removes it and releases its
+    ///         allocation (refundable to the sponsor; before expiry the operator may post a new one).
+    ///         Works after expiry until the claim deadline, while paused or not.
+    function voidRoot(uint256 id, uint32 matchweekId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Campaign storage c = _campaigns[id];
+        _checkCorrectable(id, c, matchweekId);
+        bytes32 oldRoot = rootOf[id][matchweekId];
+        uint128 released = allocatedFor[id][matchweekId];
+        delete rootOf[id][matchweekId];
+        delete rootPostedAt[id][matchweekId];
+        delete allocatedFor[id][matchweekId];
+        c.allocated -= released;
+        emit RootVoided(id, matchweekId, oldRoot, released);
     }
 
     /// @notice Pay a host their share for one matchweek. Anyone may submit; funds always go to `host`.
@@ -322,8 +341,9 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     /// @notice Return money to the sponsor's refund recipient. Anyone may trigger it.
     ///         From expiry: the unallocated budget. From claimDeadline: everything left, and the
     ///         campaign closes.
-    /// @dev Not pausable, so a pauser cannot trap sponsor funds. A pause cannot make hosts lose their
-    ///      allocation either: time paused after funding pushes claimDeadline back.
+    /// @dev Not pausable: the unallocated budget can always be refunded from expiry. While paused,
+    ///      claimDeadline moves with time, so the final sweep of allocated-but-unclaimed money waits
+    ///      until the admin unpauses; in exchange a pause can never make hosts lose their allocation.
     function refund(uint256 id) external nonReentrant returns (uint128 amount) {
         Campaign storage c = _campaigns[id];
         if (c.status != CampaignStatus.Active) revert WrongStatus(id, c.status);
@@ -376,7 +396,8 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         pausedAt = uint64(block.timestamp);
     }
 
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    /// @notice Admin only, so a leaked pauser or operator key cannot undo an emergency pause.
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
         pausedTotal += uint64(block.timestamp) - pausedAt;
         pausedAt = 0;
@@ -414,6 +435,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     function _budgetOf(uint128 grossAmount, uint16 feeBps) private pure returns (uint128) {
         uint128 fee = uint128((uint256(grossAmount) * feeBps) / BPS);
         return grossAmount - fee;
+    }
+
+    /// @dev A posted root that nobody has claimed from, in a live campaign, before the claim deadline.
+    function _checkCorrectable(uint256 id, Campaign storage c, uint32 matchweekId) private view {
+        if (c.status != CampaignStatus.Active) revert WrongStatus(id, c.status);
+        if (block.timestamp >= claimDeadline(id)) revert ClaimPeriodOver(id);
+        if (rootOf[id][matchweekId] == bytes32(0)) revert NoRoot(id, matchweekId);
+        if (claimedFor[id][matchweekId] != 0) revert AlreadyClaimedFrom(id, matchweekId);
     }
 
     function _checkRootTarget(uint256 id, Campaign storage c, uint32 matchweekId) private view {
