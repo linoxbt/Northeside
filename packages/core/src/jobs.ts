@@ -287,6 +287,30 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   /** Apply pending database migrations (run on demand after a deploy that adds one). */
   migrate: async () => applyMigrations(getCtx().db),
 
+  /**
+   * Every 6 hours: ask API-Football (used only for results) for the next matchweek, so a bad key or
+   * a plan that does not cover the season shows up days before results are due, not after.
+   */
+  "check-providers": async () => {
+    const ctx = getCtx();
+    if (!ctx.football) return { skipped: "football data providers not configured" };
+    const football = ctx.football;
+    const [mw] = await ctx.db
+      .select({ id: schema.matchweeks.id })
+      .from(schema.matchweeks)
+      .where(inArray(schema.matchweeks.status, ["draft", "open", "locked"]))
+      .orderBy(asc(schema.matchweeks.id))
+      .limit(1);
+    if (!mw) return { skipped: "no upcoming matchweek" };
+    return runJob(ctx, "check-providers", `${mw.id}:${sixHourKey()}`, async () => {
+      const games = await football.secondary.results(mw.id, ctx.season);
+      if (games.length === 0) {
+        throw new Error(`API-Football returned no games for matchday ${mw.id}, season ${ctx.season}: the key's plan may not cover this season`);
+      }
+      return { matchweek: mw.id, apiFootballGames: games.length };
+    });
+  },
+
   "drip-health": async () => {
     const ctx = getCtx();
     if (!ctx.drip) return { skipped: "drip not configured" };

@@ -199,6 +199,7 @@ scheduled function `cron-ops`. Each start makes one pass of every job (about 15 
 | `fetch-results` | compares both football providers after the last game in the matchweek window (at most every 15 min per matchweek, to save API quota); alerts on conflicts, and every 6 h while games are still missing 12 h after the last kickoff |
 | `notify` | lock reminders and results notices with rank change |
 | `drip-health` | drip balance alert at one day of cap; frees dropped drips |
+| `check-providers` | every 6 h: asks API-Football for the next matchweek, so a bad key or a plan that does not cover the season fails (and alerts) days before results are due |
 | `open-matchweeks` | creates each imported matchweek on-chain once its lock is within `OPEN_DAYS_BEFORE_LOCK` days (default 6) |
 | `publish-results` | when both providers agree (fresh check) and the chain allows it (last kickoff + `RESULTS_BUFFER_SECONDS`, default 3 h): closes reveals, scores, and proposes the results, reveals and scores roots |
 | `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks (also for a matchweek finalized by hand or first seen by the indexer) |
