@@ -247,6 +247,22 @@ export async function postRewardRoot(ctx: CoreContext, campaignId: number, match
       await ctx.alert(msg);
       throw new Error(msg);
     }
+    // The chain shows no root. If ours had landed, the admin voided it (final review M-3): posting
+    // it again would make the bad root claimable. Only a post that never landed is resent.
+    const landed =
+      stored.status !== "pending" ||
+      (stored.txHash !== null &&
+        (await ctx.publicClient.getTransactionReceipt({ hash: stored.txHash as Hex }).then((r) => r.status === "success", () => false)));
+    if (landed) {
+      if (stored.status !== "voided") {
+        await ctx.db
+          .update(schema.rewardRoots)
+          .set({ status: "voided" })
+          .where(and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId)));
+        await ctx.alert(`campaign ${campaignId} matchweek ${matchweekId}: root ${stored.root} was voided on-chain; not re-posting. After review: pnpm cli reset-reward-root ${campaignId} ${matchweekId}`);
+      }
+      return { skipped: "root was voided on-chain", root: stored.root };
+    }
     checkPostWindow(c.terms.expiry, ctx.now(), campaignId);
     return sendRoot(ctx, operator, campaignId, matchweekId, stored.root as Hex, BigInt(stored.total), stored.reportUri);
   }
@@ -364,6 +380,31 @@ async function sendRoot(ctx: CoreContext, operator: NonNullable<CoreContext["ope
     .where(and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId)));
   await audit(ctx, "operator", "post-reward-root", { campaignId, matchweekId, root, total }, tx);
   return { campaignId, matchweekId, root, total, txHash: tx };
+}
+
+/**
+ * After an admin voided a root (and the cause is fixed), forget the stored tree so the next
+ * post-reward-root computes and posts a fresh one. Refuses unless the chain really shows no root.
+ */
+export async function resetVoidedRewardRoot(ctx: CoreContext, campaignId: number, matchweekId: number) {
+  const where = and(eq(schema.rewardRoots.campaignId, campaignId), eq(schema.rewardRoots.matchweekId, matchweekId));
+  const [stored] = await ctx.db.select().from(schema.rewardRoots).where(where);
+  if (!stored) throw new Error(`no stored root for campaign ${campaignId} matchweek ${matchweekId}`);
+  if (stored.status !== "voided") throw new Error(`root is ${stored.status}, not voided; nothing to reset`);
+  const onChainRoot = await ctx.publicClient.readContract({
+    address: ctx.deployment.hostRewards,
+    abi: hostRewardsAbi,
+    functionName: "rootOf",
+    args: [BigInt(campaignId), matchweekId],
+  });
+  if (BigInt(onChainRoot) !== 0n) throw new Error(`a root is on-chain (${onChainRoot}); refusing to reset`);
+  await ctx.db.transaction(async (tx) => {
+    await tx.delete(schema.rewardLeaves).where(and(eq(schema.rewardLeaves.campaignId, campaignId), eq(schema.rewardLeaves.matchweekId, matchweekId)));
+    await tx.delete(schema.countablePlayers).where(and(eq(schema.countablePlayers.campaignId, campaignId), eq(schema.countablePlayers.matchweekId, matchweekId)));
+    await tx.delete(schema.rewardRoots).where(where);
+  });
+  await audit(ctx, "operator", "reset-voided-reward-root", { campaignId, matchweekId, root: stored.root });
+  return { campaignId, matchweekId, forgot: stored.root };
 }
 
 /** Post roots for every active campaign that covers this matchweek. */

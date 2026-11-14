@@ -7,6 +7,7 @@ import { HttpError, idempotent, json, limitWrites, requireSession, route } from 
 import { getCtx } from "@/lib/server/ctx";
 import { requireAdult } from "@/lib/server/services/accounts";
 import { checkPayload, encryptPayload, getMatchweekRow, onChainCommitment } from "@/lib/server/services/predictions";
+import { payloadWindowOpen } from "@/lib/payload-window";
 
 /** Matchweek states in which a payload can still be stored and revealed. */
 const REVEALABLE = new Set(["open", "locked", "challenged"]);
@@ -38,6 +39,9 @@ export const POST = route(async (req) => {
     // arrives later can no longer count, and accepting it would change the reveals the chain holds.
     if (!REVEALABLE.has(mw.status)) {
       throw new HttpError(409, "reveals_closed", "Results for this matchweek are already proposed; this seal can no longer be added");
+    }
+    if (!payloadWindowOpen(mw.lockTime)) {
+      throw new HttpError(409, "reveals_closed", "Seals had to reach Northeside within 10 minutes of the first kickoff");
     }
 
     // Wait briefly for the commit to land; the indexer confirms it later if it is slow.

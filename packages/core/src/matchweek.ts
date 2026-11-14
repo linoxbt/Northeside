@@ -11,7 +11,7 @@ import {
   type FixtureLeaf,
 } from "@northeside/merkle";
 import { RULES_V1_HASH, rank, scorePicks, type FixtureResult } from "@northeside/scoring";
-import { and, asc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext } from "./context";
 import { audit, confirm } from "./ops";
@@ -578,7 +578,8 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
         revealsTree: toJson(revealsTree.dump()),
         scoresRoot: scoresTree.root,
         scoresTree: toJson(scoresTree.dump()),
-        finalizedAt: ctx.now(),
+        // Keep the time the indexer recorded from the Finalized event, if it got there first.
+        finalizedAt: sql`coalesce(${schema.matchweeks.finalizedAt}, ${ctx.now().toISOString()}::timestamptz)`,
         ...(txHash ? { finalizeTx: txHash } : {}),
       })
       .where(eq(schema.matchweeks.id, id));
