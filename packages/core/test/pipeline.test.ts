@@ -25,11 +25,17 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
+import { rulesVersion } from "@northeside/scoring";
 import { FieldCrypto, schema, type Database } from "@northeside/db";
 import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from "@northeside/football";
 import {
   createCampaign,
   createJobs,
+  createChallenge,
+  acceptChallenge,
+  challengeView,
+  crowdView,
+  liveView,
   DripRefused,
   requestDrip,
   finalizeAndScore,
@@ -224,12 +230,14 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
   }
 
   /** What the browser does on "Seal": build payload, send commit() from the player's wallet, store. */
-  async function seal(key: Hex, userId: string, mwId: number, home: number[], away: number[]) {
+  async function seal(key: Hex, userId: string, mwId: number, home: number[], away: number[], banker?: number) {
     const [mw] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, mwId));
     const player = acct(key).address;
     const payload = buildSealedPayload(
       { chainId: 31337, matchweeks: ctx.deployment.matchweeks, player, matchweekId: mwId, fixturesRoot: mw!.fixturesRoot as Hex },
       { home, away },
+      undefined,
+      { version: rulesVersion(mw!.scoringRulesHash), ...(banker !== undefined ? { banker } : {}) },
     );
     const tx = await wallet(key).writeContract({
       address: ctx.deployment.matchweeks,
@@ -263,6 +271,8 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     const payload = buildSealedPayload(
       { chainId: 31337, matchweeks: ctx.deployment.matchweeks, player, matchweekId: mwId, fixturesRoot: mw!.fixturesRoot as Hex },
       { home, away },
+      undefined,
+      { version: rulesVersion(mw!.scoringRulesHash) },
     );
     const tx = await wallet(key).writeContract({ address: ctx.deployment.matchweeks, abi: matchweeksAbi, functionName: "commit", args: [mwId, payload.commitment] });
     await pub.waitForTransactionReceipt({ hash: tx });
@@ -288,10 +298,10 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     "runs two matchweeks, scores them and pays a host",
     async () => {
       // fund player and host wallets with gas (anvil dev accounts already have ETH)
-      const hostUser = await signUp(KEYS.host, "Lino", null);
+      const hostUser = await signUp(KEYS.host, "Host", null);
       const [league] = await ctx.db
         .insert(schema.leagues)
-        .values({ slug: "lino", name: "Lino's League", hostUserId: hostUser.id, hostWallet: acct(KEYS.host).address.toLowerCase() })
+        .values({ slug: "northfc", name: "North FC League", hostUserId: hostUser.id, hostWallet: acct(KEYS.host).address.toLowerCase() })
         .returning();
       const u1 = await signUp(KEYS.p1, "Ada", league!.id);
       const u2 = await signUp(KEYS.p2, "Bo", league!.id);
@@ -310,8 +320,8 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(await createMatchweekOnChain(ctx, 11)).toMatchObject({ txHash: null }); // idempotent
 
       await seal(KEYS.p1, u1.id, 11, [0, 0, 0], [0, 0, 0]); // first seal, then re-seal:
-      await seal(KEYS.p1, u1.id, 11, [2, 1, 1], [1, 1, 0]);
-      await seal(KEYS.p2, u2.id, 11, [1, 0, 2], [0, 2, 2]);
+      await seal(KEYS.p1, u1.id, 11, [2, 1, 1], [1, 1, 0], 0); // Banker on game 0
+      await seal(KEYS.p2, u2.id, 11, [1, 0, 2], [0, 2, 2], 1); // Banker on game 1
       await seal(KEYS.p3, u3.id, 11, [3, 3, 3], [0, 0, 0]);
 
       await mine();
@@ -321,6 +331,18 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
         .from(schema.predictions)
         .where(and(eq(schema.predictions.wallet, acct(KEYS.p1).address.toLowerCase()), eq(schema.predictions.matchweekId, 11)));
       expect(p1row).toMatchObject({ txStatus: "confirmed", version: 2 });
+      // Crowd odds before lock stay hidden until enough wallets have sealed (no single pick shows).
+      expect(await crowdView(ctx, 11)).toMatchObject({ players: 3, shown: false, fixtures: [] });
+      expect(await liveView(ctx, 11, { userId: u2.id })).toMatchObject({ started: false });
+      // Head-to-head: Bo challenges Ada before lock. Picks stay hidden until lock.
+      const ch = await createChallenge(ctx, u2.id, 11);
+      expect(ch.code).toMatch(/^[a-z2-9]{10}$/);
+      await expect(acceptChallenge(ctx, ch.code, u2.id)).rejects.toThrow(/your own challenge/);
+      expect(await acceptChallenge(ctx, ch.code, u1.id)).toEqual({ code: ch.code, accepted: true });
+      expect(await acceptChallenge(ctx, ch.code, u1.id)).toEqual({ code: ch.code, accepted: true }); // idempotent
+      await expect(acceptChallenge(ctx, ch.code, u3.id)).rejects.toThrow(/already accepted/);
+      const h2hBefore = await challengeView(ctx, ch.code, u3.id);
+      expect(h2hBefore).toMatchObject({ locked: false, viewer: "guest", challenger: { name: "Bo", sealed: true, picks: null }, opponent: { name: "Ada", sealed: true, picks: null } });
 
       await expect(revealMatchweek(ctx, 11)).rejects.toThrow(/not locked/);
       await advance(3 * 24 * 3600 + 30 * 3600);
@@ -340,12 +362,33 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(fin.players).toBe(3);
 
       const board = await leaderboard(ctx, { matchweekId: 11 });
-      // p1: 2-1 exact (5) + 1-1 vs 0-2 wrong (0) + void (0) = 5; p2: 1-0 outcome (2) + 0-2 exact (5) = 7; p3: 3-0 outcome (2) = 2
+      // Rules v2. Game 0 (2-1): all 3 called a home win, no bonus. Game 1 (0-2): 1 of 3 called the
+      // away win, +1 (1*2 <= 3). Game 2 void.
+      // p1: 2-1 exact 5, Banker x2 = 10; 1-1 wrong 0 => 10. p2: 1-0 result 2; 0-2 exact 5 +1 = 6,
+      // Banker x2 = 12 => 14. p3: 3-0 result 2; wrong => 2.
       expect(board.map((r) => [r.name, r.points, r.rank])).toEqual([
-        ["Bo", 7, 1],
-        ["Ada", 5, 2],
+        ["Bo", 14, 1],
+        ["Ada", 10, 2],
         ["Cy", 2, 3],
       ]);
+      // After lock the crowd is the revealed set: game 1 split 1 home / 1 draw / 1 away.
+      const crowd11 = await crowdView(ctx, 11);
+      expect(crowd11).toMatchObject({ players: 3, shown: true, source: "revealed" });
+      expect(crowd11!.fixtures[1]).toEqual({ index: 1, home: 1, draw: 1, away: 1 });
+      // The live view agrees with the final scores, with Bo's Banker breakdown.
+      const live11 = await liveView(ctx, 11, { userId: u2.id });
+      expect(live11).toMatchObject({ started: true, provisional: false, rules: 2, players: 3, me: { rank: 1, points: 14, exactScores: 1 } });
+      expect(live11!.me!.fixtures[1]).toEqual({ index: 1, points: 12, bonus: 1, exact: true, banker: true });
+      expect(live11!.table.map((r) => [r.name, r.points, r.me])).toEqual([["Bo", 14, true], ["Ada", 10, false], ["Cy", 2, false]]);
+      expect(live11!.fixtures.map((f) => f.state)).toEqual(["ft", "ft", "void"]);
+
+      // Head-to-head after the final whistle: Bo 14 v Ada 10, picks and Bankers shown.
+      const h2h = await challengeView(ctx, ch.code, u1.id);
+      expect(h2h).toMatchObject({ locked: true, final: true, viewer: "opponent", challenger: { name: "Bo", points: 14 }, opponent: { name: "Ada", points: 10 } });
+      expect(h2h!.challenger.picks).toEqual({ home: [1, 0, 2], away: [0, 2, 2], banker: 1 });
+      expect(h2h!.opponent!.fixtures[0]).toMatchObject({ points: 10, banker: true });
+      await expect(createChallenge(ctx, u1.id, 11)).rejects.toThrow(/not open|locked/);
+
       // A second wallet of the same person sealing later (with a better score) does not count twice (audit B9).
       await ctx.db.insert(schema.predictions).values({
         userId: u3.id,
@@ -359,8 +402,8 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
         exactScores: 9,
       });
       expect((await leaderboard(ctx, { matchweekId: 11 })).map((r) => [r.name, r.points])).toEqual([
-        ["Bo", 7],
-        ["Ada", 5],
+        ["Bo", 14],
+        ["Ada", 10],
         ["Cy", 2],
       ]);
       const onChain = await pub.readContract({ address: ctx.deployment.matchweeks, abi: matchweeksAbi, functionName: "matchweek", args: [11] });
@@ -377,7 +420,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
         firstMatchweek: 11,
         lastMatchweek: 12,
         expiry: new Date(clock.getTime() + 30 * 24 * 3600_000),
-        leagues: ["lino"],
+        leagues: ["northfc"],
         termsHash: `0x${"ab".repeat(32)}`,
         externalSponsor: true,
       });

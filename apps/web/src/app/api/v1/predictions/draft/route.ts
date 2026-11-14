@@ -5,7 +5,7 @@ import { getCtx } from "@/lib/server/ctx";
 import { getMatchweekRow } from "@/lib/server/services/predictions";
 
 const goal = z.number().int().min(0).max(9).nullable();
-const body = z.object({ matchweekId: z.number().int(), home: z.array(goal).max(32), away: z.array(goal).max(32) });
+const body = z.object({ matchweekId: z.number().int(), home: z.array(goal).max(32), away: z.array(goal).max(32), banker: z.number().int().min(0).max(31).nullable().optional() });
 
 /** POST /api/v1/predictions/draft: autosave picks before sealing (FR-10). */
 export const POST = route(async (req) => {
@@ -14,7 +14,7 @@ export const POST = route(async (req) => {
   const input = body.parse(await req.json());
   const mw = await getMatchweekRow(input.matchweekId);
   if (mw.status !== "open" || new Date() >= mw.lockTime) throw new HttpError(409, "locked", "This matchweek is locked");
-  const draft = { home: input.home, away: input.away };
+  const draft = { home: input.home, away: input.away, ...(input.banker != null ? { banker: input.banker } : {}) };
   await getCtx()
     .db.insert(schema.predictions)
     .values({ userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id, draft })

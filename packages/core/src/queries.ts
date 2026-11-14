@@ -46,7 +46,7 @@ export interface BoardRow {
   wallet: string;
 }
 
-function displayName(u: { displayName: string | null; qieId: string | null }, wallet: string) {
+export function displayName(u: { displayName: string | null; qieId: string | null }, wallet: string) {
   return u.qieId ?? u.displayName ?? `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
 }
 

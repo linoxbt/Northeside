@@ -8,6 +8,8 @@ import {
   predictionsHash,
   validatePicks,
   verifyPayload,
+  predictionsHashV2,
+  NO_BANKER,
 } from "../src";
 
 const golden = JSON.parse(
@@ -92,5 +94,36 @@ describe("salts and picks", () => {
     expect(() => validatePicks({ home: [1, 10], away: [0, 0] }, 2)).toThrow();
     expect(() => validatePicks({ home: [1, -1], away: [0, 0] }, 2)).toThrow();
     expect(() => validatePicks({ home: [1, 1.5], away: [0, 0] }, 2)).toThrow();
+  });
+});
+
+const goldenV2 = JSON.parse(
+  readFileSync(new URL("../../../contracts/test/fixtures/golden-vectors.json", import.meta.url), "utf8"),
+).commitmentV2 as { banker: number; predictionsHash: Hex; commitment: Hex; noBanker: { banker: number; predictionsHash: Hex; commitment: Hex } };
+
+describe("payload v2: Banker sealed with the picks (golden vectors shared with forge)", () => {
+  it("predictionsHashV2 and the commitment match Solidity", () => {
+    expect(predictionsHashV2(golden, goldenV2.banker)).toBe(goldenV2.predictionsHash);
+    expect(computeCommitment(ctx, goldenV2.predictionsHash, golden.salt)).toBe(goldenV2.commitment);
+    expect(predictionsHashV2(golden, NO_BANKER)).toBe(goldenV2.noBanker.predictionsHash);
+  });
+
+  it("buildSealedPayload v2 reproduces the golden commitment and verifies", () => {
+    const p = buildSealedPayload(ctx, golden, golden.salt, { version: 2, banker: 3 });
+    expect(p).toMatchObject({ v: 2, banker: 3, commitment: goldenV2.commitment });
+    expect(verifyPayload(p, goldenV2.commitment)).toEqual({ ok: true });
+    const none = buildSealedPayload(ctx, golden, golden.salt, { version: 2 });
+    expect(none).toMatchObject({ banker: NO_BANKER, commitment: goldenV2.noBanker.commitment });
+  });
+
+  it("a moved Banker no longer matches the sealed commitment", () => {
+    const p = buildSealedPayload(ctx, golden, golden.salt, { version: 2, banker: 3 });
+    expect(verifyPayload({ ...p, banker: 4 }, goldenV2.commitment).ok).toBe(false);
+    expect(verifyPayload({ ...p, v: 1, banker: undefined }, goldenV2.commitment).ok).toBe(false);
+  });
+
+  it("rejects a Banker outside the fixtures and a Banker on v1", () => {
+    expect(() => buildSealedPayload(ctx, golden, golden.salt, { version: 2, banker: 10 })).toThrow();
+    expect(() => buildSealedPayload(ctx, golden, golden.salt, { banker: 1 })).toThrow();
   });
 });

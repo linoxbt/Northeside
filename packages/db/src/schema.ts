@@ -369,6 +369,28 @@ export const chainEvents = pgTable(
   ],
 );
 
+/**
+ * Head-to-head: a player challenges a friend for one matchweek with a share link. Picks stay
+ * sealed until lock; then both sides are shown with live and final points.
+ */
+export const h2hChallenges = pgTable(
+  "h2h_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull().unique(),
+    matchweekId: integer("matchweek_id")
+      .notNull()
+      .references(() => matchweeks.id),
+    challengerUserId: uuid("challenger_user_id")
+      .notNull()
+      .references(() => users.id),
+    opponentUserId: uuid("opponent_user_id").references(() => users.id),
+    createdAt: createdAt(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  },
+  (t) => [index("h2h_challenger_idx").on(t.challengerUserId), index("h2h_opponent_idx").on(t.opponentUserId)],
+);
+
 /** Runtime switches the operator can flip without a redeploy (e.g. automation_paused). */
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),

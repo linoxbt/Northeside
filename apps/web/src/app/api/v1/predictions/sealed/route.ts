@@ -59,7 +59,7 @@ export const POST = route(async (req) => {
 
     const enc = encryptPayload(payload);
     const base = { userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id };
-    const draft = { home: payload.home, away: payload.away };
+    const draft = { home: payload.home, away: payload.away, ...(payload.banker !== undefined && payload.banker !== 255 ? { banker: payload.banker } : {}) };
     if (confirmed) {
       const values = {
         payloadEnc: enc,

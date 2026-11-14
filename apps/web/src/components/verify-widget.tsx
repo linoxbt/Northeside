@@ -1,6 +1,6 @@
 "use client";
 
-import { computeCommitment, predictionsHash, sealedPayloadSchema } from "@northeside/commitments";
+import { computeCommitment, payloadPredictionsHash, sealedPayloadSchema } from "@northeside/commitments";
 import { useState } from "react";
 import { encodeFunctionData, getAddress, type Address } from "viem";
 import { Button } from "./ui";
@@ -46,7 +46,7 @@ export function VerifyWidget({ onChain, rpcUrl, contract }: { onChain: Record<st
     setBusy(true);
     try {
       const p = sealedPayloadSchema.parse(JSON.parse(text));
-      const ph = predictionsHash(p);
+      const ph = payloadPredictionsHash(p);
       const c = computeCommitment(p, ph, p.salt);
       let stored: string | undefined;
       let source = "QIE chain (eth_call)";

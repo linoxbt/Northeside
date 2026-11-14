@@ -425,7 +425,8 @@ async function main() {
   const rows = await page.locator("tbody tr").allInnerTexts();
   log("leaderboard", rows);
   // Ada: 2-1 exact (5) + 1-1 vs 0-2 wrong (0) + void = 5. Bo: 1-0 outcome (2) + 0-2 exact (5) = 7.
-  check(rows[0]?.includes("Bo") && rows[0]?.includes("7"), "Bo leads with 7 points");
+  // Rules v2: game 1 (0-2) was called by 1 of 2 players, so Bo's exact 0-2 earns +1: 2 + 5 + 1 = 8.
+  check(rows[0]?.includes("Bo") && rows[0]?.includes("8"), "Bo leads with 8 points (beat-the-crowd bonus)");
   check(rows[1]?.includes("Ada") && rows[1]?.includes("5"), "Ada second with 5 points");
   await page.screenshot({ path: join(OUT, "leaderboard.png"), fullPage: true });
 

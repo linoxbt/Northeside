@@ -1,6 +1,9 @@
+import { RULES_V2, rulesVersion } from "@northeside/scoring";
 import "server-only";
 import { currentMatchweek, matchweekWithFixtures } from "@northeside/core";
 import { getCtx } from "../ctx";
+
+const CURRENT_RULES_VERSION = RULES_V2.version;
 
 export function publicMatchweek(data: NonNullable<Awaited<ReturnType<typeof matchweekWithFixtures>>>) {
   const { matchweek: mw, fixtures } = data;
@@ -12,6 +15,8 @@ export function publicMatchweek(data: NonNullable<Awaited<ReturnType<typeof matc
     lockTime: mw.lockTime.toISOString(),
     locked: ctx.now() >= mw.lockTime,
     fixturesRoot: mw.fixturesRoot,
+    /** Scoring rules version (2 = Banker and beat-the-crowd bonus). */
+    rules: mw.scoringRulesHash ? rulesVersion(mw.scoringRulesHash) : CURRENT_RULES_VERSION,
     createTx: mw.createTx,
     resultsRoot: mw.resultsRoot,
     disputeEnds: mw.disputeEnds?.toISOString() ?? null,

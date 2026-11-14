@@ -87,14 +87,14 @@ describe("schema", () => {
 
   it("league slugs are unique case-insensitively", async () => {
     const h = await user("host");
-    await db.insert(schema.leagues).values({ slug: "lino", name: "Lino", hostUserId: h.id, hostWallet: "0x1" });
+    await db.insert(schema.leagues).values({ slug: "northfc", name: "North FC", hostUserId: h.id, hostWallet: "0x1" });
     await expect(
-      db.insert(schema.leagues).values({ slug: "LINO", name: "Other", hostUserId: h.id, hostWallet: "0x1" }),
+      db.insert(schema.leagues).values({ slug: "NORTHFC", name: "Other", hostUserId: h.id, hostWallet: "0x1" }),
     ).rejects.toThrow();
   });
 
   it("counts a person once per matchweek per campaign", async () => {
-    const row = { campaignId: 1, matchweekId: 12, personHash: "0xp", host: "0xh", leagueSlug: "lino" };
+    const row = { campaignId: 1, matchweekId: 12, personHash: "0xp", host: "0xh", leagueSlug: "northfc" };
     await db.insert(schema.countablePlayers).values(row);
     await expect(db.insert(schema.countablePlayers).values({ ...row, host: "0xother" })).rejects.toThrow();
   });

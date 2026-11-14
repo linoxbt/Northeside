@@ -29,6 +29,8 @@ export function SealBarWithWallet(props: SealBarProps) {
 function SealBar(props: {
   mwId: number;
   fixturesRoot: Hex;
+  /** Scoring rules version of the matchweek: 2 seals the Banker with the picks. */
+  version: 1 | 2;
   picks: Picks;
   complete: boolean;
   picked: number;
@@ -129,6 +131,8 @@ function SealBar(props: {
       const payload = buildSealedPayload(
         { chainId: chain.id, matchweeks: publicEnv.matchweeks, player: wallet, matchweekId: props.mwId, fixturesRoot: props.fixturesRoot },
         { home: props.picks.home as number[], away: props.picks.away as number[] },
+        undefined,
+        props.version === 2 ? { version: 2, banker: props.picks.banker ?? 255 } : {},
       );
       // Kept in the pending slot: the previous, valid backup stays untouched until this one succeeds.
       localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, synced: false } satisfies LocalSeal));
