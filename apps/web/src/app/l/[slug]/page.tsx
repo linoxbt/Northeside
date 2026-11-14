@@ -6,7 +6,8 @@ import { JoinLeague } from "@/components/join-league";
 import { Container, Eyebrow } from "@/components/ui";
 import { getCtx } from "@/lib/server/ctx";
 import { safely } from "@/lib/server/configured";
-import { leagueBySlug } from "@/lib/server/services/leagues";
+import { leagueBySlug, canSeeLeagueBoard } from "@/lib/server/services/leagues";
+import { getSession } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,9 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
   const { slug } = await params;
   const league = await safely(() => leagueBySlug(slug), null);
   if (!league) notFound();
-  const rows = await safely(() => leaderboard(getCtx(), { season: getCtx().season }, { leagueSlug: slug, limit: 100 }), []);
+  const viewer = await safely(async () => (await getSession())?.userId ?? null, null);
+  const visible = await safely(() => canSeeLeagueBoard(slug, viewer), false);
+  const rows = visible ? await safely(() => leaderboard(getCtx(), { season: getCtx().season }, { leagueSlug: slug, limit: 100 }), []) : [];
   return (
     <Container className="pb-24">
       <div className="grid gap-10 pt-14 sm:pt-20 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
@@ -57,7 +60,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
       <section className="mt-20">
         <h2 className="display mb-6 text-[28px] sm:text-[34px]">Season table</h2>
         <div className="overflow-hidden rounded-[var(--radius-card)] border border-line">
-          <Board rows={rows} empty="No scores yet. The table fills in after the first matchweek is finalized." />
+          <Board rows={rows} empty={visible ? "No scores yet. The table fills in after the first matchweek is finalized." : "This is a private league: its table is visible to members. Join to see it."} />
         </div>
       </section>
     </Container>

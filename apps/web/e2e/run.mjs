@@ -171,19 +171,27 @@ async function walletContext(browser, keyIndex) {
 }
 
 /** Connect QIE Wallet and sign in. Auto sign-in may or may not fire; press "Sign in" if it remains. */
+async function confirmAdult(page, name) {
+  await page.getByText("One more step").waitFor({ timeout: 30_000 });
+  await page.getByLabel("Display name (optional)").fill(name);
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByText("One more step").waitFor({ state: "detached" });
+}
+
+/** Sign in from a page that needs it: its panel links to /sign-in, which returns here afterwards. */
 async function signInWithQie(page) {
-  const panel = page.getByText("18+ only. Free to play");
-  const qie = page.getByRole("button", { name: "QIE Wallet" });
+  const back = new URL(page.url()).pathname;
+  const link = page.locator("main").getByRole("link", { name: "Sign in", exact: true });
+  await link.waitFor({ timeout: 30_000 });
+  await link.click();
+  await page.waitForURL(/\/sign-in\?next=/, { timeout: 30_000 });
+  // Either the wallet list, or (wallet already connected) the "Sign in" button for the signature.
+  const qie = page.getByRole("button", { name: "Continue with QIE Wallet" });
   const sign = page.getByRole("button", { name: "Sign in", exact: true });
-  await panel.waitFor({ timeout: 30_000 });
-  if (await qie.isVisible().catch(() => false)) await qie.click({ timeout: 5_000 }).catch(() => {});
-  for (let i = 0; i < 60; i++) {
-    if (!(await panel.isVisible().catch(() => false))) return;
-    if (i % 6 === 5 && (await sign.isVisible().catch(() => false))) await sign.click({ timeout: 2_000 }).catch(() => {});
-    if (i % 6 === 5 && (await qie.isVisible().catch(() => false))) await qie.click({ timeout: 2_000 }).catch(() => {});
-    await sleep(500);
-  }
-  throw new Error("sign-in did not complete");
+  await qie.or(sign).first().waitFor({ timeout: 30_000 });
+  await ((await sign.isVisible()) ? sign : qie).click();
+  await page.waitForURL((u) => u.pathname === back, { timeout: 60_000 });
 }
 
 async function playerSeals(browser, keyIndex, name, picks) {
@@ -193,15 +201,13 @@ async function playerSeals(browser, keyIndex, name, picks) {
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${APP}/l/e2e-league`);
   await signInWithQie(page);
+  await confirmAdult(page, name); // FR-34: joining needs the 18+ confirmation first
   await page.getByRole("button", { name: /^Join / }).waitFor({ timeout: 30_000 });
   await page.getByRole("button", { name: /^Join / }).click();
   await page.getByText("You are in").waitFor();
+  check(await page.getByRole("button", { name: /^Leave / }).isVisible(), `${name}: members can leave the league`);
   await page.goto(`${APP}/play`);
-  await page.getByText("One more step").waitFor({ timeout: 30_000 });
-  await page.getByLabel("Display name (optional)").fill(name);
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByText("One more step").waitFor({ state: "detached" });
+  await page.locator('[role="group"][aria-label$=" goals"]').first().waitFor({ timeout: 30_000 });
 
   const fixtures = await page.locator('[role="group"][aria-label$=" goals"]').evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
   for (let i = 0; i < fixtures.length; i++) {
@@ -212,6 +218,16 @@ async function playerSeals(browser, keyIndex, name, picks) {
   await page.screenshot({ path: join(OUT, `${name}-picks.png`), fullPage: true });
   await page.getByRole("button", { name: "Seal predictions" }).click();
   await page.getByText(/Sealed · v1/).waitFor({ timeout: 60_000 });
+  if (name === "Ada") {
+    // Editing after sealing warns that the change is not sealed, and can be undone (audit B7).
+    const first = fixtures[0];
+    await page.getByRole("button", { name: `${first}: one more` }).click();
+    await page.getByText("Unsealed changes.").waitFor({ timeout: 10_000 });
+    check(true, "editing a sealed pick shows an 'unsealed changes' warning");
+    await page.getByRole("button", { name: "Undo my changes" }).click();
+    await page.getByText("Unsealed changes.").waitFor({ state: "detached", timeout: 10_000 });
+    check(true, "undo restores the sealed picks");
+  }
   await page.screenshot({ path: join(OUT, `${name}-sealed.png`), fullPage: true });
   check(errors.length === 0, `${name}: no page errors (${errors.join("; ")})`);
   return { ctx, page, account };
@@ -247,8 +263,8 @@ async function main() {
       RESULTS_ADDRESS: addr(3),
       ATTESTER_ADDRESS: addr(4),
       TREASURY_ADDRESS: addr(5),
-      PAUSER_ADDRESS: addr(2),
-      CHALLENGER_ADDRESSES: addr(1),
+      PAUSER_ADDRESS: "0x00000000000000000000000000000000000000A8", // separate from the operator (deploy script rule); never signs here
+      CHALLENGER_ADDRESSES: "0x00000000000000000000000000000000000000A9", // independent of the admin key; never signs here
     },
     stdio: "inherit",
   });
@@ -330,9 +346,11 @@ async function main() {
     const page = await ctx.newPage();
     await page.goto(`${APP}/host`);
     await signInWithQie(page);
+    await confirmAdult(page, "Host");
     await page.getByRole("button", { name: "Create league" }).waitFor({ timeout: 30_000 });
     await page.getByLabel("Name", { exact: true }).fill("E2E League");
-    await page.getByLabel(/Link:/).fill("e2e-league");
+    // the link follows the name until edited (audit B15)
+    check((await page.getByLabel(/Link:/).inputValue()) === "e2e-league", "league link is derived from the whole name");
     await page.getByRole("button", { name: "Create league" }).click();
     await page.getByRole("link", { name: "/l/e2e-league" }).waitFor();
     await page.screenshot({ path: join(OUT, "host.png"), fullPage: true });

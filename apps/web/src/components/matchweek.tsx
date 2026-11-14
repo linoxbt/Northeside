@@ -6,7 +6,8 @@ import { scoreFixture } from "@northeside/scoring";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Hex } from "viem";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
+import { useAuthBridge } from "./providers";
 import { AdultGate, SignInPanel } from "./sign-in";
 import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, deviceId, track } from "@/lib/client/api";
@@ -40,6 +41,7 @@ interface MyPrediction {
   txHash: string | null;
   txStatus: string;
   hasPayload: boolean;
+  sealedPicks: { home: number[]; away: number[]; commitment: string } | null;
   revealValid: boolean | null;
   points: number | null;
   exactScores: number | null;
@@ -49,6 +51,8 @@ interface MyPrediction {
 type Picks = { home: (number | null)[]; away: (number | null)[] };
 
 const sealedKey = (mw: number, wallet: string) => `ns_sealed_${mw}_${wallet.toLowerCase()}`;
+/** A seal whose transaction has not succeeded yet. Promoted to sealedKey only after its receipt (audit B6). */
+const pendingKey = (mw: number, wallet: string) => `ns_pending_${mw}_${wallet.toLowerCase()}`;
 const draftKey = (mw: number) => `ns_draft_${mw}`;
 
 interface LocalSeal {
@@ -57,13 +61,25 @@ interface LocalSeal {
   synced: boolean;
 }
 
-function readLocalSeal(mw: number, wallet?: string): LocalSeal | null {
+function readLocalSeal(mw: number, wallet?: string, key = sealedKey): LocalSeal | null {
   if (!wallet) return null;
   try {
-    return JSON.parse(localStorage.getItem(sealedKey(mw, wallet)) ?? "null");
+    return JSON.parse(localStorage.getItem(key(mw, wallet)) ?? "null");
   } catch {
     return null;
   }
+}
+
+/** Plain-language messages for wallet and transaction failures (audit B13). */
+export function txError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/rejected|denied|4001|cancel/i.test(msg)) return "You cancelled the transaction.";
+  if (/insufficient funds|exceeds the balance|gas required exceeds/i.test(msg)) return "Not enough QIEV3 for gas. Wait for the free gas to arrive, then try again.";
+  if (/chain mismatch|does not match the target chain|wrong network|4902|Unrecognized chain/i.test(msg)) return "Your wallet is on another network. Switch it to QIE, then try again.";
+  if (/connector not connected|not connected|no account/i.test(msg)) return "Your wallet is not connected. Reconnect it, then try again.";
+  if (/Locked|after lock|AfterLock|TooLate/i.test(msg)) return "This matchweek is locked; seals are closed.";
+  if (/timed out|timeout/i.test(msg)) return "Still waiting for the network. Your seal may still go through: check your receipt in a minute before trying again.";
+  return msg.split("\n")[0]!.slice(0, 200);
 }
 
 /** Null before mount; after that, live. `serverOpen` decides the first paint so SSR and hydration agree. */
@@ -136,9 +152,12 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   });
 
   const [picks, setPicks] = useState<Picks>(() => ({ home: Array(n).fill(null), away: Array(n).fill(null) }));
+  const [saveFailed, setSaveFailed] = useState(false);
   const loaded = useRef(false);
   useEffect(() => {
-    if (loaded.current) return;
+    // Wait for the session (and, when signed in, the server draft) so a draft saved on another
+    // device is not skipped (audit B18).
+    if (loaded.current || session.isLoading || (user && !mine.isFetched)) return;
     const local = (() => {
       try {
         return JSON.parse(localStorage.getItem(draftKey(mw.id)) ?? "null") as Picks | null;
@@ -152,7 +171,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
       setPicks({ home: src.home, away: src.away });
       loaded.current = true;
     } else if (!user || mine.isFetched) loaded.current = true;
-  }, [mine.data, mine.isFetched, mw.id, n, user]);
+  }, [mine.data, mine.isFetched, mw.id, n, user, session.isLoading]);
 
   // Autosave: locally at once, to the server after a pause (FR-10).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -164,7 +183,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
         if (user) {
           if (saveTimer.current) clearTimeout(saveTimer.current);
           saveTimer.current = setTimeout(() => {
-            void api("/api/v1/predictions/draft", { method: "POST", json: { matchweekId: mw.id, ...next } }).catch(() => {});
+            void api("/api/v1/predictions/draft", { method: "POST", json: { matchweekId: mw.id, ...next } })
+              .then(() => setSaveFailed(false))
+              .catch(() => setSaveFailed(true));
           }, 1200);
         }
         return next;
@@ -173,6 +194,19 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     },
     [mw.id, user],
   );
+
+  // What is actually sealed on-chain: the server copy, or this browser's backup if it matches.
+  const sealedPicks = useMemo<Picks | null>(() => {
+    const p = mine.data;
+    if (!p?.commitment) return null;
+    if (p.sealedPicks && p.sealedPicks.commitment.toLowerCase() === p.commitment.toLowerCase()) return p.sealedPicks;
+    const local = readLocalSeal(mw.id, wallet ?? undefined);
+    if (local && local.payload.commitment.toLowerCase() === p.commitment.toLowerCase()) return { home: local.payload.home, away: local.payload.away };
+    return null;
+  }, [mine.data, mw.id, wallet]);
+  // After lock the sealed picks are the only picks that count: show them, read-only.
+  const shown = !open && sealedPicks ? sealedPicks : picks;
+  const unsealed = open && !!sealedPicks && (picks.home.some((v, i) => v !== sealedPicks.home[i]) || picks.away.some((v, i) => v !== sealedPicks.away[i]));
 
   const complete = picks.home.every((x) => x !== null) && picks.away.every((x) => x !== null);
   const picked = picks.home.filter((x, i) => x !== null && picks.away[i] !== null).length;
@@ -217,8 +251,8 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
               <h3 className="eyebrow bg-subtle px-4 py-2.5 sm:px-5">{g.day}</h3>
               <ul className="divide-y divide-line">
                 {g.items.map((f) => {
-                  const h = picks.home[f.index] ?? null;
-                  const a = picks.away[f.index] ?? null;
+                  const h = shown.home[f.index] ?? null;
+                  const a = shown.away[f.index] ?? null;
                   const scored =
                     results && f.status !== "scheduled" && h !== null && a !== null
                       ? scoreFixture(h, a, { index: f.index, homeGoals: f.homeGoals ?? 0, awayGoals: f.awayGoals ?? 0, status: f.status === "void" ? "void" : "played" })
@@ -253,8 +287,20 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
         </ol>
       </Card>
 
+      {unsealed ? (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warn/40 bg-warn/5 px-4 py-3 text-[14px]">
+          <p>
+            <b className="font-medium">Unsealed changes.</b> Your sealed picks have not changed. Re-seal before the first kickoff to keep these.
+          </p>
+          <button type="button" className="underline underline-offset-4" onClick={() => setPicks({ home: [...sealedPicks!.home], away: [...sealedPicks!.away] })}>
+            Undo my changes
+          </button>
+        </div>
+      ) : null}
+      {saveFailed ? <p className="text-center text-[13px] text-warn">Your draft is saved on this device but could not be saved to your account. It will retry.</p> : null}
+
       {user && user.adultConfirmed && open ? (
-        <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
+        <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
       ) : null}
 
       {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
@@ -281,9 +327,12 @@ function SealBar(props: {
   picked: number;
   total: number;
   resealing: boolean;
+  unsealed: boolean;
   onSealed(): void;
 }) {
-  const { address } = useAccount();
+  const { address, chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const bridge = useAuthBridge();
   const session = useSession();
   const wallet = session.data?.wallet;
   const publicClient = usePublicClient({ chainId: chain.id });
@@ -295,23 +344,42 @@ function SealBar(props: {
   const onSealedRef = useRef(props.onSealed);
   onSealedRef.current = props.onSealed;
   useEffect(() => {
-    if (!wallet) return;
-    const local = readLocalSeal(props.mwId, wallet);
-    if (local && local.txHash && !local.synced) {
-      void syncSeal(props.mwId, wallet, local)
-        .then(() => onSealedRef.current())
-        .catch(() => {});
-    }
-  }, [wallet, props.mwId]);
+    if (!wallet || !publicClient) return;
+    void (async () => {
+      // A seal sent but not yet confirmed when the page closed: keep it only if it succeeded.
+      const pending = readLocalSeal(props.mwId, wallet, pendingKey);
+      if (pending?.txHash) {
+        const receipt = await publicClient.getTransactionReceipt({ hash: pending.txHash as Hex }).catch(() => null);
+        if (receipt?.status === "success") {
+          localStorage.setItem(sealedKey(props.mwId, wallet), JSON.stringify(pending));
+          localStorage.removeItem(pendingKey(props.mwId, wallet));
+        } else if (receipt?.status === "reverted") localStorage.removeItem(pendingKey(props.mwId, wallet));
+      }
+      const local = readLocalSeal(props.mwId, wallet);
+      if (local && local.txHash && !local.synced) {
+        await syncSeal(props.mwId, wallet, local).then(() => onSealedRef.current()).catch(() => {});
+      }
+    })();
+  }, [wallet, props.mwId, publicClient]);
 
   async function seal() {
     setError(null);
     if (!wallet || !publicClient) return;
-    if (address && address.toLowerCase() !== wallet.toLowerCase()) {
+    if (!address) {
+      // The embedded wallet reconnects itself; an external one needs the player.
+      if (bridge.privyEnabled) await bridge.ensureEmbeddedWallet().catch(() => {});
+      setError("Your wallet is not connected. Reconnect it (or sign in again), then seal.");
+      return;
+    }
+    if (address.toLowerCase() !== wallet.toLowerCase()) {
       setError(`Switch your wallet to ${short(wallet)}, the one you signed in with`);
       return;
     }
     try {
+      if (chainId !== chain.id) {
+        setStep("Switching to QIE…");
+        await switchChainAsync({ chainId: chain.id });
+      }
       // 1. Gas: a brand-new wallet gets a small drip once.
       setStep("Checking gas…");
       let balance = await publicClient.getBalance({ address: wallet });
@@ -331,10 +399,11 @@ function SealBar(props: {
         { chainId: chain.id, matchweeks: publicEnv.matchweeks, player: wallet, matchweekId: props.mwId, fixturesRoot: props.fixturesRoot },
         { home: props.picks.home as number[], away: props.picks.away as number[] },
       );
-      localStorage.setItem(sealedKey(props.mwId, wallet), JSON.stringify({ payload, synced: false } satisfies LocalSeal));
+      // Kept in the pending slot: the previous, valid backup stays untouched until this one succeeds.
+      localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, synced: false } satisfies LocalSeal));
 
       // 3. commit() from the player's own wallet.
-      setStep("Confirm in your wallet…");
+      setStep(bridge.isEmbedded(address) ? "Sealing…" : "Confirm in your wallet…");
       const hash = await writeContractAsync({
         address: publicEnv.matchweeks,
         abi: matchweeksAbi,
@@ -342,10 +411,15 @@ function SealBar(props: {
         args: [props.mwId, payload.commitment],
         chainId: chain.id,
       });
-      localStorage.setItem(sealedKey(props.mwId, wallet), JSON.stringify({ payload, txHash: hash, synced: false } satisfies LocalSeal));
+      localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, txHash: hash, synced: false } satisfies LocalSeal));
       setStep("Sealing on QIE…");
       const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000 });
-      if (receipt.status !== "success") throw new Error("The transaction failed on-chain");
+      if (receipt.status !== "success") {
+        localStorage.removeItem(pendingKey(props.mwId, wallet));
+        throw new Error("The transaction failed on-chain. Your previous seal, if any, still stands.");
+      }
+      localStorage.setItem(sealedKey(props.mwId, wallet), JSON.stringify({ payload, txHash: hash, synced: false } satisfies LocalSeal));
+      localStorage.removeItem(pendingKey(props.mwId, wallet));
       track(props.resealing ? "prediction_resealed" : "prediction_sealed", { matchweek_id: props.mwId });
 
       // 4. Hand the encrypted payload to the backend for the reveal (retried later if this fails).
@@ -355,8 +429,10 @@ function SealBar(props: {
       props.onSealed();
     } catch (e) {
       setStep(null);
+      // A cancelled or failed send leaves nothing pending; a timeout keeps it for the check on reload.
       const msg = e instanceof Error ? e.message : String(e);
-      setError(/rejected|denied|4001/i.test(msg) ? "You cancelled the transaction" : msg.split("\n")[0]!);
+      if (!/timed out|timeout/i.test(msg)) localStorage.removeItem(pendingKey(props.mwId, wallet));
+      setError(txError(e));
     }
   }
 
@@ -365,7 +441,7 @@ function SealBar(props: {
       <Card className="flex items-center justify-between gap-3 !rounded-[22px] border-ink/10 !py-3 !pl-5 !pr-3 shadow-[0_20px_50px_-20px_rgba(10,11,13,0.35)]">
         <div className="min-w-0 text-[14px]">
           <p className="font-medium tracking-[-0.01em]">{props.picked}/{props.total} picked</p>
-          <p className="text-muted">{step ?? (props.resealing ? "You can re-seal until lock" : "Seal before the first kickoff")}</p>
+          <p className="text-muted">{step ?? (props.unsealed ? "Re-seal to keep your changes" : props.resealing ? "Sealed. You can re-seal until lock" : "Seal before the first kickoff")}</p>
           {error ? <p role="alert" className="text-bad">{error}</p> : null}
         </div>
         <Button variant="accent" className="shrink-0" disabled={!props.complete || step !== null} onClick={() => void seal()}>
@@ -377,11 +453,17 @@ function SealBar(props: {
 }
 
 async function syncSeal(mwId: number, wallet: string, local: LocalSeal) {
-  await api("/api/v1/predictions/sealed", {
-    method: "POST",
-    headers: { "idempotency-key": `seal-${local.payload.commitment.slice(2, 34)}` },
-    json: { payload: local.payload, txHash: local.txHash },
-  });
+  try {
+    await api("/api/v1/predictions/sealed", {
+      method: "POST",
+      headers: { "idempotency-key": `seal-${local.payload.commitment.slice(2, 34)}` },
+      json: { payload: local.payload, txHash: local.txHash },
+    });
+  } catch (e) {
+    // Too late to add (results proposed) or superseded on-chain: retrying cannot help, so stop.
+    const code = (e as { code?: string }).code;
+    if (code !== "reveals_closed" && code !== "superseded") throw e;
+  }
   localStorage.setItem(sealedKey(mwId, wallet), JSON.stringify({ ...local, synced: true }));
 }
 
@@ -389,7 +471,8 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
   if (!p.commitment || p.txStatus === "none") return null;
   const local = readLocalSeal(mwId, wallet);
   function download() {
-    const data = local?.payload;
+    // Only a backup that matches the on-chain commitment; otherwise the server's copy (audit B6).
+    const data = local?.payload && local.payload.commitment.toLowerCase() === p.commitment!.toLowerCase() ? local.payload : null;
     if (data) {
       const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
       const a = document.createElement("a");
@@ -403,7 +486,9 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
     <Card className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-[20px] tracking-[-0.02em]">Sealed receipt</h2>
-        <Pill tone={p.txStatus === "confirmed" ? "good" : "warn"}>{p.txStatus === "confirmed" ? `Sealed · v${p.version}` : "Confirming…"}</Pill>
+        <Pill tone={p.txStatus === "confirmed" ? "good" : p.txStatus === "failed" ? "bad" : "warn"}>
+          {p.txStatus === "confirmed" ? `Sealed · v${p.version}` : p.txStatus === "failed" ? "Failed, seal again" : "Confirming…"}
+        </Pill>
       </div>
       <dl className="grid gap-2 text-sm">
         <div>

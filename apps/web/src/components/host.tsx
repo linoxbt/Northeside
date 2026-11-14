@@ -3,9 +3,10 @@
 import { hostRewardsAbi } from "@northeside/chain";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import type { Hex } from "viem";
-import { usePublicClient, useWriteContract } from "wagmi";
-import { SignInPanel } from "./sign-in";
+import { formatUnits, type Hex } from "viem";
+import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
+import { txError } from "./matchweek";
+import { AdultGate, PanelSkeleton, SignInPanel } from "./sign-in";
 import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { chain, publicEnv, txUrl } from "@/lib/client/env";
@@ -15,11 +16,19 @@ import { useMounted } from "@/lib/client/use-mounted";
 interface HostData {
   matchweekId: number | null;
   leagues: { slug: string; name: string; hostWallet: string; joined: number; sealed: number; returning: number; verified: number }[];
-  earnings: { campaignId: number; matchweekId: number; host: string; amount: string; countablePlayers: number; proof: Hex[]; claimTx: string | null }[];
+  earnings: { campaignId: number; matchweekId: number; host: string; amount: string; countablePlayers: number; proof: Hex[]; claimTx: string | null; claimableFrom: string | null }[];
   campaigns: { id: number; sponsorName: string; ratePerPlayer: string; capPerHost: string; firstMatchweek: number; lastMatchweek: number; leagues: string[] | null }[];
 }
 
-const qusdc = (v: string | bigint) => (Number(v) / 1e6).toFixed(2);
+/** QUSDC base units (6 decimals) to text, without floating point (audit B16). */
+const qusdc = (v: string | bigint) => {
+  const [whole, frac = ""] = formatUnits(BigInt(v), 6).split(".");
+  return `${whole}.${frac.padEnd(2, "0").slice(0, Math.max(2, frac.replace(/0+$/, "").length))}`;
+};
+
+/** League link: lowercase letters, numbers and single dashes, 3-32 characters (matches the API). */
+const toSlug = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").slice(0, 32);
+const SLUG_OK = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/;
 
 export function HostDashboard() {
   const session = useSession();
@@ -27,16 +36,33 @@ export function HostDashboard() {
   const data = useQuery({ queryKey: ["host"], enabled: !!session.data?.user, queryFn: () => api<HostData>("/api/v1/hosts/me") });
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
+  const { chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const [err, setErr] = useState<string | null>(null);
   const publicClient = usePublicClient({ chainId: chain.id });
   const { writeContractAsync } = useWriteContract();
   const [claiming, setClaiming] = useState<string | null>(null);
   const mounted = useMounted();
 
+  if (session.isLoading) {
+    return (
+      <div className="mx-auto max-w-md">
+        <PanelSkeleton />
+      </div>
+    );
+  }
   if (!session.data?.user) {
     return (
       <div className="mx-auto max-w-md">
         <SignInPanel title="Sign in to host" />
+      </div>
+    );
+  }
+  if (!session.data.user.adultConfirmed) {
+    return (
+      <div className="mx-auto max-w-md">
+        <AdultGate />
       </div>
     );
   }
@@ -48,6 +74,7 @@ export function HostDashboard() {
       track("host_league_created", { league_slug: slug });
       setName("");
       setSlug("");
+      setSlugEdited(false);
       await qc.invalidateQueries({ queryKey: ["host"] });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -59,6 +86,10 @@ export function HostDashboard() {
     setClaiming(key);
     setErr(null);
     try {
+      if (e.claimableFrom && new Date(e.claimableFrom) > new Date()) {
+        throw new Error(`Claims for this payout open on ${new Date(e.claimableFrom).toLocaleString()}`);
+      }
+      if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
       const hash = await writeContractAsync({
         address: publicEnv.hostRewards,
         abi: hostRewardsAbi,
@@ -66,12 +97,12 @@ export function HostDashboard() {
         args: [BigInt(e.campaignId), e.matchweekId, e.host as Hex, BigInt(e.amount), e.countablePlayers, e.proof],
         chainId: chain.id,
       });
-      await publicClient?.waitForTransactionReceipt({ hash });
+      const receipt = await publicClient?.waitForTransactionReceipt({ hash, timeout: 90_000 });
+      if (receipt && receipt.status !== "success") throw new Error("The claim failed on-chain");
       track("host_claimed", { amount: e.amount });
       await qc.invalidateQueries({ queryKey: ["host"] });
     } catch (x) {
-      const m = x instanceof Error ? x.message : String(x);
-      setErr(/rejected|4001/i.test(m) ? "You cancelled the claim" : m.split("\n")[0]!);
+      setErr(txError(x));
     } finally {
       setClaiming(null);
     }
@@ -84,13 +115,14 @@ export function HostDashboard() {
         <h2 className="text-[22px] tracking-[-0.03em]">Create a league</h2>
         <label className="block text-sm">
           <span className="text-[14px] text-muted">Name</span>
-          <input value={name} maxLength={40} onChange={(e) => { setName(e.target.value); if (!slug) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32)); }} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
+          <input value={name} maxLength={40} onChange={(e) => { setName(e.target.value); if (!slugEdited) setSlug(toSlug(e.target.value).replace(/-+$/, "")); }} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
         <label className="block text-sm">
           <span className="text-[14px] text-muted">Link: <span className="font-mono">{mounted ? location.host : ""}/l/{slug || "your-name"}</span></span>
-          <input value={slug} maxLength={32} onChange={(e) => setSlug(e.target.value.toLowerCase())} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
+          <input value={slug} maxLength={32} aria-invalid={slug.length > 0 && !SLUG_OK.test(slug)} onChange={(e) => { setSlugEdited(true); setSlug(toSlug(e.target.value)); }} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
+          {slug.length > 0 && !SLUG_OK.test(slug) ? <span className="mt-1 block text-[13px] text-bad">3-32 letters or numbers, with dashes between words.</span> : null}
         </label>
-        <Button className="w-full" disabled={name.trim().length < 3 || slug.length < 3} onClick={() => void create()}>Create league</Button>
+        <Button className="w-full" disabled={name.trim().length < 3 || !SLUG_OK.test(slug)} onClick={() => void create()}>Create league</Button>
         <p className="text-xs text-muted">Payouts go to the wallet you are signed in with. By creating a league you accept the <a className="underline" href="/legal/host-terms">host terms</a>.</p>
         {err ? <p role="alert" className="text-sm text-bad">{err}</p> : null}
       </Card>
@@ -140,7 +172,11 @@ export function HostDashboard() {
                 {e.claimTx ? (
                   <span className="flex items-center gap-2"><Pill tone="good">Claimed</Pill><ExtLink href={txUrl(e.claimTx)}>tx</ExtLink></span>
                 ) : (
-                  <Button disabled={claiming !== null} onClick={() => void claim(e)}>{claiming === `${e.campaignId}-${e.matchweekId}` ? "Claiming…" : "Claim"}</Button>
+                  e.claimableFrom && mounted && new Date(e.claimableFrom) > new Date() ? (
+                    <Pill>Claimable {new Date(e.claimableFrom).toLocaleDateString(undefined, { day: "numeric", month: "short" })} {new Date(e.claimableFrom).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</Pill>
+                  ) : (
+                    <Button disabled={claiming !== null} onClick={() => void claim(e)}>{claiming === `${e.campaignId}-${e.matchweekId}` ? "Claiming…" : "Claim"}</Button>
+                  )
                 )}
               </li>
             ))}

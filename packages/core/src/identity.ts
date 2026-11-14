@@ -39,6 +39,29 @@ export function passProviderFromEnv(chainId: number, env: Record<string, string 
 }
 
 /**
+ * The EIP-712 attestation IdentityAdapter verifies. Shared by the signer and the golden-vector
+ * test, which checks the same digest in Solidity (contracts/test/fixtures/golden-vectors.json).
+ */
+export function attestationTypedData(
+  d: { chainId: number; identity: Address },
+  message: { wallet: Address; personHash: Hex; nonce: bigint; deadline: bigint },
+) {
+  return {
+    domain: { name: "Northeside Identity", version: "1", chainId: d.chainId, verifyingContract: d.identity },
+    types: {
+      Attestation: [
+        { name: "wallet", type: "address" },
+        { name: "personHash", type: "bytes32" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint64" },
+      ],
+    },
+    primaryType: "Attestation" as const,
+    message,
+  };
+}
+
+/**
  * Store the encrypted person reference and sign an EIP-712 attestation the player submits from
  * their own wallet (Mode B). Disclosed on the Proof page as "verified by Northeside using QIE Pass".
  */
@@ -63,19 +86,9 @@ export async function issueAttestation(ctx: CoreContext, userId: string, wallet:
   });
   const deadline = BigInt(Math.floor(ctx.now().getTime() / 1000) + 3600);
   if (!attester.signTypedData) throw new Error("attester account cannot sign typed data");
-  const signature = await attester.signTypedData({
-    domain: { name: "Northeside Identity", version: "1", chainId: ctx.deployment.chainId, verifyingContract: ctx.deployment.identity },
-    types: {
-      Attestation: [
-        { name: "wallet", type: "address" },
-        { name: "personHash", type: "bytes32" },
-        { name: "nonce", type: "uint256" },
-        { name: "deadline", type: "uint64" },
-      ],
-    },
-    primaryType: "Attestation",
-    message: { wallet: w, personHash: ph, nonce, deadline },
-  });
+  const signature = await attester.signTypedData(
+    attestationTypedData({ chainId: ctx.deployment.chainId, identity: ctx.deployment.identity }, { wallet: w, personHash: ph, nonce, deadline }),
+  );
   return { wallet: w, personHash: ph, deadline, signature };
 }
 

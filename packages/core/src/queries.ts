@@ -64,6 +64,7 @@ export async function leaderboard(
       points: schema.predictions.points,
       exactScores: schema.predictions.exactScores,
       matchweekId: schema.predictions.matchweekId,
+      sealedAt: schema.predictions.sealedAt,
     })
     .from(schema.predictions)
     .innerJoin(schema.matchweeks, eq(schema.matchweeks.id, schema.predictions.matchweekId))
@@ -86,8 +87,18 @@ export async function leaderboard(
     allowedUsers = new Set(members.map((m) => m.userId));
   }
 
-  const agg = new Map<string, { userId: string; wallet: string; points: number; exactScores: number }>();
+  // One entry per person per matchweek: a player who seals from several linked wallets counts once,
+  // with the wallet that sealed first (audit B9).
+  const firstSeal = new Map<string, (typeof rows)[number]>();
   for (const r of rows) {
+    const key = `${r.userId}:${r.matchweekId}`;
+    const cur = firstSeal.get(key);
+    const t = (x: (typeof rows)[number]) => x.sealedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    if (!cur || t(r) < t(cur) || (t(r) === t(cur) && r.wallet < cur.wallet)) firstSeal.set(key, r);
+  }
+
+  const agg = new Map<string, { userId: string; wallet: string; points: number; exactScores: number }>();
+  for (const r of firstSeal.values()) {
     if (allowedUsers && !allowedUsers.has(r.userId)) continue;
     const a = agg.get(r.userId) ?? { userId: r.userId, wallet: r.wallet, points: 0, exactScores: 0 };
     a.points += r.points ?? 0;
@@ -334,8 +345,18 @@ export async function hostStats(ctx: CoreContext, userId: string) {
   }
 
   const hostWallets = [...new Set(leagues.map((l) => l.hostWallet.toLowerCase()))];
+  // Confirmed roots only; claims open 24 hours after a root is posted (HostRewards.CLAIM_DELAY).
   const earnings = hostWallets.length
-    ? await db.select().from(schema.rewardLeaves).where(inArray(schema.rewardLeaves.host, hostWallets))
+    ? (
+        await db
+          .select({ leaf: schema.rewardLeaves, postedAt: schema.rewardRoots.createdAt })
+          .from(schema.rewardLeaves)
+          .innerJoin(
+            schema.rewardRoots,
+            and(eq(schema.rewardRoots.campaignId, schema.rewardLeaves.campaignId), eq(schema.rewardRoots.matchweekId, schema.rewardLeaves.matchweekId)),
+          )
+          .where(and(inArray(schema.rewardLeaves.host, hostWallets), eq(schema.rewardRoots.status, "confirmed")))
+      ).map((r) => ({ ...r.leaf, claimableFrom: new Date(r.postedAt.getTime() + 24 * 3600_000 + 5 * 60_000) }))
     : [];
   const active = await db.select().from(schema.campaigns).where(eq(schema.campaigns.status, "active"));
   return { matchweekId: mw?.id ?? null, leagues: out, earnings, campaigns: active };

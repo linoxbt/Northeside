@@ -1,7 +1,32 @@
 import "server-only";
 import { schema } from "@northeside/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getCtx } from "../ctx";
+
+/** Private leagues are unlisted and their table is for members only (audit S7). */
+export async function canSeeLeagueBoard(slug: string, userId: string | null) {
+  const db = getCtx().db;
+  const [league] = await db.select().from(schema.leagues).where(sql`lower(${schema.leagues.slug}) = ${slug.toLowerCase()}`);
+  if (!league) return false;
+  if (league.privacy === "public") return true;
+  if (!userId) return false;
+  const [m] = await db
+    .select({ u: schema.leagueMembers.userId })
+    .from(schema.leagueMembers)
+    .where(and(eq(schema.leagueMembers.leagueId, league.id), eq(schema.leagueMembers.userId, userId)));
+  return Boolean(m);
+}
+
+export async function isMember(slug: string, userId: string | null) {
+  if (!userId) return false;
+  const db = getCtx().db;
+  const [m] = await db
+    .select({ u: schema.leagueMembers.userId })
+    .from(schema.leagueMembers)
+    .innerJoin(schema.leagues, eq(schema.leagues.id, schema.leagueMembers.leagueId))
+    .where(and(sql`lower(${schema.leagues.slug}) = ${slug.toLowerCase()}`, eq(schema.leagueMembers.userId, userId)));
+  return Boolean(m);
+}
 
 export async function leagueBySlug(slug: string) {
   const db = getCtx().db;

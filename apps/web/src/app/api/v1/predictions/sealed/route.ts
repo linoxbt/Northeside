@@ -5,6 +5,7 @@ import { z } from "zod";
 import { sealedPayloadSchema } from "@northeside/commitments";
 import { HttpError, idempotent, json, limitWrites, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
+import { requireAdult } from "@/lib/server/services/accounts";
 import { checkPayload, encryptPayload, getMatchweekRow, onChainCommitment } from "@/lib/server/services/predictions";
 
 /** Matchweek states in which a payload can still be stored and revealed. */
@@ -19,6 +20,7 @@ const body = z.object({ payload: z.unknown(), txHash: z.string().regex(/^0x[0-9a
 export const POST = route(async (req) => {
   const s = await requireSession();
   await limitWrites(s, "sealed", 20, 60);
+  await requireAdult(s.userId);
   const input = body.parse(await req.json());
   const result = await idempotent(req.headers.get("idempotency-key"), s.userId, "sealed", async () => {
     const ctx = getCtx();

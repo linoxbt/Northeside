@@ -344,6 +344,23 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
         ["Ada", 5, 2],
         ["Cy", 2, 3],
       ]);
+      // A second wallet of the same person sealing later (with a better score) does not count twice (audit B9).
+      await ctx.db.insert(schema.predictions).values({
+        userId: u3.id,
+        wallet: "0x00000000000000000000000000000000000000c3",
+        matchweekId: 11,
+        commitment: "0x01",
+        txStatus: "confirmed",
+        sealedAt: new Date(Date.now() + 3600_000),
+        revealValid: true,
+        points: 99,
+        exactScores: 9,
+      });
+      expect((await leaderboard(ctx, { matchweekId: 11 })).map((r) => [r.name, r.points])).toEqual([
+        ["Bo", 7],
+        ["Ada", 5],
+        ["Cy", 2],
+      ]);
       const onChain = await pub.readContract({ address: ctx.deployment.matchweeks, abi: matchweeksAbi, functionName: "matchweek", args: [11] });
       expect(onChain.status).toBe(4);
 

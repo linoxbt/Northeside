@@ -21,6 +21,7 @@ export interface SessionData {
   wallet?: `0x${string}`;
   wallets?: { address: string; kind: string }[];
   verified?: boolean;
+  verificationAvailable?: boolean;
 }
 
 export function useSession() {

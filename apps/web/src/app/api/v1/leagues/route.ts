@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { HttpError, json, limitWrites, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
-import { joinLeague } from "@/lib/server/services/accounts";
+import { joinLeague, requireAdult } from "@/lib/server/services/accounts";
 
 const RESERVED = new Set(["admin", "api", "host", "proof", "stats", "me", "rules", "legal", "northeside", "qie", "judges-admin"]);
 const body = z.object({
@@ -16,6 +16,7 @@ const body = z.object({
 export const POST = route(async (req) => {
   const s = await requireSession();
   await limitWrites(s, "league-create", 5, 10);
+  await requireAdult(s.userId);
   const input = body.parse(await req.json());
   if (RESERVED.has(input.slug)) throw new HttpError(400, "reserved", "That name is reserved");
   const db = getCtx().db;
