@@ -3,6 +3,7 @@
 import { crowdBonus, type FixtureBreakdown } from "@northeside/scoring";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Hex } from "viem";
 import { AdultGate, SignInPanel } from "./sign-in";
@@ -419,16 +420,21 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                                   state === "ht" ? "HT" : "FT"
                                 )}
                               </span>
-                              <div className="min-w-0 flex-1 text-[14px] leading-[18px] tracking-[-0.01em]">
+                              <Link
+                                href={`/match/${mw.id}/${f.index}`}
+                                prefetch={false}
+                                aria-label={`${f.home} v ${f.away}: match details`}
+                                className="group min-w-0 flex-1 text-[14px] leading-[18px] tracking-[-0.01em]"
+                              >
                                 <p className="flex items-center justify-between gap-2">
-                                  <span className="truncate">{f.home}</span>
+                                  <span className="truncate group-hover:underline">{f.home}</span>
                                   {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[13px] font-medium">{score.split("–")[0]}</b> : null}
                                 </p>
                                 <p className="flex items-center justify-between gap-2">
-                                  <span className="truncate">{f.away}</span>
+                                  <span className="truncate group-hover:underline">{f.away}</span>
                                   {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[13px] font-medium">{score.split("–")[1]}</b> : null}
                                 </p>
-                              </div>
+                              </Link>
                             </div>
                             <div className="order-last col-span-2 flex min-w-0 items-center gap-1.5 md:order-none md:col-span-1">
                               <div className="min-w-0 flex-1">

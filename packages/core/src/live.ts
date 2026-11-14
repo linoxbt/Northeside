@@ -191,3 +191,150 @@ export function sideFor<T extends { userId: string; sealedAt: Date | null }>(sco
 }
 
 export { fixtureRows };
+
+/** Like cached(), but on a provider error serve the last good value (or null) instead of failing. */
+async function cachedOrStale<T>(ctx: CoreContext, key: string, ttlMs: number, fn: () => Promise<T>): Promise<T | null> {
+  const [row] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, key));
+  const hit = row?.value as { at: number; data: T } | undefined;
+  if (hit && Date.now() - hit.at < ttlMs) return hit.data;
+  try {
+    const data = await fn();
+    const value = { at: Date.now(), data };
+    await ctx.db
+      .insert(schema.appSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: schema.appSettings.key, set: { value, updatedAt: new Date() } });
+    return data;
+  } catch {
+    return hit?.data ?? null;
+  }
+}
+
+export interface MatchView {
+  matchweekId: number;
+  index: number;
+  home: string;
+  away: string;
+  kickoff: string;
+  rules: 1 | 2;
+  locked: boolean;
+  finalized: boolean;
+  state: LiveState;
+  score: { home: number; away: number } | null;
+  halfTime: { home: number; away: number } | null;
+  minute: string | null;
+  venue: string | null;
+  referee: string | null;
+  crowd: { players: number; shown: boolean; minPlayers: number; home: number; draw: number; away: number; scorelines: { home: number; away: number; count: number }[] };
+  mine: { home: number | null; away: number | null; banker: boolean; sealed: boolean; points: FixtureBreakdown | null } | null;
+  meetings: { date: string; home: string; away: string; homeGoals: number | null; awayGoals: number | null }[];
+}
+
+/** One game in detail: live state, the crowd market on it, your pick and points, earlier meetings. */
+export async function matchView(ctx: CoreContext, id: number, index: number, viewer?: { userId: string } | null): Promise<MatchView | null> {
+  const mw = await matchweekRow(ctx, id);
+  if (!mw) return null;
+  const fixtures = await fixtureRows(ctx, id);
+  const f = fixtures.find((x) => x.idx === index);
+  if (!f) return null;
+  const version = rulesVersion(mw.scoringRulesHash);
+  const locked = ctx.now() >= mw.lockTime;
+
+  // Crowd market for this game (same rules as crowdView: hidden before lock until MIN_CROWD seals).
+  const crowd = await cached(ctx, `crowdmatch:${id}:${index}:${locked ? "r" : "s"}`, locked ? 60_000 : 120_000, async () => {
+    const entries = (await crowdEntries(ctx, id, locked)).map((e) => e.payload);
+    const shown = locked ? entries.length > 0 : entries.length >= MIN_CROWD;
+    const c = crowdCounts(entries, fixtures.length)[index] ?? { players: 0, home: 0, draw: 0, away: 0 };
+    const tally = new Map<string, number>();
+    for (const e of entries) {
+      const k = `${e.home[index]}-${e.away[index]}`;
+      tally.set(k, (tally.get(k) ?? 0) + 1);
+    }
+    const scorelines = [...tally.entries()]
+      .map(([k, count]) => ({ home: Number(k.split("-")[0]), away: Number(k.split("-")[1]), count }))
+      .sort((a, b) => b.count - a.count || a.home + a.away - (b.home + b.away))
+      .slice(0, 5);
+    return {
+      players: entries.length,
+      shown,
+      minPlayers: MIN_CROWD,
+      home: shown ? c.home : 0,
+      draw: shown ? c.draw : 0,
+      away: shown ? c.away : 0,
+      scorelines: shown ? scorelines : [],
+    };
+  });
+
+  // Live state and provisional points (after lock).
+  const live = locked ? await provisional(ctx, id, version, fixtures) : null;
+  const lf = live?.view.find((x) => x.index === index);
+  const state: LiveState = lf?.state ?? (f.status === "void" ? "void" : f.status === "played" ? "ft" : "scheduled");
+  const score = lf && lf.home !== null && lf.away !== null ? { home: lf.home, away: lf.away } : f.status === "played" ? { home: f.homeGoals ?? 0, away: f.awayGoals ?? 0 } : null;
+
+  // Provider detail: refreshed every 2 minutes while it matters, otherwise hourly; head-to-head daily.
+  const football = ctx.football;
+  const liveNow = state === "live" || state === "ht" || (locked && state === "scheduled");
+  const detail = football ? await cachedOrStale(ctx, `match:${f.externalId}`, liveNow ? 120_000 : 3_600_000, () => football.primary.match(f.externalId)) : null;
+  const meetings = football ? ((await cachedOrStale(ctx, `h2h:${f.externalId}`, 86_400_000, () => football.primary.headToHead(f.externalId, 5))) ?? []) : [];
+
+  // The viewer's own pick: before lock their draft or sealed payload, after lock their revealed pick.
+  let mine: MatchView["mine"] = null;
+  if (viewer) {
+    const side = live ? sideFor(live.scored, viewer.userId) : undefined;
+    if (side && live) {
+      const b = breakdown(version, side, live.entries, live.results).find((x) => x.index === index) ?? null;
+      mine = { home: side.home[index] ?? null, away: side.away[index] ?? null, banker: side.banker === index, sealed: true, points: b };
+    } else {
+      const rows = await ctx.db.select().from(schema.predictions).where(eq(schema.predictions.matchweekId, id));
+      const row = rows.filter((r) => r.userId === viewer.userId).sort((a, b) => (a.sealedAt?.getTime() ?? Infinity) - (b.sealedAt?.getTime() ?? Infinity))[0];
+      if (row) {
+        let picks: { home: (number | null)[]; away: (number | null)[]; banker?: number | null } | null = null;
+        if (row.payloadEnc) {
+          try {
+            picks = sealedPayloadSchema.parse(JSON.parse(ctx.crypto.decrypt(row.payloadEnc, payloadAad(row.wallet, id))));
+          } catch {
+            picks = null;
+          }
+        }
+        if (!picks && row.draft) picks = row.draft as { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
+        if (picks) {
+          mine = {
+            home: picks.home[index] ?? null,
+            away: picks.away[index] ?? null,
+            banker: picks.banker === index,
+            sealed: row.txStatus === "confirmed",
+            points: null,
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    matchweekId: id,
+    index,
+    home: f.home,
+    away: f.away,
+    kickoff: f.kickoff.toISOString(),
+    rules: version,
+    locked,
+    finalized: mw.status === "finalized",
+    state,
+    score,
+    halfTime: detail?.score.halfTime && detail.score.halfTime.home !== null && detail.score.halfTime.away !== null ? { home: detail.score.halfTime.home, away: detail.score.halfTime.away } : null,
+    minute: detail?.minute != null && (state === "live" || state === "ht") ? String(detail.minute) : null,
+    venue: detail?.venue ?? null,
+    referee: detail?.referees?.find((r) => !r.type || r.type === "REFEREE")?.name ?? null,
+    crowd,
+    mine,
+    meetings: meetings
+      .filter((m) => m.id !== f.externalId && m.status === "FINISHED")
+      .map((m) => ({
+        date: m.utcDate,
+        home: m.homeTeam.shortName ?? m.homeTeam.name ?? "?",
+        away: m.awayTeam.shortName ?? m.awayTeam.name ?? "?",
+        homeGoals: m.score.fullTime.home,
+        awayGoals: m.score.fullTime.away,
+      })),
+  };
+}

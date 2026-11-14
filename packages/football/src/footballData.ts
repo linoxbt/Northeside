@@ -16,6 +16,23 @@ const match = z.object({
   }),
 });
 const response = z.object({ matches: z.array(match) });
+
+const goals = z.object({ home: z.number().nullable(), away: z.number().nullable() });
+/** One match in detail (match page): status, minute, half-time score, venue, referee. */
+const detail = z.object({
+  id: z.number(),
+  utcDate: z.string(),
+  status: z.string(),
+  minute: z.union([z.number(), z.string()]).nullable().optional(),
+  venue: z.string().nullable().optional(),
+  homeTeam: team,
+  awayTeam: team,
+  score: z.object({ fullTime: goals, halfTime: goals.optional() }),
+  referees: z.array(z.object({ name: z.string(), type: z.string().nullable().optional() })).optional(),
+});
+export type MatchDetail = z.infer<typeof detail>;
+const h2h = z.object({ matches: z.array(z.object({ id: z.number(), utcDate: z.string(), status: z.string(), homeTeam: team, awayTeam: team, score: z.object({ fullTime: goals }) })) });
+export type HeadToHead = z.infer<typeof h2h>["matches"];
 type Match = z.infer<typeof match>;
 
 const VOID = new Set(["POSTPONED", "CANCELLED", "SUSPENDED", "AWARDED"]);
@@ -50,6 +67,21 @@ export class FootballDataClient {
       { backoffMs: this.opts.backoffMs ?? 6_500 },
     );
     return response.parse(json).matches;
+  }
+
+  private get(path: string) {
+    const base = this.opts.baseUrl ?? "https://api.football-data.org/v4";
+    return getJson("football-data.org", `${base}${path}`, { "X-Auth-Token": this.opts.apiKey }, this.opts.fetch, { backoffMs: this.opts.backoffMs ?? 6_500, retries: 0 });
+  }
+
+  /** One match in detail. */
+  async match(id: number): Promise<MatchDetail> {
+    return detail.parse(await this.get(`/matches/${id}`));
+  }
+
+  /** Earlier meetings of the two teams (newest first). */
+  async headToHead(id: number, limit = 5): Promise<HeadToHead> {
+    return h2h.parse(await this.get(`/matches/${id}/head2head?limit=${limit}`)).matches;
   }
 
   /** Fixtures in canonical order: kickoff, then provider id. */
