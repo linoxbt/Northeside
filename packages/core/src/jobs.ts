@@ -21,6 +21,7 @@ import { notifyJob } from "./notify";
 import { reportError, runJob } from "./ops";
 import { postRewardRootsForMatchweek } from "./rewards";
 import { nsdConfigFromEnv, postNsdRoot } from "./nsd";
+import { computeOdds } from "./odds";
 
 type Env = Record<string, string | undefined>;
 
@@ -300,6 +301,12 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
       .from(schema.matchweeks)
       .where(and(eq(schema.matchweeks.status, "finalized"), gte(schema.matchweeks.finalizedAt, new Date(ctx.now().getTime() - 14 * 24 * 3600_000))));
     return each(finalized, async (mw) => ({ id: mw.id, ...(await runJob(ctx, "post-nsd-root", String(mw.id), () => postNsdRoot(ctx, mw.id, cfg))) }));
+  },
+
+  /** Every 6 hours: refit the odds model and store expected goals for matchweeks not yet locked. */
+  "compute-odds": async () => {
+    const ctx = getCtx();
+    return runJob(ctx, "compute-odds", sixHourKey(), () => computeOdds(ctx));
   },
 
   migrate: async () => applyMigrations(getCtx().db),

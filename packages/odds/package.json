@@ -1,0 +1,17 @@
+{
+  "name": "@northeside/odds",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./grid": "./src/grid.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@northeside/football": "workspace:*"
+  }
+}

@@ -13,3 +13,4 @@ export * from "./worker";
 export * from "./live";
 export * from "./h2h";
 export * from "./nsd";
+export * from "./odds";

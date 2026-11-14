@@ -1,6 +1,6 @@
 import { contactText } from "./contact";
 
-export const LEGAL_VERSION = "1.0 · 12 November 2026 · pending review by Nigerian counsel before launch";
+export const LEGAL_VERSION = "1.1 · 14 November 2026 · pending review by Nigerian counsel before launch";
 
 export interface LegalSection {
   /** Anchor id, so other pages can link to a section (e.g. /docs/privacy#cookies). */
@@ -43,7 +43,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "free-to-play",
         heading: "Free to play",
         body: [
-          "No purchase is necessary and nothing can be bought. There are no stakes, no odds, no random draws and no prizes for players.",
+          "No purchase is necessary and nothing can be bought. There are no stakes, no random draws and no prizes for players. Odds shown in the app are statistical estimates for information only; nothing can be wagered on them.",
           "Leaderboards show skill only. Sponsors pay league hosts for real, returning, verified players; how well anyone scores never changes what a host is paid.",
         ],
       },

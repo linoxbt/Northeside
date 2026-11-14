@@ -26,7 +26,7 @@ to get paid for the real fans they bring.
 5. **Hosts** (KOLs, communities) create leagues and earn QUSDC from sponsors for every
    **QIE Pass-verified person who keeps coming back**, paid by Merkle proof on-chain.
 
-No token, no odds, no stakes, no prizes for players. See [How it works](apps/web/src/app/how-it-works/page.tsx).
+No stakes and no prizes for players; odds are statistical estimates for fun ([docs/ODDS.md](docs/ODDS.md)). $NSD rewards are built but not live ([docs/NSD.md](docs/NSD.md)).
 
 ## How it uses QIE
 

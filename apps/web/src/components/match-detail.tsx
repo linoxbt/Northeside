@@ -3,9 +3,9 @@
 import type { MatchView } from "@northeside/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "./ui";
-import { applySelection, CORRECT_SCORES, crowdCount, crowdOdds, satisfies, type Score, type Selection } from "@/lib/markets";
+import { applySelection, CORRECT_SCORES, marketGrid, satisfies, selectionOdds, type Score, type Selection } from "@/lib/markets";
 import { api, track } from "@/lib/client/api";
 import { draftKey, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
@@ -71,7 +71,8 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
       setSaving(false);
     }
   }
-  const ctx: MarketCtx = { pick, final: v.state === "ft" && v.score ? v.score : null, scores: v.crowd.shown ? v.crowd.scorelines : null, total: v.crowd.shown ? v.crowd.players : 0, disabled: !canPick || saving, onSelect: (sel) => void select(sel) };
+  const grid = useMemo(() => marketGrid(v.xg, v.crowd.shown ? v.crowd.scorelines : null), [v.xg, v.crowd.shown, v.crowd.scorelines]);
+  const ctx: MarketCtx = { pick, final: v.state === "ft" && v.score ? v.score : null, grid, disabled: !canPick || saving, onSelect: (sel) => void select(sel) };
   const isLive = v.state === "live" || v.state === "ht";
   const playUrl = `/play?mw=${v.matchweekId}`;
 
@@ -123,7 +124,11 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-subtle px-3 py-2 text-[12px] text-muted">
             <span>Exact score 5 pts · correct result 2 pts{v.rules === 2 ? " · beat the crowd up to +3" : ""}</span>
             <span className="font-mono">
-              {v.crowd.shown ? `Crowd odds · ${v.crowd.players} ${v.locked ? "players" : "sealed"}` : `Odds open at ${v.crowd.minPlayers} sealed · ${v.crowd.players}/${v.crowd.minPlayers}`}
+              {v.xg
+                ? `Northeside odds · model${v.crowd.shown ? ` + ${v.crowd.players} picks` : ""}`
+                : v.crowd.shown
+                  ? `Crowd odds · ${v.crowd.players} picks`
+                  : `Odds open at ${v.crowd.minPlayers} sealed · ${v.crowd.players}/${v.crowd.minPlayers}`}
             </span>
           </div>
           <Market title="1X2" sub="Full-time result">
@@ -234,8 +239,8 @@ interface MarketCtx {
   pick: Score | null;
   /** Final score, once the game is over: winning selections are marked. */
   final: Score | null;
-  scores: { home: number; away: number; count: number }[] | null;
-  total: number;
+  /** Score-probability grid (model, blended with the crowd once shown). */
+  grid: number[][] | null;
   disabled: boolean;
   onSelect(sel: Selection): void;
 }
@@ -272,7 +277,7 @@ function Odds({ items, cols, ctx }: { items: OddsItem[]; cols: 2 | 3; ctx: Marke
 function OddsButton({ item, ctx }: { item: OddsItem; ctx: MarketCtx }) {
   const on = ctx.pick ? satisfies(ctx.pick, item.sel) : false;
   const won = ctx.final ? satisfies(ctx.final, item.sel) : false;
-  const odds = ctx.scores ? crowdOdds(crowdCount(ctx.scores, item.sel), ctx.total) : null;
+  const odds = selectionOdds(ctx.grid, item.sel)?.odds ?? null;
   return (
     <button
       type="button"

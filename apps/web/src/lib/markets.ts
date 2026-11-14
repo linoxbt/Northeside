@@ -1,3 +1,4 @@
+import { blendGrid, fairOdds, MAX_GOALS as GRID_MAX, probabilityOf, scoreGrid } from "@northeside/odds/grid";
 /**
  * Betting-style markets derived from one exact-score pick. A player's pick is always a single
  * score; every market (1X2, double chance, over/under 2.5, both teams to score, correct score)
@@ -101,3 +102,39 @@ export const CORRECT_SCORES: Record<Outcome, Score[]> = {
     [0, 1], [0, 2], [1, 2], [0, 3], [1, 3], [2, 3], [0, 4], [1, 4], [2, 4], [3, 4],
   ].map(([home, away]) => ({ home: home!, away: away! })),
 };
+
+// ------------------------------------------------------------------ odds engine (client side)
+
+
+/**
+ * The score-probability grid for a game: the model's expected goals (Dixon–Coles), blended with
+ * the crowd's picks once they are shown. Crowd only when there is no model yet; null if neither.
+ */
+export function marketGrid(xg: { home: number; away: number } | null | undefined, crowd: { home: number; away: number; count: number }[] | null): number[][] | null {
+  if (xg) return crowd && crowd.length ? blendGrid(scoreGrid(xg.home, xg.away), crowd) : scoreGrid(xg.home, xg.away);
+  if (!crowd || crowd.length === 0) return null;
+  const n = crowd.reduce((s, c) => s + c.count, 0);
+  const g = Array.from({ length: GRID_MAX + 1 }, () => Array<number>(GRID_MAX + 1).fill(0));
+  for (const c of crowd) g[Math.min(c.home, GRID_MAX)]![Math.min(c.away, GRID_MAX)]! += c.count / n;
+  return g;
+}
+
+/** Probability and fair decimal odds of a selection on a grid. */
+export function selectionOdds(grid: number[][] | null, sel: Selection): { p: number; odds: string } | null {
+  if (!grid) return null;
+  const p = probabilityOf(grid, (home, away) => satisfies({ home, away }, sel));
+  return p > 0 ? { p, odds: fairOdds(p) } : null;
+}
+
+/** 1X2 for the board: model probability blended with the crowd's result counts (k = 30 pseudo-picks). */
+export function resultOdds(xg: { home: number; away: number } | null | undefined, crowd: { home: number; draw: number; away: number } | undefined, k = 30) {
+  const g = xg ? scoreGrid(xg.home, xg.away) : null;
+  const n = crowd ? crowd.home + crowd.draw + crowd.away : 0;
+  const one = (o: Outcome) => {
+    const model = g ? probabilityOf(g, (h, a) => outcome({ home: h, away: a }) === o) : null;
+    const c = crowd ? crowd[o] : 0;
+    const p = model !== null ? (n ? (k * model + c) / (k + n) : model) : n ? c / n : null;
+    return p !== null && p > 0 ? { p, odds: fairOdds(p) } : null;
+  };
+  return { home: one("home"), draw: one("draw"), away: one("away") };
+}
