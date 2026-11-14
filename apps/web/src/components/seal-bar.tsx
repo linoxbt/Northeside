@@ -173,7 +173,7 @@ function SealBar(props: {
   }
 
   return (
-    <div className="sticky bottom-3 z-10 lg:static">
+    <div className="sticky bottom-[76px] z-10 lg:static">
       <Card className="flex items-center justify-between gap-3 !rounded-[22px] border-ink/10 !py-3 !pl-5 !pr-3 shadow-[0_20px_50px_-20px_rgba(10,11,13,0.35)]">
         <div className="min-w-0 text-[14px]">
           <p className="font-medium tracking-[-0.01em]">{props.picked}/{props.total} picked</p>

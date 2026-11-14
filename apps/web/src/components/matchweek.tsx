@@ -69,7 +69,7 @@ interface CrowdDTO {
   fixtures: { index: number; home: number; draw: number; away: number }[];
 }
 
-interface LiveDTO {
+export interface LiveDTO {
   started: boolean;
   provisional: boolean;
   rules: number;
@@ -348,7 +348,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[10px] uppercase tracking-[0.06em]">
           <span className="rounded-full bg-white/10 px-2.5 py-1">{n} games</span>
-          <span className="rounded-full bg-white/10 px-2.5 py-1">{crowd.data?.players ?? 0} sealed</span>
+          <span className="rounded-full bg-white/10 px-2.5 py-1">
+            {crowd.data?.players ?? 0} {open ? "sealed" : "players"}
+          </span>
           <span className="rounded-full bg-white/10 px-2.5 py-1">{v2 ? "Banker ×2 · beat the crowd" : "Exact 5 · result 2"}</span>
           <a href={`/proof/${mw.id}`} className="rounded-full bg-white/10 px-2.5 py-1 hover:bg-white/20">
             Proof ↗
@@ -409,7 +411,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                         <li key={f.index} className={`px-3 py-2 sm:px-4 ${isBanker ? "bg-accent/5" : ""}`}>
                           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_228px_auto]">
                             <div className="flex min-w-0 items-center gap-2.5">
-                              <span className="w-9 shrink-0 font-mono text-[11px] leading-4 text-muted">
+                              <span className="w-10 shrink-0 font-mono text-[11px] leading-4 text-muted">
                                 {state === "scheduled" ? (
                                   fmtTime(f.kickoff, mounted)
                                 ) : state === "void" ? (
@@ -419,6 +421,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                                 ) : (
                                   state === "ht" ? "HT" : "FT"
                                 )}
+                                {state !== "scheduled" && state !== "void" ? <b className="block font-medium text-ink md:hidden">{score}</b> : null}
                               </span>
                               <Link
                                 href={`/match/${mw.id}/${f.index}`}
@@ -428,11 +431,11 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                               >
                                 <p className="flex items-center justify-between gap-2">
                                   <span className="truncate group-hover:underline">{f.home}</span>
-                                  {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[13px] font-medium">{score.split("–")[0]}</b> : null}
+                                  {state !== "scheduled" && state !== "void" ? <b className="hidden font-mono text-[13px] font-medium md:inline">{score.split("–")[0]}</b> : null}
                                 </p>
                                 <p className="flex items-center justify-between gap-2">
                                   <span className="truncate group-hover:underline">{f.away}</span>
-                                  {state !== "scheduled" && state !== "void" ? <b className="font-mono text-[13px] font-medium">{score.split("–")[1]}</b> : null}
+                                  {state !== "scheduled" && state !== "void" ? <b className="hidden font-mono text-[13px] font-medium md:inline">{score.split("–")[1]}</b> : null}
                                 </p>
                               </Link>
                             </div>
@@ -649,7 +652,7 @@ function OddsButtons({
 }
 
 /** Live match centre: provisional table while games are played; final once the matchweek is. */
-function LiveCentre({ live }: { live: LiveDTO }) {
+export function LiveCentre({ live }: { live: LiveDTO }) {
   return (
     <Card className="space-y-4">
       <div className="flex items-center justify-between">

@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { MatchweekView } from "@/components/matchweek";
-import { ButtonLink, Container, PageHeader } from "@/components/ui";
-import { backendConfigured, safely } from "@/lib/server/configured";
+import { MatchweekScreen } from "@/components/matchweek-screen";
+import { Container } from "@/components/ui";
+import { backendConfigured } from "@/lib/server/configured";
 import { getSession } from "@/lib/server/session";
-import { getById, getCurrent } from "@/lib/server/services/matchweeks";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Play this week", description: "Call every Premier League score this matchweek and seal your picks on QIE before kickoff." };
@@ -17,20 +16,9 @@ export default async function PlayPage({ searchParams }: { searchParams: Promise
     const back = mwParam && /^\d+$/.test(mwParam) ? `/play?mw=${mwParam}` : "/play";
     redirect(`/sign-in?next=${encodeURIComponent(back)}`);
   }
-  const mw = await safely(() => (mwParam && /^\d+$/.test(mwParam) ? getById(Number(mwParam)) : getCurrent()), null);
   return (
-    <Container wide className="pb-24">
-      {mw ? (
-        <div className="pt-6 sm:pt-8">
-          <MatchweekView mw={mw} />
-        </div>
-      ) : (
-        <PageHeader eyebrow="Play" title="The next matchweek opens soon.">
-          <ButtonLink href="/leagues" variant="primary" arrow>
-            Find a league
-          </ButtonLink>
-        </PageHeader>
-      )}
+    <Container wide className="pb-24 pt-4 sm:pt-6">
+      <MatchweekScreen mwParam={mwParam} base="/play" />
     </Container>
   );
 }

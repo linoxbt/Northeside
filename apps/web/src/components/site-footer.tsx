@@ -8,9 +8,9 @@ import { api } from "@/lib/client/api";
 import { isPreview } from "@/lib/client/env";
 
 const COLUMNS: { title: string; links: [string, string][] }[] = [
-  { title: "Play", links: [["/play", "This week"], ["/table", "Table"], ["/leagues", "Leagues"], ["/host", "Host a league"]] },
+  { title: "Play", links: [["/", "Matches"], ["/live", "Live"], ["/table", "Table"], ["/leagues", "Leagues"], ["/host", "Host a league"]] },
   { title: "Proof", links: [["/proof", "Proof"], ["/stats", "Live stats"]] },
-  { title: "Docs", links: [["/docs", "How it works"], ["/docs/sponsors", "Sponsors"], ["/docs/terms", "Terms"], ["/docs/privacy", "Privacy"]] },
+  { title: "Docs", links: [["/about", "About"], ["/docs", "How it works"], ["/docs/sponsors", "Sponsors"], ["/docs/terms", "Terms"], ["/docs/privacy", "Privacy"]] },
 ];
 
 function Status() {
@@ -43,18 +43,18 @@ function Status() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-white">
-      <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-x-6 gap-y-10 px-5 py-16 sm:px-8 lg:grid-cols-[1.4fr_repeat(3,1fr)] lg:gap-12">
-        <div className="col-span-2 space-y-4 lg:col-span-1">
+      <div className="mx-auto grid max-w-[1280px] grid-cols-3 gap-x-4 gap-y-6 px-5 py-8 sm:px-8 lg:grid-cols-[1.4fr_repeat(3,1fr)] lg:gap-12 lg:py-12">
+        <div className="col-span-3 flex flex-wrap items-center justify-between gap-3 lg:col-span-1 lg:block lg:space-y-4">
           <Logo />
           <Status />
         </div>
         {COLUMNS.map((c) => (
           <div key={c.title}>
-            <p className="mb-4 text-[14px] font-medium">{c.title}</p>
-            <ul className="space-y-3">
+            <p className="mb-2 text-[13px] font-medium lg:mb-4 lg:text-[14px]">{c.title}</p>
+            <ul className="space-y-0.5 lg:space-y-2">
               {c.links.map(([href, label]) => (
                 <li key={href}>
-                  <Link href={href} prefetch={prefetchFor(href)} className="inline-flex min-h-11 items-center text-[14px] text-muted transition-colors hover:text-ink">
+                  <Link href={href} prefetch={prefetchFor(href)} className="inline-flex min-h-9 items-center text-[13px] text-muted transition-colors hover:text-ink lg:min-h-10 lg:text-[14px]">
                     {label}
                   </Link>
                 </li>
@@ -63,7 +63,7 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-6 text-[13px] text-muted sm:px-8">
+      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-2 border-t border-line px-5 py-4 text-[12px] text-muted sm:px-8">
         <p>© 2026 Northeside · Free · 18+</p>
         <p>Not affiliated with the Premier League.</p>
       </div>

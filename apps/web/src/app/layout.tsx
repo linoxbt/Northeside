@@ -2,6 +2,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { BottomNav } from "@/components/bottom-nav";
 import { CookieNotice } from "@/components/cookie-notice";
 import { QueryProvider } from "@/components/query-provider";
 import { SiteChrome } from "@/components/site-chrome";
@@ -38,6 +39,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <main id="main">{children}</main>
           <SiteChrome landingOnly>
             <SiteFooter />
+          </SiteChrome>
+          <SiteChrome>
+            <BottomNav />
           </SiteChrome>
           <CookieNotice />
         </QueryProvider>

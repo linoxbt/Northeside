@@ -1,6 +1,8 @@
 import { RULES_V2, rulesVersion } from "@northeside/scoring";
 import "server-only";
 import { currentMatchweek, matchweekWithFixtures } from "@northeside/core";
+import { schema } from "@northeside/db";
+import { desc } from "drizzle-orm";
 import { getCtx } from "../ctx";
 
 const CURRENT_RULES_VERSION = RULES_V2.version;
@@ -45,4 +47,21 @@ export async function getCurrent() {
 export async function getById(id: number) {
   const data = await matchweekWithFixtures(getCtx(), id);
   return data ? publicMatchweek(data) : null;
+}
+
+export interface MatchweekTab {
+  id: number;
+  status: string;
+  lockTime: string;
+}
+
+/** Matchweeks for the sportsbook switcher: the latest played, the open one, and the next drafts. */
+export async function listMatchweeks(): Promise<MatchweekTab[]> {
+  const { db } = getCtx();
+  const rows = await db
+    .select({ id: schema.matchweeks.id, status: schema.matchweeks.status, lockTime: schema.matchweeks.lockTime })
+    .from(schema.matchweeks)
+    .orderBy(desc(schema.matchweeks.id))
+    .limit(12);
+  return rows.map((r) => ({ id: r.id, status: r.status, lockTime: r.lockTime.toISOString() })).sort((a, b) => a.id - b.id);
 }
