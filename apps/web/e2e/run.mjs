@@ -384,11 +384,15 @@ async function main() {
   // Match page before lock: the market is visible (odds hidden under 5 players) and a result can be
   // picked from it, which updates the draft. Bo picks a draw for game 3 (he sealed 2-2).
   await bo.page.goto(`${APP}/match/11/2`, { waitUntil: "networkidle" });
-  check((await bo.page.getByText("Crowd market").count()) === 1 && (await bo.page.getByText(/Crowd odds open at 5 sealed players/).count()) === 1, "match page shows the market before it opens");
+  check(
+    (await bo.page.getByText("Correct Score").count()) === 1 && (await bo.page.getByText("Double Chance").count()) === 1 && (await bo.page.getByText(/Odds open at 5 sealed/).count()) === 1,
+    "match page shows the betting markets before odds open",
+  );
   await bo.page.getByRole("button", { name: "Got it" }).click({ timeout: 2_000 }).catch(() => {});
-  await bo.page.getByRole("button", { name: /Brentford win/ }).click();
-  await bo.page.getByText(/Saved to your draft/).waitFor({ timeout: 15_000 });
-  check(true, "a result can be picked from the match page");
+  await bo.page.getByRole("button", { name: /^1:2/ }).click();
+  await bo.page.getByText(/Draft updated|Added to your slip/).waitFor({ timeout: 15_000 });
+  check((await bo.page.getByRole("button", { name: /^1:2/ }).getAttribute("aria-pressed")) === "true", "a correct score can be picked from the match page");
+  check((await bo.page.getByRole("button", { name: /^X2/ }).getAttribute("aria-pressed")) === "true", "the pick lights up the markets it wins (X2)");
   await bo.page.screenshot({ path: join(OUT, "match-open.png"), fullPage: true });
 
   // ---------------------------------------------------------------- lock, reveal, results, finalize
@@ -448,7 +452,7 @@ async function main() {
   check((await page.getByText("reveal verified").count()) === 2, "Proof page shows 2 verified reveals");
   // Match page: final score, crowd market and earlier meetings area for Everton v Liverpool.
   await page.goto(`${APP}/match/11/1`, { waitUntil: "networkidle" });
-  check((await page.getByText("Crowd market").count()) === 1 && (await page.getByText("Full time").count()) >= 1, "match page shows the final score and the crowd market");
+  check((await page.getByText("Correct Score").count()) === 1 && (await page.getByText("Full time").count()) >= 1, "match page shows the final score and the markets");
   await page.screenshot({ path: join(OUT, "match.png"), fullPage: true });
   // Sportsbook pages: Live (every game with its state) and My slips (history).
   await page.goto(`${APP}/live`, { waitUntil: "networkidle" });
