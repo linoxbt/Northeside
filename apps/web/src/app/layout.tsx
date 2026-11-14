@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <SiteHeader />
           </SiteChrome>
           <main id="main">{children}</main>
-          <SiteChrome>
+          <SiteChrome landingOnly>
             <SiteFooter />
           </SiteChrome>
           <CookieNotice />

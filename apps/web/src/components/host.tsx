@@ -123,7 +123,7 @@ export function HostDashboard() {
           {slug.length > 0 && !SLUG_OK.test(slug) ? <span className="mt-1 block text-[13px] text-bad">3-32 letters or numbers, with dashes between words.</span> : null}
         </label>
         <Button className="w-full" disabled={name.trim().length < 3 || !SLUG_OK.test(slug)} onClick={() => void create()}>Create league</Button>
-        <p className="text-xs text-muted">Payouts go to the wallet you are signed in with. By creating a league you accept the <a className="underline" href="/legal/host-terms">host terms</a>.</p>
+        <p className="text-xs text-muted">Payouts go to this wallet. Creating a league accepts the <a className="underline" href="/docs/host-terms">host terms</a>.</p>
         {err ? <p role="alert" className="text-sm text-bad">{err}</p> : null}
       </Card>
 
@@ -142,7 +142,7 @@ export function HostDashboard() {
               <div key={k as string} className="rounded-xl bg-subtle px-2 py-3"><p className="text-[26px] tracking-[-0.04em] tabular-nums">{v}</p><p className="eyebrow mt-1">{k}</p></div>
             ))}
           </div>
-          <p className="text-xs text-muted">Sealed and returning are for matchweek {d.matchweekId ?? "—"}. Sponsors pay for verified players who come back week after week.</p>
+          <p className="text-xs text-muted">Matchweek {d.matchweekId ?? "—"}.</p>
           <div className="flex flex-wrap gap-2 text-sm">
             <a className="inline-flex min-h-10 items-center rounded-full border border-line px-4" href={`/api/v1/og/league/${l.slug}`} target="_blank" rel="noreferrer">Share card (X)</a>
             <a className="inline-flex min-h-10 items-center rounded-full border border-line px-4" href={`/api/v1/og/league/${l.slug}?format=story`} target="_blank" rel="noreferrer">Story card (WhatsApp)</a>
@@ -182,7 +182,7 @@ export function HostDashboard() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted">Earnings appear after a sponsored matchweek is finalized.</p>
+          <p className="text-sm text-muted">No earnings yet.</p>
         )}
       </Card>
       </div>

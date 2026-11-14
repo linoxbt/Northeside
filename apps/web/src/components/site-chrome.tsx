@@ -6,8 +6,10 @@ import type { ReactNode } from "react";
 /** Focused pages (sign-in) render without the site header and footer. */
 const BARE = ["/sign-in", "/tg"];
 
-export function SiteChrome({ children }: { children: ReactNode }) {
+/** Header everywhere except focused pages; the footer only on the landing page. */
+export function SiteChrome({ children, landingOnly = false }: { children: ReactNode; landingOnly?: boolean }) {
   const path = usePathname();
+  if (landingOnly) return path === "/" ? <>{children}</> : null;
   if (BARE.some((p) => path === p || path.startsWith(`${p}/`))) return null;
   return <>{children}</>;
 }

@@ -82,13 +82,8 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
     <Container className="pb-24">
       <PageHeader
         eyebrow={`Proof · Matchweek ${m.id}`}
-        title="Every pick, every result, checkable."
-        lede={
-          <>
-            Everything on this page can be checked on the QIE explorer against the{" "}
-            <ExtLink href={`${explorer()}/address/${ctx.deployment.matchweeks}`}>NorthesideMatchweeks contract</ExtLink>.
-          </>
-        }
+        title="Every pick, checkable."
+        lede={<ExtLink href={`${explorer()}/address/${ctx.deployment.matchweeks}`}>Contract on the QIE explorer</ExtLink>}
       />
 
       {others.length > 1 ? (
@@ -146,7 +141,6 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
             <Hash v={m.scoresRoot} /> <span className="ml-2 text-[13px]">finalized {tx(m.finalizeTx)}</span>
           </Row>
         </dl>
-        <p className="mt-4 max-w-3xl text-[14px] leading-6 text-muted">Results are published by the Northeside operator only after two independent data providers agree, then stay open to challenge for 12 hours before they become final.</p>
       </Block>
 
       <Block title="Fixtures and results">
@@ -218,13 +212,7 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
       {data.revealed ? (
         <Block title="Check a commitment yourself">
           <div className="grid gap-8 md:grid-cols-[1fr_1.4fr]">
-            <p className="text-[15px] leading-6 text-muted">
-              Copy any payload above, or your own exported file. Your browser recomputes the hash with the{" "}
-              <a className="underline underline-offset-4" href="/how-it-works#sealing">
-                published encoding
-              </a>{" "}
-              and compares it to what was sealed on QIE before kickoff.
-            </p>
+            <p className="text-[15px] leading-6 text-muted">Paste a payload. Your browser checks it against the chain.</p>
             <VerifyWidget onChain={onChain} rpcUrl={ctx.chain.rpcUrls.default.http[0]!} contract={ctx.deployment.matchweeks} />
           </div>
         </Block>
@@ -248,7 +236,6 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
                 </li>
               ))}
             </ul>
-            <p className="text-[13px] text-muted">Identity: verified by Northeside using QIE Pass (attestations signed by Northeside, submitted from players' own wallets).</p>
           </div>
         </Block>
       ) : null}

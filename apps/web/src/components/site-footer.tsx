@@ -6,13 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Logo } from "./ui";
 import { api } from "@/lib/client/api";
 import { isPreview } from "@/lib/client/env";
-import { contactHref } from "@/lib/contact";
 
 const COLUMNS: { title: string; links: [string, string][] }[] = [
-  { title: "Play", links: [["/play", "This week"], ["/table", "Table"], ["/leagues", "Leagues"], ["/how-it-works", "How it works"]] },
-  { title: "Partners", links: [["/host", "Host a league"], ["/sponsors", "Sponsors"], ["/legal/host-terms", "Host terms"], ["/legal/sponsor-terms", "Sponsor terms"]] },
-  { title: "Trust", links: [["/proof", "Proof"], ["/stats", "Live stats"], ["/how-it-works#sealing", "How sealing works"], [contactHref("Northeside security report", "security"), "Security"]] },
-  { title: "Legal", links: [["/legal/terms", "Terms of use"], ["/legal/privacy", "Privacy notice"], ["/legal/cookies", "Cookie policy"]] },
+  { title: "Play", links: [["/play", "This week"], ["/table", "Table"], ["/leagues", "Leagues"], ["/host", "Host a league"]] },
+  { title: "Proof", links: [["/proof", "Proof"], ["/stats", "Live stats"]] },
+  { title: "Docs", links: [["/docs", "How it works"], ["/docs/sponsors", "Sponsors"], ["/docs/terms", "Terms"], ["/docs/privacy", "Privacy"]] },
 ];
 
 function Status() {
@@ -25,9 +23,9 @@ function Status() {
   });
   if (isPreview) {
     return (
-      <Link href="/how-it-works" className="inline-flex items-center gap-2 text-[14px] text-accent-deep">
+      <Link href="/docs" className="inline-flex items-center gap-2 text-[14px] text-accent-deep">
         <span className="size-2 animate-pulse-dot rounded-full bg-accent" aria-hidden />
-        Launching on QIE mainnet
+        Launching on QIE
       </Link>
     );
   }
@@ -45,10 +43,9 @@ function Status() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-white">
-      <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-x-6 gap-y-10 px-5 py-16 sm:px-8 lg:grid-cols-[1.4fr_repeat(4,1fr)] lg:gap-12">
+      <div className="mx-auto grid max-w-[1280px] grid-cols-2 gap-x-6 gap-y-10 px-5 py-16 sm:px-8 lg:grid-cols-[1.4fr_repeat(3,1fr)] lg:gap-12">
         <div className="col-span-2 space-y-4 lg:col-span-1">
           <Logo />
-          <p className="max-w-xs text-[15px] leading-6 text-muted">Football predictions, sealed onchain before kickoff. Free to play, built on QIE.</p>
           <Status />
         </div>
         {COLUMNS.map((c) => (
@@ -67,8 +64,8 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-6 text-[13px] text-muted sm:px-8">
-        <p>© 2026 Northeside. Free to play, 18+. No purchase, no stakes, no prizes.</p>
-        <p>Not affiliated with the Premier League or any club.</p>
+        <p>© 2026 Northeside · Free · 18+</p>
+        <p>Not affiliated with the Premier League.</p>
       </div>
     </footer>
   );

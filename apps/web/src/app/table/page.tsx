@@ -36,7 +36,7 @@ export default async function TablePage({ searchParams }: { searchParams: Promis
   const link = (m: number | null, v: boolean) => `/table?${new URLSearchParams({ ...(m ? { mw: String(m) } : {}), ...(v ? { verified: "1" } : {}) })}`;
   return (
     <Container className="pb-24">
-      <PageHeader eyebrow={`Premier League ${season}/${String((season + 1) % 100).padStart(2, "0")}`} title={mw ? `Matchweek ${mw} table` : "Season table"} lede="Five points for an exact score, two for the right result. Ties share a rank; there are no random tie-breaks." />
+      <PageHeader eyebrow={`Premier League ${season}/${String((season + 1) % 100).padStart(2, "0")}`} title={mw ? `Matchweek ${mw} table` : "Season table"} />
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Tab href={link(null, verifiedOnly)} active={!mw}>Season</Tab>
         {finals.map((f) => (
@@ -48,7 +48,7 @@ export default async function TablePage({ searchParams }: { searchParams: Promis
       <div className="overflow-hidden rounded-[var(--radius-card)] border border-line">
         <Board rows={rows} />
       </div>
-      <p className="mt-4 text-[14px] text-muted">✓ marks a verified human (QIE Pass). One person counts once, however many wallets they use.</p>
+      <p className="mt-4 text-[14px] text-muted">✓ Verified human</p>
     </Container>
   );
 }

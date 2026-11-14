@@ -283,7 +283,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
       <p className="pt-2 text-center text-[14px] text-muted">
         Exact score 5 points · right result 2 ·{" "}
-        <a className="underline underline-offset-4" href="/how-it-works">
+        <a className="underline underline-offset-4" href="/docs">
           how it works
         </a>{" "}
         ·{" "}
@@ -354,7 +354,6 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
           </>
         ) : null}
       </div>
-      <p className="border-t border-line pt-4 text-[13px] leading-5 text-muted">Only the hash is on-chain. Your picks stay private until the first kickoff, then everyone's are revealed and checked against their hash.</p>
     </Card>
   );
 }

@@ -3,7 +3,7 @@ import { contactText } from "./contact";
 export const LEGAL_VERSION = "1.0 · 12 November 2026 · pending review by Nigerian counsel before launch";
 
 export interface LegalSection {
-  /** Anchor id, so other pages can link to a section (e.g. /legal/privacy#cookies). */
+  /** Anchor id, so other pages can link to a section (e.g. /docs/privacy#cookies). */
   id: string;
   heading: string;
   body: string[];

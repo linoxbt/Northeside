@@ -27,12 +27,12 @@ export function SignInPanel({ title = "Sign in to play" }: { title?: string }) {
     <Card className="space-y-5 p-6 sm:p-7">
       <div>
         <h2 className="text-[22px] tracking-[-0.03em]">{title}</h2>
-        <p className="mt-1 text-[15px] text-muted">Sign in with your email, or use a wallet such as QIE Wallet.</p>
+        <p className="mt-1 text-[15px] text-muted">Email or wallet.</p>
       </div>
       <ButtonLink href={`/sign-in?next=${encodeURIComponent(here)}`} variant="primary" className="w-full" arrow>
         Sign in
       </ButtonLink>
-      <p className="border-t border-line pt-4 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">18+ only. Free to play: no purchase, no stakes, no prizes.</p>
+      <p className="border-t border-line pt-4 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">18+ · Free</p>
     </Card>
   );
 }
@@ -52,8 +52,8 @@ function LaunchingSoon({ title }: { title: string }) {
     <Card className="space-y-4 p-6 sm:p-7">
       <p className="eyebrow">Preview</p>
       <h2 className="text-[22px] tracking-[-0.03em]">{title.replace(/^Sign in to/, "Soon you can")}</h2>
-      <p className="text-[15px] leading-6 text-muted">Northeside is launching on QIE mainnet. Sign-in and sealing open with the first live matchweek.</p>
-      <a href="/how-it-works" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong px-5 text-[15px] font-medium hover:bg-subtle">
+      <p className="text-[15px] leading-6 text-muted">Opens with the first live matchweek.</p>
+      <a href="/docs" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong px-5 text-[15px] font-medium hover:bg-subtle">
         See how it works
       </a>
     </Card>
@@ -77,7 +77,7 @@ export function AdultGate() {
       </label>
       <label className="flex min-h-11 items-center gap-3 text-sm">
         <input type="checkbox" className="size-5" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-        I am 18 or older and accept the <a href="/legal/terms" className="text-accent-deep underline">terms</a> and <a href="/legal/privacy" className="text-accent-deep underline">privacy notice</a>.
+        I am 18 or older and accept the <a href="/docs/terms" className="text-accent-deep underline">terms</a> and <a href="/docs/privacy" className="text-accent-deep underline">privacy notice</a>.
       </label>
       <Button
         disabled={!checked}

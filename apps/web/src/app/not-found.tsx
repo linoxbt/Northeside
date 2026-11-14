@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Page not found", robots: { index: fa
 export default function NotFound() {
   return (
     <Container className="pb-24">
-      <PageHeader eyebrow="404" title="Offside." lede="That page does not exist. The game is still on, though.">
+      <PageHeader eyebrow="404" title="Offside.">
         <ButtonLink href="/play" variant="primary" arrow>
           Play this week
         </ButtonLink>

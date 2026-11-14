@@ -434,6 +434,8 @@ async function main() {
   await page.locator("details summary").first().click();
   const payload = await page.locator("details pre").first().innerText();
   await page.getByLabel("Payload JSON").fill(payload);
+  // The cookie notice is fixed to the bottom of the viewport; dismiss it like a visitor would.
+  await page.getByRole("button", { name: "Got it" }).click({ timeout: 2_000 }).catch(() => {});
   await page.getByRole("button", { name: "Recompute in my browser" }).click();
   const matched = await page
     .getByText("Match: these picks are exactly what was sealed before lock.")
