@@ -142,8 +142,8 @@ For a fresh setup:
 The site runs on **Netlify**: project `northeside` (https://northeside.netlify.app), live mode.
 `apps/web/netlify.toml` configures the build. `pnpm build` first bundles the ops worker
 (`apps/web/worker/ops-worker.ts` → `netlify/functions/ops-worker.mjs`, esbuild), then builds Next.
-Two functions run the operation: `cron-ops` (scheduled, every 10 minutes) starts `ops-worker`
-(background, up to 15 minutes), which runs every job in-process for about 9 minutes.
+Two functions run the operation: `cron-ops` (scheduled, every 5 minutes) starts `ops-worker`
+(background), which makes one pass of every job in-process.
 
 Environment rules on Netlify: every secret exists in the **production** context only (deploy
 previews and branch deploys get none, so untrusted pull-request builds cannot reach the keys or
@@ -184,20 +184,25 @@ integration until a real verification has gone through on mainnet.
 
 ## Weekly operations (automated on Netlify)
 
-Netlify scheduled functions run the whole week with the operator and results keys stored as
-Netlify secrets. Every step is idempotent, re-checks the chain first, and alerts the operator.
+The whole week runs on Netlify with the operator and results keys stored as production-only
+secrets. Every step is idempotent, re-checks the chain first, and alerts the operator.
 
-| Schedule | Function → route | What it does |
-| --- | --- | --- |
-| every minute | `cron-index-chain` → `index-chain` | mirrors contract events into Postgres |
-| daily | `cron-import-fixtures` → `import-fixtures` | imports the next matchday; flags kickoff changes |
-| every 5 min | `cron-lock-and-reveal` → `lock-and-reveal` | after lock, reveals and verifies every stored payload |
-| every 15 min | `cron-fetch-results` → `fetch-results` | compares both football providers after the last game |
-| every 10 min | `cron-weekly-ops` → background `weekly-ops` | runs the four on-chain steps below, in order, each with the full 60 s route limit |
-| | → `open-matchweeks` | creates each imported matchweek on-chain once its lock is within `OPEN_DAYS_BEFORE_LOCK` days (default 6) |
-| | → `publish-results` | when both providers agree (fresh check) and the chain allows it (last kickoff + `RESULTS_BUFFER_SECONDS`, default 3 h): closes reveals, scores, and proposes the results, reveals and scores roots |
-| | → `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks |
-| | → `post-reward-roots` | posts each active campaign's host payout root; hosts can claim 24 h later |
+Everything runs in one Netlify background function, `ops-worker`, started every 5 minutes by the
+scheduled function `cron-ops`. Each start makes one pass of every job (about 15 s of compute, so
+~130k function-seconds a month, inside the free plan); a database lease stops overlapping runs.
+
+| Job | What it does |
+| --- | --- |
+| `index-chain` | mirrors contract events into Postgres (one transaction per chunk; stops and alerts on a reorg) |
+| `import-fixtures` | every 6 h: refreshes draft matchweeks, re-checks open ones for moved kickoffs, imports the next matchday |
+| `lock-and-reveal` | after lock, reveals and verifies every stored payload (until results are proposed) |
+| `fetch-results` | compares both football providers after the last game in the matchweek window |
+| `notify` | lock reminders and results notices with rank change |
+| `drip-health` | drip balance alert at one day of cap; frees dropped drips |
+| `open-matchweeks` | creates each imported matchweek on-chain once its lock is within `OPEN_DAYS_BEFORE_LOCK` days (default 6) |
+| `publish-results` | when both providers agree (fresh check) and the chain allows it (last kickoff + `RESULTS_BUFFER_SECONDS`, default 3 h): closes reveals, scores, and proposes the results, reveals and scores roots |
+| `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks |
+| `post-reward-roots` | posts each active campaign's host payout root; hosts can claim 24 h later |
 
 Needs a person:
 
