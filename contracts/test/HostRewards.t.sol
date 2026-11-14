@@ -781,6 +781,31 @@ contract HostRewardsTest is HostRewardsFixture {
         rewards.replaceRoot(id, 11, other.root, other.total, "ipfs://other");
     }
 
+    /// @dev Final review H-1: after the unallocated budget is refunded, a correction may not raise
+    ///      the allocation above what is left, or it would pay out of another campaign's escrow.
+    function test_replaceRoot_afterRefund_cannotExceedRemainingBudget() public {
+        uint256 a = _createFunded(500 * ONE, 0);
+        uint256 b = _createFunded(500 * ONE, 0);
+        Tree memory t1 = _twoHostTree(a, 11, 50 * ONE, 50 * ONE);
+        vm.prank(operator);
+        rewards.postRoot(a, 11, t1.root, t1.total, "ipfs://1");
+        vm.warp(expiry);
+        rewards.refund(a); // the 400 unallocated goes back to the sponsor
+
+        Tree memory up = _twoHostTree(a, 11, 150 * ONE, 150 * ONE);
+        vm.expectRevert(HostRewards.OverBudget.selector);
+        vm.prank(operator);
+        rewards.replaceRoot(a, 11, up.root, up.total, "ipfs://2");
+
+        // A correction within the remaining 100 still works, and b's escrow stays whole.
+        Tree memory fix = _twoHostTree(a, 11, 60 * ONE, 40 * ONE);
+        vm.prank(operator);
+        rewards.replaceRoot(a, 11, fix.root, fix.total, "ipfs://3");
+        assertEq(uint256(rewards.totalLiability()), uint256(600 * ONE), "liability");
+        assertGe(qusdc.balanceOf(address(rewards)), uint256(rewards.totalLiability()), "solvent");
+        assertEq(uint256(rewards.campaign(b).budget), uint256(500 * ONE), "b intact");
+    }
+
     /// @dev Audit L-4: the sponsor can redirect refunds, nobody else can.
     function test_setRefundRecipient() public {
         uint256 id = _createFunded(100 * ONE, 0);
