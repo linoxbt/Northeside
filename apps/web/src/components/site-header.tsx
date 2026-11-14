@@ -11,11 +11,11 @@ import { isPreview, short } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
 
 export const NAV = [
-  { href: "/play", label: "Play" },
+  { href: "/", label: "Matches" },
+  { href: "/live", label: "Live" },
+  { href: "/slips", label: "My slips" },
   { href: "/table", label: "Table" },
   { href: "/leagues", label: "Leagues" },
-  { href: "/host", label: "Hosts" },
-  { href: "/proof", label: "Proof" },
   { href: "/docs", label: "Docs" },
 ];
 
@@ -99,14 +99,17 @@ export function SiteHeader() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [menu]);
-  const active = (href: string) => path === href || path.startsWith(`${href}/`) || (href === "/leagues" && path.startsWith("/l/"));
+  const active = (href: string) =>
+    href === "/"
+      ? path === "/" || path.startsWith("/play") || path.startsWith("/match/")
+      : path === href || path.startsWith(`${href}/`) || (href === "/leagues" && path.startsWith("/l/"));
   const account = user ? (user.qieId ?? user.displayName ?? short(session.data!.wallet!)) : null;
 
   return (
     <>
       <AnnouncementBar />
-      <header className="sticky top-0 z-40 border-b border-line/70 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-[1280px] items-center gap-6 px-5 sm:px-8">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-ink text-white">
+        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-6 px-5 sm:px-8">
           <Link href="/" aria-label="Northeside home" className="shrink-0">
             <Logo />
           </Link>
@@ -117,7 +120,7 @@ export function SiteHeader() {
                 href={n.href}
                 prefetch={prefetchFor(n.href)}
                 aria-current={active(n.href) ? "page" : undefined}
-                className={`rounded-full px-3.5 py-2 text-[15px] tracking-[-0.01em] transition-colors ${active(n.href) ? "bg-subtle text-ink" : "text-ink-2 hover:text-ink"}`}
+                className={`rounded-full px-3.5 py-1.5 text-[14px] tracking-[-0.01em] transition-colors ${active(n.href) ? "bg-white/10 text-white" : "text-white/65 hover:text-white"}`}
               >
                 {n.label}
               </Link>
@@ -125,24 +128,24 @@ export function SiteHeader() {
           </nav>
           <div className="ml-auto flex items-center gap-2 lg:ml-0">
             {account ? (
-              <Link href="/me" prefetch={false} className="hidden min-h-10 items-center gap-2 rounded-full border border-line px-3.5 text-[14px] sm:inline-flex">
+              <Link href="/me" prefetch={false} className="hidden min-h-9 items-center gap-2 rounded-full border border-white/15 px-3.5 text-[13px] hover:bg-white/10 sm:inline-flex">
                 <span className="size-2 rounded-full bg-accent" aria-hidden />
                 {account}
               </Link>
             ) : !isPreview && !session.isLoading ? (
-              <Link href={`/sign-in?next=${encodeURIComponent(path)}`} prefetch={false} className="hidden min-h-10 items-center rounded-full px-3.5 text-[14px] text-ink-2 hover:bg-subtle sm:inline-flex">
+              <Link href={`/sign-in?next=${encodeURIComponent(path)}`} prefetch={false} className="hidden min-h-9 items-center rounded-full px-3.5 text-[13px] text-white/80 hover:bg-white/10 sm:inline-flex">
                 Sign in
               </Link>
             ) : null}
             {/* wrapper carries the breakpoint: ButtonLink's own inline-flex would override "hidden" */}
             <span className="hidden sm:inline-flex">
-              <ButtonLink href="/play" variant="primary" className="!min-h-10 !px-4 !text-[14px]" arrow>
-                {user ? "This week" : "Play now"}
+              <ButtonLink href={user ? "/slips" : "/sign-in?next=/"} variant="accent" className="!min-h-9 !px-4 !text-[13px]" arrow>
+                {user ? "My slips" : "Join free"}
               </ButtonLink>
             </span>
             <button
               ref={toggleRef}
-              className="inline-flex size-11 items-center justify-center rounded-full border border-line lg:hidden"
+              className="inline-flex size-10 items-center justify-center rounded-full border border-white/20 lg:hidden"
               aria-label={menu ? "Close menu" : "Open menu"}
               aria-expanded={menu}
               aria-controls="mobile-menu"
@@ -156,16 +159,16 @@ export function SiteHeader() {
         </div>
       </header>
       {menu ? (
-        <div ref={menuRef} id="mobile-menu" className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-white lg:hidden">
+        <div ref={menuRef} id="mobile-menu" className="fixed inset-x-0 bottom-0 top-14 z-30 overflow-y-auto bg-white lg:hidden">
           <nav aria-label="Mobile" className="px-5 py-6">
-            {[...NAV, { href: "/stats", label: "Live stats" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
+            {[...NAV, { href: "/host", label: "Host a league" }, { href: "/proof", label: "Proof" }, { href: "/stats", label: "Live stats" }, { href: "/about", label: "About" }, { href: account ? "/me" : "/sign-in?next=/me", label: account ? "Your profile" : "Sign in" }].map((n) => (
               <Link key={n.href} href={n.href} prefetch={prefetchFor(n.href)} className="flex items-center justify-between border-b border-line py-4 text-[26px] tracking-[-0.03em]">
                 {n.label}
                 <Chevron className="size-4 text-muted" />
               </Link>
             ))}
-            <ButtonLink href="/play" variant="accent" className="mt-8 w-full" arrow>
-              Play this week
+            <ButtonLink href="/" variant="accent" className="mt-8 w-full" arrow>
+              Matches
             </ButtonLink>
           </nav>
         </div>

@@ -8,7 +8,7 @@ const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const pages = ["", "/play", "/table", "/leagues", "/host", "/docs", "/docs/hosts", "/docs/sponsors", "/proof", "/stats"];
+  const pages = ["", "/live", "/about", "/table", "/leagues", "/host", "/docs", "/docs/hosts", "/docs/sponsors", "/proof", "/stats"];
   const leagues = await safely(() => leagueDirectory(200), []);
   return [
     ...pages.map((p) => ({ url: `${site}${p}`, changeFrequency: "daily" as const, priority: p === "" ? 1 : 0.7 })),

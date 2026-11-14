@@ -9,7 +9,7 @@ const BARE = ["/sign-in", "/tg"];
 /** Header everywhere except focused pages; the footer only on the landing page. */
 export function SiteChrome({ children, landingOnly = false }: { children: ReactNode; landingOnly?: boolean }) {
   const path = usePathname();
-  if (landingOnly) return path === "/" ? <>{children}</> : null;
+  if (landingOnly) return path === "/" || path === "/about" ? <>{children}</> : null;
   if (BARE.some((p) => path === p || path.startsWith(`${p}/`))) return null;
   return <>{children}</>;
 }

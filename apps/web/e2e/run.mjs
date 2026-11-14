@@ -440,6 +440,19 @@ async function main() {
   await page.goto(`${APP}/match/11/1`, { waitUntil: "networkidle" });
   check((await page.getByText("Crowd market").count()) === 1 && (await page.getByText("Full time").count()) >= 1, "match page shows the final score and the crowd market");
   await page.screenshot({ path: join(OUT, "match.png"), fullPage: true });
+  // Sportsbook pages: Live (every game with its state) and My slips (history).
+  await page.goto(`${APP}/live`, { waitUntil: "networkidle" });
+  check((await page.getByText("Live · Matchweek 11").count()) === 1 && (await page.getByText("Finished").count()) >= 1, "live page lists the matchweek's finished games");
+  await page.screenshot({ path: join(OUT, "live.png"), fullPage: true });
+  await page.goto(`${APP}/slips`, { waitUntil: "networkidle" });
+  check((await page.getByText("My slips").count()) >= 1, "my slips page renders");
+  await page.screenshot({ path: join(OUT, "slips.png"), fullPage: true });
+  await page.goto(`${APP}/`, { waitUntil: "networkidle" });
+  check((await page.getByText("Matchweek 11").count()) >= 1, "home is the match board");
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.screenshot({ path: join(OUT, "home-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.screenshot({ path: join(OUT, "home.png"), fullPage: true });
   await page.goto(`${APP}/proof/11`, { waitUntil: "networkidle" });
   await page.locator("details summary").first().click();
   const payload = await page.locator("details pre").first().innerText();
