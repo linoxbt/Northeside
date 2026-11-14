@@ -1,7 +1,7 @@
 import { schema } from "@northeside/db";
 import { and, eq, lt, or } from "drizzle-orm";
 import type { Hash, TransactionReceipt } from "viem";
-import { bigintReplacer, type CoreContext } from "./context";
+import { bigintReplacer, type CoreContext, type Signer } from "./context";
 
 export async function audit(
   ctx: CoreContext,
@@ -16,6 +16,18 @@ export async function audit(
     details: JSON.parse(JSON.stringify(details, bigintReplacer)),
     txHash: txHash ?? null,
   });
+}
+
+/**
+ * Send a contract write with an explicit gas limit. On 14 Nov 2026 a QIE RPC gave viem a bare
+ * intrinsic-gas estimate (22,696) for createMatchweek, so the transaction ran out of gas and
+ * reverted. The limit here is our own estimate plus 30%, or a safe ceiling when the estimate is
+ * implausibly low or fails. Unused gas is not charged.
+ */
+export async function sendWrite(ctx: CoreContext, signer: Signer, request: Parameters<Signer["writeContract"]>[0], ceiling = 500_000n): Promise<Hash> {
+  const estimate = await ctx.publicClient.estimateContractGas({ ...(request as object), account: signer.account } as never).catch(() => 0n);
+  const gas = estimate < 40_000n ? ceiling : (estimate * 13n) / 10n;
+  return signer.writeContract({ ...(request as object), gas } as never);
 }
 
 /** Wait for a transaction and fail loudly if it reverted. */

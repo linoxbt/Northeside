@@ -4,6 +4,7 @@ import { identityAbi } from "@northeside/chain";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { Hex } from "viem";
+import { safeGas } from "@/lib/client/gas";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { txError } from "@/lib/client/tx-errors";
 import { useAuthBridge } from "./auth-bridge";
@@ -74,12 +75,17 @@ export function Profile() {
       );
       if (att.alreadyVerified) return;
       if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
+      const attArgs = [att.wallet, att.personHash, BigInt(att.deadline), att.signature] as const;
+      const estimate = await publicClient
+        ?.estimateContractGas({ address: publicEnv.identity, abi: identityAbi, functionName: "submitAttestation", args: attArgs, account: att.wallet })
+        .catch(() => null);
       const hash = await writeContractAsync({
         address: publicEnv.identity,
         abi: identityAbi,
         functionName: "submitAttestation",
-        args: [att.wallet, att.personHash, BigInt(att.deadline), att.signature],
+        args: attArgs,
         chainId: chain.id,
+        gas: safeGas(estimate, 250_000n),
       });
       const receipt = await publicClient?.waitForTransactionReceipt({ hash, timeout: 90_000 });
       if (receipt && receipt.status !== "success") throw new Error("The verification transaction failed on-chain");

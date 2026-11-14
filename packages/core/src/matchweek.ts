@@ -14,7 +14,7 @@ import { RULES_V1_HASH, rank, scorePicks, type FixtureResult } from "@northeside
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext } from "./context";
-import { audit, confirm } from "./ops";
+import { audit, confirm, sendWrite } from "./ops";
 
 /** On-chain Status enum in NorthesideMatchweeks. */
 export const ChainStatus = { None: 0, Open: 1, ResultsProposed: 2, Challenged: 3, Finalized: 4 } as const;
@@ -188,7 +188,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
       functionName: "createMatchweek",
       args: [id, tree.root, lockTime, resultsNotBefore, rows.length, RULES_V1_HASH],
     });
-    txHash = await operator.writeContract(request);
+    txHash = await sendWrite(ctx, operator, request);
     await confirm(ctx, txHash, `createMatchweek(${id})`);
   }
 
@@ -474,7 +474,7 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
       functionName: "proposeResults",
       args: [id, tree.root, revealsTree.root, scoresTree.root, evidenceUri],
     });
-    txHash = await signer.writeContract(request);
+    txHash = await sendWrite(ctx, signer, request);
     await confirm(ctx, txHash, `proposeResults(${id})`);
   }
 
@@ -563,7 +563,7 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
       functionName: "finalize",
       args: [id],
     });
-    txHash = await signer.writeContract(request);
+    txHash = await sendWrite(ctx, signer, request);
     await confirm(ctx, txHash, `finalize(${id})`);
   }
 
