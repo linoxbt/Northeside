@@ -381,6 +381,16 @@ async function main() {
   }
   check(senders.has(addr(7)) && senders.has(addr(5)), "commit() transactions were sent from the players' own wallets");
 
+  // Match page before lock: the market is visible (odds hidden under 5 players) and a result can be
+  // picked from it, which updates the draft. Bo picks a draw for game 3 (he sealed 2-2).
+  await bo.page.goto(`${APP}/match/11/2`, { waitUntil: "networkidle" });
+  check((await bo.page.getByText("Crowd market").count()) === 1 && (await bo.page.getByText(/Crowd odds open at 5 sealed players/).count()) === 1, "match page shows the market before it opens");
+  await bo.page.getByRole("button", { name: "Got it" }).click({ timeout: 2_000 }).catch(() => {});
+  await bo.page.getByRole("button", { name: /Brentford win/ }).click();
+  await bo.page.getByText(/Saved to your draft/).waitFor({ timeout: 15_000 });
+  check(true, "a result can be picked from the match page");
+  await bo.page.screenshot({ path: join(OUT, "match-open.png"), fullPage: true });
+
   // ---------------------------------------------------------------- lock, reveal, results, finalize
   const waitMs = start * 1000 - Date.now() + 2000;
   log(`waiting ${Math.ceil(waitMs / 1000)}s for the first kickoff (lock)`);

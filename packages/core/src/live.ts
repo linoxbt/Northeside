@@ -213,6 +213,8 @@ async function cachedOrStale<T>(ctx: CoreContext, key: string, ttlMs: number, fn
 export interface MatchView {
   matchweekId: number;
   index: number;
+  /** Games in the matchweek (a draft holds one pick per game). */
+  fixtureCount: number;
   home: string;
   away: string;
   kickoff: string;
@@ -313,6 +315,7 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
   return {
     matchweekId: id,
     index,
+    fixtureCount: fixtures.length,
     home: f.home,
     away: f.away,
     kickoff: f.kickoff.toISOString(),

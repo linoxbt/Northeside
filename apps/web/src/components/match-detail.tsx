@@ -2,11 +2,18 @@
 
 import type { MatchView } from "@northeside/core";
 import { crowdBonus } from "@northeside/scoring";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { Card } from "./ui";
-import { api } from "@/lib/client/api";
+import { api, track } from "@/lib/client/api";
+import { draftKey, type Picks } from "@/lib/client/local-seal";
+import { useSession } from "@/lib/client/session";
 import { useMounted } from "@/lib/client/use-mounted";
+
+type Outcome = "home" | "draw" | "away";
+const outcomeOf = (h: number | null | undefined, a: number | null | undefined): Outcome | null =>
+  h === null || h === undefined || a === null || a === undefined ? null : h > a ? "home" : h === a ? "draw" : "away";
 
 const WAT = { timeZone: "Africa/Lagos" } as const;
 const when = (iso: string, local: boolean) =>
@@ -27,6 +34,47 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
     },
   });
   const v = q.data;
+  const qc = useQueryClient();
+  const session = useSession();
+  const signedIn = !!session.data?.user;
+  const [saving, setSaving] = useState<Outcome | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const canPick = !v.locked && signedIn;
+  const myOutcome = outcomeOf(v.mine?.home, v.mine?.away);
+
+  /** Tap a result: set a typical score for this game in your draft (sealing happens on the board). */
+  async function pick(o: Outcome) {
+    if (!canPick || saving) return;
+    setSaving(o);
+    setNote(null);
+    try {
+      const n = v.fixtureCount;
+      const server = await api<{ prediction: { draft: Picks | null } | null }>(`/api/v1/predictions/${v.matchweekId}/me`).catch(() => null);
+      let local: Picks | null = null;
+      try {
+        local = JSON.parse(localStorage.getItem(draftKey(v.matchweekId)) ?? "null") as Picks | null;
+      } catch {
+        local = null;
+      }
+      const base: Picks = server?.prediction?.draft ?? local ?? { home: Array(n).fill(null), away: Array(n).fill(null), banker: null };
+      const [h, a] = o === "home" ? [1, 0] : o === "draw" ? [1, 1] : [0, 1];
+      const keep = outcomeOf(base.home[v.index], base.away[v.index]) === o;
+      const next: Picks = {
+        ...base,
+        home: base.home.map((x, i) => (i === v.index && !keep ? h : x)),
+        away: base.away.map((x, i) => (i === v.index && !keep ? a : x)),
+      };
+      localStorage.setItem(draftKey(v.matchweekId), JSON.stringify(next));
+      await api("/api/v1/predictions/draft", { method: "POST", json: { matchweekId: v.matchweekId, ...next } });
+      track("outcome_tapped", { matchweek_id: v.matchweekId, from: "match_page" });
+      setNote(v.mine?.sealed ? "Saved to your draft. Re-seal on the board to keep it." : "Saved to your draft. Seal your slip on the board.");
+      await qc.invalidateQueries({ queryKey: ["match", v.matchweekId, v.index] });
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "Could not save your pick");
+    } finally {
+      setSaving(null);
+    }
+  }
   const isLive = v.state === "live" || v.state === "ht";
   const total = v.crowd.home + v.crowd.draw + v.crowd.away;
   const playUrl = `/play?mw=${v.matchweekId}`;
@@ -78,52 +126,72 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
         <Card className="space-y-4">
           <div className="flex items-baseline justify-between">
             <h2 className="text-[18px] tracking-[-0.02em]">Crowd market</h2>
-            <span className="font-mono text-[12px] text-muted">{v.crowd.players} sealed</span>
+            <span className="font-mono text-[12px] text-muted">{v.crowd.players} {v.locked ? "players" : "sealed"}</span>
           </div>
-          {v.crowd.shown ? (
-            <>
-              <ul className="space-y-2">
-                {(
-                  [
-                    ["home", `${v.home} win`, v.crowd.home],
-                    ["draw", "Draw", v.crowd.draw],
-                    ["away", `${v.away} win`, v.crowd.away],
-                  ] as const
-                ).map(([k, label, count]) => {
-                  const pct = total ? Math.round((count * 100) / total) : 0;
-                  const bonus = v.rules === 2 ? crowdBonus(count, total) : 0;
-                  return (
-                    <li key={k} className="relative overflow-hidden rounded-lg bg-subtle">
-                      <span aria-hidden className="absolute inset-y-0 left-0 bg-accent/25" style={{ width: `${pct}%` }} />
-                      <div className="relative flex items-center justify-between gap-3 px-3 py-2.5 text-[14px]">
+          <ul className="space-y-2">
+            {(
+              [
+                ["home", "1", `${v.home} win`, v.crowd.home],
+                ["draw", "X", "Draw", v.crowd.draw],
+                ["away", "2", `${v.away} win`, v.crowd.away],
+              ] as const
+            ).map(([k, code, label, count]) => {
+              const pct = v.crowd.shown && total ? Math.round((count * 100) / total) : null;
+              const bonus = v.rules === 2 && v.crowd.shown ? crowdBonus(count, total) : 0;
+              const mine = myOutcome === k;
+              return (
+                <li key={k}>
+                  <button
+                    type="button"
+                    disabled={!canPick || saving !== null}
+                    onClick={() => void pick(k)}
+                    aria-pressed={mine}
+                    className={`relative w-full overflow-hidden rounded-lg text-left transition-colors disabled:cursor-default ${mine ? "bg-ink text-white" : "bg-subtle hover:bg-line disabled:hover:bg-subtle"}`}
+                  >
+                    {pct !== null ? <span aria-hidden className={`absolute inset-y-0 left-0 ${mine ? "bg-accent/30" : "bg-accent/25"}`} style={{ width: `${pct}%` }} /> : null}
+                    <span className="relative flex items-center justify-between gap-3 px-3 py-2.5 text-[14px]">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className={`font-mono text-[12px] ${mine ? "text-white/60" : "text-muted"}`}>{code}</span>
                         <span className="truncate">{label}</span>
-                        <span className="flex items-center gap-2">
-                          {bonus ? <span className="rounded bg-ink px-1.5 py-0.5 font-mono text-[10px] text-accent">+{bonus} if right</span> : null}
-                          <b className="font-mono text-[18px] font-medium tabular-nums">{pct}%</b>
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {v.crowd.scorelines.length ? (
-                <div>
-                  <p className="eyebrow mb-2">Popular scores</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {v.crowd.scorelines.map((s) => (
-                      <span key={`${s.home}-${s.away}`} className="rounded-md border border-line px-2.5 py-1 font-mono text-[13px]">
-                        {s.home}–{s.away} <span className="text-muted">{total ? Math.round((s.count * 100) / total) : 0}%</span>
                       </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <p className="text-[14px] text-muted">
-              The market opens once {v.crowd.minPlayers} players have sealed ({v.crowd.players} so far).
-            </p>
-          )}
+                      <span className="flex items-center gap-2">
+                        {mine ? <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] text-accent-ink">YOUR PICK</span> : null}
+                        {bonus ? <span className="rounded bg-ink px-1.5 py-0.5 font-mono text-[10px] text-accent">+{bonus} if right</span> : null}
+                        <b className="font-mono text-[18px] font-medium tabular-nums">{saving === k ? "…" : pct !== null ? `${pct}%` : "–"}</b>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {!v.crowd.shown ? (
+            <div className="space-y-1.5">
+              <div className="h-1.5 overflow-hidden rounded-full bg-subtle" aria-hidden>
+                <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (v.crowd.players * 100) / v.crowd.minPlayers)}%` }} />
+              </div>
+              <p className="text-[12px] text-muted">
+                Crowd odds open at {v.crowd.minPlayers} sealed players · {v.crowd.players} of {v.crowd.minPlayers} so far
+              </p>
+            </div>
+          ) : v.crowd.scorelines.length ? (
+            <div>
+              <p className="eyebrow mb-2">Popular scores</p>
+              <div className="flex flex-wrap gap-1.5">
+                {v.crowd.scorelines.map((sl) => (
+                  <span key={`${sl.home}-${sl.away}`} className="rounded-md border border-line px-2.5 py-1 font-mono text-[13px]">
+                    {sl.home}–{sl.away} <span className="text-muted">{total ? Math.round((sl.count * 100) / total) : 0}%</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {!v.locked && !signedIn ? (
+            <Link href={`/sign-in?next=${encodeURIComponent(`/match/${v.matchweekId}/${v.index}`)}`} prefetch={false} className="block text-center text-[13px] text-accent-deep underline underline-offset-4">
+              Sign in to pick a result
+            </Link>
+          ) : null}
+          {note ? <p className="text-[13px] text-muted">{note}</p> : null}
         </Card>
 
         {/* Your pick */}
