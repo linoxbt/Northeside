@@ -145,7 +145,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "sharing",
         heading: "Who we share it with",
         body: [
-          "Service providers that host or operate parts of Northeside for us: hosting (Netlify), database (Supabase), football data providers (fixtures and results only, no personal data), and, if you use them, Privy for email sign-in and QIE Pass for verification.",
+          "Service providers that host or operate parts of Northeside for us: hosting (Netlify), database (Supabase), error monitoring (Sentry: technical error details, no email or name), football data providers (fixtures and results only, no personal data), and, if you use them, Privy for email sign-in, QIE Pass for verification and, only with your consent, PostHog for product analytics.",
           "Sponsors receive reports with hashed identifiers and counts only, never your email or name. We do not sell personal data.",
         ],
       },
@@ -223,17 +223,26 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "local",
         heading: "Local storage on your device",
         body: [
-          "Draft picks for the current matchweek, so you do not lose them if you close the tab.",
-          "A backup of each sealed prediction (your picks and salt), so you can prove and reveal your seal even if our servers are unavailable. Export it from the Play page if you change device.",
-          "The league you joined through and how you found it (for host attribution), and that you have seen this cookie notice.",
+          "ns_draft_<matchweek>: your draft picks for a matchweek, so you do not lose them if you close the tab.",
+          "ns_sealed_<matchweek>_<wallet> and ns_pending_<matchweek>_<wallet>: a backup of each sealed prediction (your picks and salt), and one waiting for its transaction, so you can prove and reveal your seal even if our servers are unavailable. Export it from the Play page if you change device.",
+          "ns_device: a random identifier for this browser, used only to limit free gas to one drip per device.",
+          "ns_ref and ns_src: the league you joined through and how you found it (for host attribution).",
+          "ns_cookie_notice and ns_analytics: that you have seen this notice, and your analytics choice.",
+          "If you sign in with email, Privy stores its own session and embedded-wallet data for northeside.netlify.app.",
+        ],
+      },
+      {
+        id: "analytics",
+        heading: "Product analytics (only with your consent)",
+        body: [
+          "If product analytics is switched on for Northeside, the cookie notice asks first. Only if you choose Accept analytics do we load PostHog (EU servers), which stores an anonymous identifier in local storage and records which pages and features are used. Choosing Only necessary means it never loads.",
+          "You can change your choice at any time with the button below.",
         ],
       },
       {
         id: "none",
         heading: "What we do not use",
-        body: [
-          "No advertising cookies, no cross-site tracking, no social media pixels. If we ever add product analytics, it will be off until you agree to it.",
-        ],
+        body: ["No advertising cookies, no cross-site tracking, no social media pixels, no session recording."],
       },
       {
         id: "control",

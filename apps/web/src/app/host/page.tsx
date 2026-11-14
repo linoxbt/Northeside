@@ -16,7 +16,7 @@ export default function HostPage() {
             {[
               ["01", "Create your league", "Pick a name and a link. Share it on WhatsApp, X and Telegram, or open it from your bot."],
               ["02", "Your fans play every week", "Ten scores, sealed onchain before kickoff. Reminders bring them back each matchweek."],
-              ["03", "Sponsors pay per real fan", "For each QIE Pass-verified player who played this week and an earlier one, you earn the campaign rate, up to a cap."],
+              ["03", "Sponsors pay per real fan", "For each QIE Pass-verified player who played this week and an earlier one, you earn the campaign rate, up to a cap. Payouts start once QIE Pass verification is live."],
               ["04", "Claim onchain", "After the matchweek is final a Merkle root lands onchain. Claim your QUSDC from this page."],
             ].map(([n, t, b]) => (
               <li key={n} className="grid grid-cols-[48px_1fr]">

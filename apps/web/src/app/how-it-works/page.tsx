@@ -57,7 +57,7 @@ export default function HowItWorks() {
         </Section>
 
         <Section id="identity" eyebrow="Identity" title="One person, one player." art={<PersonArt />}>
-          <p>QIE Pass proves a real person is behind a profile without Northeside ever seeing their documents. A person may link up to three wallets; on tables and for host payouts they count once.</p>
+          <p>QIE Pass proves a real person is behind a profile without Northeside ever seeing their documents. A person may link up to three wallets; on tables and for host payouts they count once. Verification opens once QIE Pass is connected to Northeside; until then the verified badge and host payouts are not active.</p>
         </Section>
 
         <section id="free" className="scroll-mt-24 border-t border-line pb-16 pt-16">

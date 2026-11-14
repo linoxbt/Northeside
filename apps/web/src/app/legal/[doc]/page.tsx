@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AnalyticsChoice } from "@/components/analytics-choice";
 import { Container, PageHeader } from "@/components/ui";
 import { LEGAL, LEGAL_VERSION } from "@/lib/legal";
 
@@ -59,6 +60,7 @@ export default async function LegalPage({ params }: { params: Promise<{ doc: str
                 {s.body.map((p) => (
                   <p key={p.slice(0, 40)}>{p}</p>
                 ))}
+                {slug === "cookies" && s.id === "analytics" ? <AnalyticsChoice /> : null}
               </div>
             </section>
           ))}

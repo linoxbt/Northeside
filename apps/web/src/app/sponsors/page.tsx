@@ -47,7 +47,7 @@ export default function SponsorsPage() {
               <PersonArt />
             </div>
             <h2 className="mt-6 text-[22px] tracking-[-0.02em]">Bots don't count</h2>
-            <p className="mt-2 max-w-lg text-[15px] leading-6 text-muted">Only QIE Pass-verified people count, and only once they come back for a second matchweek. Farmed wallets earn hosts nothing.</p>
+            <p className="mt-2 max-w-lg text-[15px] leading-6 text-muted">Only QIE Pass-verified people count, and only once they come back for a second matchweek. Farmed wallets earn hosts nothing. QIE Pass verification is being connected: campaigns pay out once it is live, and until then no player counts.</p>
           </article>
           <article>
             <div className="dot-grid rounded-[var(--radius-card)] border border-line bg-white px-4 py-6">
