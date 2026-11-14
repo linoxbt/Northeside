@@ -20,6 +20,7 @@ import {
 import { notifyJob } from "./notify";
 import { reportError, runJob } from "./ops";
 import { postRewardRootsForMatchweek } from "./rewards";
+import { nsdConfigFromEnv, postNsdRoot } from "./nsd";
 
 type Env = Record<string, string | undefined>;
 
@@ -285,6 +286,22 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   notify: async () => notifyJob(getCtx(), env),
 
   /** Apply pending database migrations (run on demand after a deploy that adds one). */
+  /**
+   * $NSD rewards for recently finalized matchweeks. Off unless NSD_REWARDS_ENABLED=1 and the
+   * rewards contract is configured (launch needs verified identity and legal review first).
+   */
+  "post-nsd-roots": async () => {
+    const ctx = getCtx();
+    const cfg = nsdConfigFromEnv(env);
+    if (!cfg.enabled || !ctx.deployment.nsdRewards) return { skipped: "NSD rewards are off" };
+    if (await paused(ctx)) return { skipped: "automation paused" };
+    const finalized = await ctx.db
+      .select()
+      .from(schema.matchweeks)
+      .where(and(eq(schema.matchweeks.status, "finalized"), gte(schema.matchweeks.finalizedAt, new Date(ctx.now().getTime() - 14 * 24 * 3600_000))));
+    return each(finalized, async (mw) => ({ id: mw.id, ...(await runJob(ctx, "post-nsd-root", String(mw.id), () => postNsdRoot(ctx, mw.id, cfg))) }));
+  },
+
   migrate: async () => applyMigrations(getCtx().db),
 
   /**

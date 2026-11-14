@@ -7,6 +7,8 @@ export const publicEnv = {
   matchweeks: process.env.NEXT_PUBLIC_MATCHWEEKS_ADDRESS as Address,
   hostRewards: process.env.NEXT_PUBLIC_HOST_REWARDS_ADDRESS as Address,
   identity: process.env.NEXT_PUBLIC_IDENTITY_ADDRESS as Address,
+  /** $NSD rewards pool; empty until deployed. */
+  nsdRewards: (process.env.NEXT_PUBLIC_NSD_REWARDS_ADDRESS || undefined) as Address | undefined,
   qusdc: process.env.NEXT_PUBLIC_QUSDC_ADDRESS as Address,
   privyAppId: process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "",

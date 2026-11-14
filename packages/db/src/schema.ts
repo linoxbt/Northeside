@@ -370,6 +370,39 @@ export const chainEvents = pgTable(
 );
 
 /**
+ * $NSD rewards: one root per finalized matchweek. "pending" is written before postRoot is sent
+ * (a crash after mining never loses the proofs); "voided" means the admin removed it on-chain.
+ */
+export const nsdRoots = pgTable("nsd_roots", {
+  matchweekId: integer("matchweek_id")
+    .primaryKey()
+    .references(() => matchweeks.id),
+  root: text("root").notNull(),
+  total: uint256("total").notNull(),
+  reportUri: text("report_uri").notNull(),
+  tree: jsonb("tree").notNull(),
+  txHash: text("tx_hash"),
+  status: text("status", { enum: ["pending", "confirmed", "voided"] }).notNull().default("pending"),
+  createdAt: createdAt(),
+});
+
+/** Each wallet's $NSD reward for a matchweek, with its Merkle proof. */
+export const nsdLeaves = pgTable(
+  "nsd_leaves",
+  {
+    matchweekId: integer("matchweek_id").notNull(),
+    wallet: text("wallet").notNull(),
+    amount: uint256("amount").notNull(),
+    rank: integer("rank").notNull(),
+    points: integer("points").notNull(),
+    proof: jsonb("proof").$type<string[]>().notNull(),
+    claimTx: text("claim_tx"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.matchweekId, t.wallet] }), index("nsd_leaves_wallet_idx").on(t.wallet)],
+);
+
+/**
  * Head-to-head: a player challenges a friend for one matchweek with a share link. Picks stay
  * sealed until lock; then both sides are shown with live and final points.
  */

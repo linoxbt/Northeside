@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Address, Hex } from "viem";
-import { RULES_V1_HASH, RULES_V1_TEXT, computeHostPayouts, rank, scoreFixture, scorePicks, type FixtureResult, type PayoutCandidate, RULES_V2_HASH, CURRENT_RULES_HASH, rulesVersion, crowdBonus, scoreEntries } from "../src";
+import { RULES_V1_HASH, RULES_V1_TEXT, computeHostPayouts, rank, scoreFixture, scorePicks, type FixtureResult, type PayoutCandidate, RULES_V2_HASH, CURRENT_RULES_HASH, rulesVersion, crowdBonus, scoreEntries, DEFAULT_NSD_POSITIONS_BPS, nsdPayouts } from "../src";
 
 const played = (index: number, h: number, a: number): FixtureResult => ({ index, homeGoals: h, awayGoals: a, status: "played" });
 
@@ -173,5 +173,54 @@ describe("rules v2: beat the crowd and Banker", () => {
     const results = [{ index: 0, homeGoals: 2, awayGoals: 1, status: "played" as const }];
     const scored = scoreEntries(1, [{ id: "x", home: [2], away: [1], banker: 0 }], results);
     expect(scored[0]).toMatchObject({ points: 5, exactScores: 1 });
+  });
+});
+
+describe("$NSD reward schedule", () => {
+  const E = 10n ** 18n;
+  const pool = 10_000n * E;
+
+  it("default split adds up to exactly 100%", () => {
+    expect(DEFAULT_NSD_POSITIONS_BPS.reduce((a, b) => a + b, 0)).toBe(10_000);
+    expect(DEFAULT_NSD_POSITIONS_BPS).toHaveLength(30);
+  });
+
+  it("pays by position and ignores players beyond the schedule", () => {
+    const ranked = [1, 2, 3, 4].map((rank) => ({ id: `p${rank}`, rank }));
+    const out = nsdPayouts(ranked, { poolPerMatchweek: pool, positionsBps: [5000, 3000, 2000] });
+    expect(out.map((o) => [o.id, o.amount])).toEqual([
+      ["p1", 5_000n * E],
+      ["p2", 3_000n * E],
+      ["p3", 2_000n * E],
+    ]);
+  });
+
+  it("tied players split the positions they occupy; the next rank skips", () => {
+    // Two tied for 2nd share the 2nd (30%) and 3rd (20%) place shares: 25% each. 4th gets 4th's share.
+    const ranked = [
+      { id: "a", rank: 1 },
+      { id: "b", rank: 2 },
+      { id: "c", rank: 2 },
+      { id: "d", rank: 4 },
+    ];
+    const out = nsdPayouts(ranked, { poolPerMatchweek: pool, positionsBps: [4000, 3000, 2000, 1000] });
+    expect(out.map((o) => [o.id, o.amount])).toEqual([
+      ["a", 4_000n * E],
+      ["b", 2_500n * E],
+      ["c", 2_500n * E],
+      ["d", 1_000n * E],
+    ]);
+  });
+
+  it("rounds down; the total never exceeds the pool", () => {
+    const ranked = [1, 1, 1].map((rank, i) => ({ id: `t${i}`, rank }));
+    const out = nsdPayouts(ranked, { poolPerMatchweek: 10n, positionsBps: [10_000] });
+    expect(out.map((o) => o.amount)).toEqual([3n, 3n, 3n]);
+    expect(out.reduce((a, o) => a + o.amount, 0n)).toBeLessThanOrEqual(10n);
+  });
+
+  it("rejects a schedule over 100% or a zero pool", () => {
+    expect(() => nsdPayouts([], { poolPerMatchweek: pool, positionsBps: [6000, 5000] })).toThrow(/over 100%/);
+    expect(() => nsdPayouts([], { poolPerMatchweek: 0n, positionsBps: [100] })).toThrow(/positive/);
   });
 });
