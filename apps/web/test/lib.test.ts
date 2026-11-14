@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatQusdc } from "../src/lib/money";
+import { applySelection, crowdCount, crowdOdds, satisfies } from "../src/lib/markets";
 import { LATE_PAYLOAD_GRACE_MS, payloadWindowOpen } from "../src/lib/payload-window";
 import { isWalletRoute, prefetchFor } from "../src/lib/routes";
 import { safeNext } from "../src/lib/safe-next";
@@ -61,5 +62,53 @@ describe("payloadWindowOpen (final review H-2)", () => {
   it("refuses payloads once the grace has passed, so nobody picks a reveal after seeing scores", () => {
     expect(payloadWindowOpen(lock, new Date(lock.getTime() + LATE_PAYLOAD_GRACE_MS))).toBe(false);
     expect(payloadWindowOpen(lock, new Date("2026-11-21T17:00:00Z"))).toBe(false);
+  });
+});
+
+describe("betting-style markets from one exact score", () => {
+  const s = (home: number, away: number) => ({ home, away });
+
+  it("a pick wins exactly the markets it should", () => {
+    const p = s(2, 1);
+    expect(satisfies(p, { market: "1x2", value: "home" })).toBe(true);
+    expect(satisfies(p, { market: "dc", value: "1X" })).toBe(true);
+    expect(satisfies(p, { market: "dc", value: "12" })).toBe(true);
+    expect(satisfies(p, { market: "dc", value: "X2" })).toBe(false);
+    expect(satisfies(p, { market: "ou", value: "over" })).toBe(true);
+    expect(satisfies(p, { market: "gg", value: "yes" })).toBe(true);
+    expect(satisfies(s(1, 0), { market: "gg", value: "no" })).toBe(true);
+  });
+
+  it("tapping a market moves the pick to the nearest score and keeps the result", () => {
+    expect(applySelection(s(1, 0), { market: "ou", value: "over" })).toEqual(s(3, 0)); // keeps the win and "no" for both to score
+    expect(applySelection(s(1, 0), { market: "gg", value: "yes" })).toEqual(s(2, 1));
+    expect(applySelection(s(2, 1), { market: "ou", value: "under" })).toEqual(s(2, 0));
+    expect(applySelection(s(2, 1), { market: "1x2", value: "draw" })).toEqual(s(2, 2)); // keeps over 2.5 and both to score
+    expect(applySelection(s(2, 1), { market: "1x2", value: "away" })).toEqual(s(1, 2));
+    expect(applySelection(s(1, 1), { market: "dc", value: "12" })).toEqual(s(1, 0));
+    expect(applySelection(s(2, 1), { market: "cs", value: s(3, 3) })).toEqual(s(3, 3));
+    // Already satisfied: unchanged.
+    expect(applySelection(s(3, 1), { market: "ou", value: "over" })).toEqual(s(3, 1));
+  });
+
+  it("starts from a typical score when there is no pick", () => {
+    expect(applySelection(null, { market: "1x2", value: "home" })).toEqual(s(1, 0));
+    expect(applySelection(null, { market: "1x2", value: "draw" })).toEqual(s(1, 1));
+    expect(applySelection(null, { market: "ou", value: "over" })).toEqual(s(2, 1));
+    expect(applySelection(null, { market: "gg", value: "no" })).toEqual(s(1, 0));
+  });
+
+  it("crowd odds are 1 / share, rounded down to 2 decimals; none when nobody picked it", () => {
+    expect(crowdOdds(62, 100)).toBe("1.61");
+    expect(crowdOdds(1, 3)).toBe("3.00");
+    expect(crowdOdds(0, 10)).toBeNull();
+    const dist = [
+      { home: 2, away: 1, count: 3 },
+      { home: 1, away: 1, count: 1 },
+      { home: 0, away: 2, count: 1 },
+    ];
+    expect(crowdCount(dist, { market: "1x2", value: "home" })).toBe(3);
+    expect(crowdCount(dist, { market: "gg", value: "yes" })).toBe(4);
+    expect(crowdCount(dist, { market: "ou", value: "over" })).toBe(3);
   });
 });

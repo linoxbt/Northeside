@@ -254,8 +254,7 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
     }
     const scorelines = [...tally.entries()]
       .map(([k, count]) => ({ home: Number(k.split("-")[0]), away: Number(k.split("-")[1]), count }))
-      .sort((a, b) => b.count - a.count || a.home + a.away - (b.home + b.away))
-      .slice(0, 5);
+      .sort((a, b) => b.count - a.count || a.home + a.away - (b.home + b.away));
     return {
       players: entries.length,
       shown,
