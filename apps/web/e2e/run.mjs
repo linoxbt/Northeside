@@ -381,18 +381,34 @@ async function main() {
   }
   check(senders.has(addr(7)) && senders.has(addr(5)), "commit() transactions were sent from the players' own wallets");
 
-  // Match page before lock: the market is visible (odds hidden under 5 players) and a result can be
-  // picked from it, which updates the draft. Bo picks a draw for game 3 (he sealed 2-2).
+  // Odds model fits, as the compute-odds job stores them (three fits, 6 hours apart).
+  {
+    const db = postgres(DATABASE_URL, { max: 1 });
+    const fit = (h, xg) => ({ t: new Date(Date.now() - h * 3_600_000).toISOString(), fixtures: xg.map(([home, away], index) => ({ index, home, away })) });
+    const hist = [fit(12, [[1.6, 1.1], [1.0, 1.7], [1.3, 1.2]]), fit(6, [[1.7, 1.0], [1.1, 1.6], [1.2, 1.3]]), fit(0, [[1.8, 0.9], [1.1, 1.5], [1.1, 1.4]])];
+    const cur = { model: "dixon-coles-v1", fittedAt: hist[2].t, matches: 480, fixtures: hist[2].fixtures };
+    await db`insert into app_settings (key, value) values ('odds:11', ${db.json(cur)}), ('oddshist:11', ${db.json(hist)})`;
+    await db.end();
+  }
+
+  // Match page before lock: chance chart, the three results with Yes/No, likeliest exact scores.
+  // Bo picks Fulham v Brentford (game 3, he sealed 2-2): "No" on Fulham, then the 1-2 exact score.
   await bo.page.goto(`${APP}/match/11/2`, { waitUntil: "networkidle" });
   check(
-    (await bo.page.getByText("Correct Score").count()) === 1 && (await bo.page.getByText("Double Chance").count()) === 1 && (await bo.page.getByText(/Odds open at 5 sealed/).count()) === 1,
-    "match page shows the betting markets before odds open",
+    (await bo.page.getByRole("img", { name: /Chance over time/ }).count()) === 1 &&
+      (await bo.page.getByRole("button", { name: /^Yes \d+%/ }).count()) === 3 &&
+      (await bo.page.getByText("Exact score", { exact: true }).count()) === 1 &&
+      (await bo.page.getByText("Double Chance").count()) === 0,
+    "match page shows the chance chart, Yes/No outcomes and exact scores (no extra markets)",
   );
   await bo.page.getByRole("button", { name: "Got it" }).click({ timeout: 2_000 }).catch(() => {});
-  await bo.page.getByRole("button", { name: /^1:2/ }).click();
+  await bo.page.getByRole("button", { name: /^No / }).first().click();
   await bo.page.getByText(/Draft updated|Added to your slip/).waitFor({ timeout: 15_000 });
-  check((await bo.page.getByRole("button", { name: /^1:2/ }).getAttribute("aria-pressed")) === "true", "a correct score can be picked from the match page");
-  check((await bo.page.getByRole("button", { name: /^X2/ }).getAttribute("aria-pressed")) === "true", "the pick lights up the markets it wins (X2)");
+  check((await bo.page.getByRole("button", { name: /^Yes / }).first().getAttribute("aria-pressed")) === "false", "No on the home side moves the pick off a home win");
+  await bo.page.getByRole("button", { name: /^1–2/ }).click();
+  await bo.page.waitForFunction(() => [...document.querySelectorAll('button[aria-pressed="true"]')].some((b) => b.textContent?.includes("1–2")), null, { timeout: 15_000 });
+  check((await bo.page.getByRole("button", { name: /^1–2/ }).getAttribute("aria-pressed")) === "true", "an exact score can be picked from the match page");
+  check((await bo.page.getByRole("button", { name: /^Yes / }).nth(2).getAttribute("aria-pressed")) === "true", "the pick lights up the result it wins (away)");
   await bo.page.screenshot({ path: join(OUT, "match-open.png"), fullPage: true });
 
   // ---------------------------------------------------------------- lock, reveal, results, finalize
@@ -452,7 +468,7 @@ async function main() {
   check((await page.getByText("reveal verified").count()) === 2, "Proof page shows 2 verified reveals");
   // Match page: final score, crowd market and earlier meetings area for Everton v Liverpool.
   await page.goto(`${APP}/match/11/1`, { waitUntil: "networkidle" });
-  check((await page.getByText("Correct Score").count()) === 1 && (await page.getByText("Full time").count()) >= 1, "match page shows the final score and the markets");
+  check((await page.getByText("Exact score", { exact: true }).count()) === 1 && (await page.getByText("Full time").count()) >= 1, "match page shows the final score and the market");
   await page.screenshot({ path: join(OUT, "match.png"), fullPage: true });
   // Sportsbook pages: Live (every game with its state) and My slips (history).
   await page.goto(`${APP}/live`, { waitUntil: "networkidle" });

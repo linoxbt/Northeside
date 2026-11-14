@@ -4,7 +4,7 @@ import { breakdown, crowdCounts, rank, rulesVersion, scoreEntries, type FixtureB
 import { asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
-import { oddsFor } from "./odds";
+import { chanceSeries, fitsFor, oddsFor, type ChancePoint } from "./odds";
 import { displayName } from "./queries";
 
 /** Crowd odds before lock appear only once this many wallets have sealed, so no single pick shows. */
@@ -231,6 +231,8 @@ export interface MatchView {
   venue: string | null;
   referee: string | null;
   crowd: { players: number; shown: boolean; minPlayers: number; home: number; draw: number; away: number; scorelines: { home: number; away: number; count: number }[] };
+  /** Chance of each result over time (model blended with the crowd), up to lock. */
+  chart: ChancePoint[];
   mine: { home: number | null; away: number | null; banker: boolean; sealed: boolean; points: FixtureBreakdown | null } | null;
   meetings: { date: string; home: string; away: string; homeGoals: number | null; awayGoals: number | null }[];
 }
@@ -268,6 +270,17 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
       away: shown ? c.away : 0,
       scorelines: shown ? scorelines : [],
     };
+  });
+
+  // Chance over time: every model fit, plus the crowd as it sealed (frozen at lock).
+  const chart = await cached(ctx, `chart:${id}:${index}:${locked ? "r" : "s"}`, locked ? 3_600_000 : 300_000, async () => {
+    const seals = (await crowdEntries(ctx, id, locked)).flatMap((e) => {
+      const h = e.payload.home[index], a = e.payload.away[index];
+      if (h === null || h === undefined || a === null || a === undefined || !e.sealedAt) return [];
+      return [{ t: e.sealedAt, outcome: h > a ? ("home" as const) : h === a ? ("draw" as const) : ("away" as const) }];
+    });
+    const now = ctx.now();
+    return chanceSeries(await fitsFor(ctx, id, index), seals, { end: now < mw.lockTime ? now : mw.lockTime, minCrowd: MIN_CROWD });
   });
 
   // Live state and provisional points (after lock).
@@ -323,6 +336,7 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
       const o = odds?.fixtures.find((x) => x.index === index);
       return o ? { home: o.home, away: o.away } : null;
     })(),
+    chart,
     home: f.home,
     away: f.away,
     kickoff: f.kickoff.toISOString(),

@@ -1,11 +1,13 @@
 "use client";
 
 import type { MatchView } from "@northeside/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "./ui";
-import { applySelection, CORRECT_SCORES, marketGrid, satisfies, selectionOdds, type Score, type Selection } from "@/lib/markets";
+import { probabilityOf } from "@northeside/odds/grid";
+import { crowdBonus } from "@northeside/scoring";
+import { applySelection, marketGrid, satisfies, type Score, type Selection } from "@/lib/markets";
 import { api, track } from "@/lib/client/api";
 import { draftKey, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
@@ -31,7 +33,6 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
     },
   });
   const v = q.data;
-  const qc = useQueryClient();
   const session = useSession();
   const signedIn = !!session.data?.user;
   const [saving, setSaving] = useState(false);
@@ -72,7 +73,24 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
     }
   }
   const grid = useMemo(() => marketGrid(v.xg, v.crowd.shown ? v.crowd.scorelines : null), [v.xg, v.crowd.shown, v.crowd.scorelines]);
-  const ctx: MarketCtx = { pick, final: v.state === "ft" && v.score ? v.score : null, grid, disabled: !canPick || saving, onSelect: (sel) => void select(sel) };
+  const final = v.state === "ft" && v.score ? v.score : null;
+  const won = (k: Outcome) => !!final && satisfies(final, { market: "1x2", value: k });
+  const chance = (k: Outcome) => (grid ? probabilityOf(grid, k === "home" ? (h, a) => h > a : k === "draw" ? (h, a) => h === a : (h, a) => h < a) : null);
+  const outcomes = (
+    [
+      ["home", v.home],
+      ["draw", "Draw"],
+      ["away", v.away],
+    ] as const
+  ).map(([k, name]) => ({ k, name, color: SERIES[k], p: chance(k) }));
+  const lead = (() => {
+    const best = outcomes.filter((o) => o.p !== null).sort((a, b) => b.p! - a.p!)[0];
+    if (!best) return null;
+    const first = v.chart[0]?.[best.k];
+    const delta = first === undefined ? 0 : Math.round(best.p! * 100) - Math.round(first * 100);
+    return { name: best.name, p: best.p!, delta };
+  })();
+  const scores = topScores(grid, pick);
   const isLive = v.state === "live" || v.state === "ht";
   const playUrl = `/play?mw=${v.matchweekId}`;
 
@@ -119,59 +137,130 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
       </section>
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_300px]">
-        {/* Markets */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-subtle px-3 py-2 text-[12px] text-muted">
-            <span>Exact score 5 pts · correct result 2 pts{v.rules === 2 ? " · beat the crowd up to +3" : ""}</span>
-            <span className="font-mono">
-              {v.xg
-                ? `Northeside odds · model${v.crowd.shown ? ` + ${v.crowd.players} picks` : ""}`
-                : v.crowd.shown
-                  ? `Crowd odds · ${v.crowd.players} picks`
-                  : `Odds open at ${v.crowd.minPlayers} sealed · ${v.crowd.players}/${v.crowd.minPlayers}`}
-            </span>
-          </div>
-          <Market title="1X2" sub="Full-time result">
-            <Odds cols={3} items={[
-              { sel: { market: "1x2", value: "home" }, label: "1", hint: v.home },
-              { sel: { market: "1x2", value: "draw" }, label: "X", hint: "Draw" },
-              { sel: { market: "1x2", value: "away" }, label: "2", hint: v.away },
-            ]} ctx={ctx} />
-          </Market>
-          <Market title="Double Chance">
-            <Odds cols={3} items={[
-              { sel: { market: "dc", value: "1X" }, label: "1X", hint: "Home or draw" },
-              { sel: { market: "dc", value: "12" }, label: "12", hint: "Either wins" },
-              { sel: { market: "dc", value: "X2" }, label: "X2", hint: "Draw or away" },
-            ]} ctx={ctx} />
-          </Market>
-          <Market title="Over/Under 2.5" sub="Total goals">
-            <Odds cols={2} items={[
-              { sel: { market: "ou", value: "over" }, label: "Over 2.5" },
-              { sel: { market: "ou", value: "under" }, label: "Under 2.5" },
-            ]} ctx={ctx} />
-          </Market>
-          <Market title="GG/NG" sub="Both teams to score">
-            <Odds cols={2} items={[
-              { sel: { market: "gg", value: "yes" }, label: "GG", hint: "Yes" },
-              { sel: { market: "gg", value: "no" }, label: "NG", hint: "No" },
-            ]} ctx={ctx} />
-          </Market>
-          <Market title="Correct Score" sub="Your exact pick">
-            <div className="grid grid-cols-3 gap-1.5">
-              {(["home", "draw", "away"] as const).map((col) => (
-                <div key={col} className="space-y-1.5">
-                  <p className="truncate text-center font-mono text-[10px] uppercase tracking-[0.06em] text-muted">{col === "home" ? v.home : col === "draw" ? "Draw" : v.away}</p>
-                  {CORRECT_SCORES[col].map((sc) => (
-                    <OddsButton key={`${sc.home}-${sc.away}`} item={{ sel: { market: "cs", value: sc }, label: `${sc.home}:${sc.away}` }} ctx={ctx} />
-                  ))}
-                </div>
-              ))}
+        {/* Market: chance over time and the three results, Polymarket-style */}
+        <div className="space-y-3">
+          <section className="rounded-2xl border border-line bg-white p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                {lead ? (
+                  <p className="flex items-baseline gap-2">
+                    <span className="text-[30px] font-medium leading-none tracking-[-0.04em] tabular-nums">{pct(lead.p)}</span>
+                    <span className="text-[15px] text-muted">chance · {lead.name}</span>
+                    {lead.delta ? (
+                      <span className={`font-mono text-[12px] ${lead.delta > 0 ? "text-accent-deep" : "text-bad"}`}>
+                        {lead.delta > 0 ? "▲" : "▼"} {Math.abs(lead.delta)}
+                      </span>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-[15px] text-muted">Odds appear after the first model fit.</p>
+                )}
+              </div>
+              <span className="flex flex-col items-end gap-1">
+                {final ? (
+                  <span className="rounded-full bg-ink px-2.5 py-0.5 text-[12px] font-medium text-white">
+                    Resolved · {final.home > final.away ? v.home : final.home === final.away ? "Draw" : v.away}
+                  </span>
+                ) : null}
+                <span className="font-mono text-[12px] text-muted">
+                  {v.crowd.players} {v.crowd.players === 1 ? "pick" : "picks"}
+                  {v.crowd.shown || v.locked ? "" : ` · crowd joins at ${v.crowd.minPlayers}`}
+                </span>
+              </span>
             </div>
-            {pick && !CORRECT_SCORES[pick.home > pick.away ? "home" : pick.home === pick.away ? "draw" : "away"].some((sc) => sc.home === pick.home && sc.away === pick.away) ? (
-              <p className="mt-2 text-center text-[12px] text-muted">Your pick {pick.home}:{pick.away} (fine-tune any score on the board)</p>
-            ) : null}
-          </Market>
+            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]" aria-label="Legend">
+              {outcomes.map((o) => (
+                <li key={o.k} className="flex items-center gap-1.5">
+                  <span aria-hidden className="size-2 rounded-full" style={{ background: o.color }} />
+                  <span className="text-ink-2">{o.name}</span>
+                  <b className="font-medium tabular-nums">{o.p === null ? "–" : pct(o.p)}</b>
+                </li>
+              ))}
+            </ul>
+            {v.chart.length > 1 ? <ChanceChart points={v.chart} outcomes={outcomes} mounted={mounted} /> : null}
+          </section>
+
+          <section className="overflow-hidden rounded-2xl border border-line bg-white">
+            <header className="flex items-center justify-between border-b border-line px-4 py-2.5 text-[12px] text-muted">
+              <span className="font-mono uppercase tracking-[0.06em]">Outcome</span>
+              <span>Exact 5 · result 2{v.rules === 2 ? " · beat the crowd +3" : ""}</span>
+            </header>
+            <ul className="divide-y divide-line">
+              {outcomes.map((o) => {
+                const yes = !!pick && satisfies(pick, { market: "1x2", value: o.k });
+                const bonus = v.rules === 2 && v.crowd.shown ? crowdBonus(v.crowd[o.k], v.crowd.home + v.crowd.draw + v.crowd.away) : 0;
+                return (
+                  <li key={o.k} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_64px_auto]">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span aria-hidden className="h-8 w-1 shrink-0 rounded-full" style={{ background: o.color }} />
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px] font-medium">{o.name}</p>
+                        <p className="text-[12px] text-muted">
+                          {v.crowd.shown ? `${v.crowd[o.k]} ${v.crowd[o.k] === 1 ? "pick" : "picks"}` : o.k === "draw" ? "Level at full time" : "To win"}
+                          {bonus ? <span className="ml-1.5 text-accent-deep">+{bonus} if right</span> : null}
+                          {yes ? <span className="ml-1.5 rounded bg-ink px-1.5 py-px font-mono text-[10px] text-accent">YOUR PICK</span> : null}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="hidden text-right text-[22px] font-medium tracking-[-0.03em] tabular-nums sm:block">{o.p === null ? "–" : pct(o.p)}</p>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        disabled={!canPick || saving}
+                        aria-pressed={yes}
+                        onClick={() => void select({ market: "1x2", value: o.k })}
+                        className={`h-10 min-w-[84px] rounded-lg px-3 text-[13px] font-medium tabular-nums transition-colors disabled:cursor-default ${
+                          yes ? "bg-[#1baf7a] text-white" : "bg-[#1baf7a]/12 text-[#0b6b49] hover:bg-[#1baf7a]/20 disabled:hover:bg-[#1baf7a]/12"
+                        } ${won(o.k) ? "ring-2 ring-ink ring-offset-1" : ""}`}
+                      >
+                        Yes {o.p === null ? "" : pct(o.p)}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canPick || saving}
+                        onClick={() => void select({ market: "dc", value: NOT[o.k] })}
+                        className="h-10 min-w-[84px] rounded-lg bg-bad/10 px-3 text-[13px] font-medium tabular-nums text-bad transition-colors hover:bg-bad/15 disabled:cursor-default disabled:hover:bg-bad/10"
+                      >
+                        No {o.p === null ? "" : pct(1 - o.p)}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          {/* Exact score: the game's 5-point pick */}
+          <section className="rounded-2xl border border-line bg-white p-4">
+            <div className="mb-2.5 flex items-baseline justify-between">
+              <h3 className="text-[15px] font-medium">Exact score</h3>
+              <span className="text-[12px] text-muted">5 pts if right</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {scores.map((sc) => {
+                const on = !!pick && pick.home === sc.home && pick.away === sc.away;
+                return (
+                  <button
+                    key={`${sc.home}-${sc.away}`}
+                    type="button"
+                    disabled={!canPick || saving}
+                    aria-pressed={on}
+                    onClick={() => void select({ market: "cs", value: { home: sc.home, away: sc.away } })}
+                    className={`inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] tabular-nums transition-colors disabled:cursor-default ${
+                      on ? "bg-ink text-white" : "border border-line hover:bg-subtle"
+                    }`}
+                  >
+                    <b className="font-mono font-medium">
+                      {sc.home}–{sc.away}
+                    </b>
+                    {sc.p !== null ? <span className={on ? "text-white/60" : "text-muted"}>{pct(sc.p)}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+            {!v.locked ? <p className="mt-2 text-[12px] text-muted">Any other score: set it on your slip.</p> : null}
+          </section>
+
           {!v.locked && !signedIn ? (
             <Link href={`/sign-in?next=${encodeURIComponent(`/match/${v.matchweekId}/${v.index}`)}`} prefetch={false} className="block rounded-xl bg-accent py-2.5 text-center text-[14px] font-medium text-accent-ink">
               Sign in to pick
@@ -235,65 +324,102 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
   );
 }
 
-interface MarketCtx {
-  pick: Score | null;
-  /** Final score, once the game is over: winning selections are marked. */
-  final: Score | null;
-  /** Score-probability grid (model, blended with the crowd once shown). */
-  grid: number[][] | null;
-  disabled: boolean;
-  onSelect(sel: Selection): void;
+type Outcome = "home" | "draw" | "away";
+/** Series colours (validated for colour-blind separation); identity is also in the legend and rows. */
+const SERIES: Record<Outcome, string> = { home: "#1baf7a", draw: "#eb6834", away: "#2a78d6" };
+const NOT: Record<Outcome, "1X" | "12" | "X2"> = { home: "X2", draw: "12", away: "1X" };
+const pct = (p: number) => `${p < 0.005 ? "<1" : p > 0.995 ? ">99" : Math.round(p * 100)}%`;
+
+/** The six likeliest scores (plus your pick if it is not among them). */
+function topScores(grid: number[][] | null, pick: Score | null): { home: number; away: number; p: number | null }[] {
+  const all: { home: number; away: number; p: number | null }[] = [];
+  if (grid) grid.forEach((row, h) => row.forEach((p, a) => all.push({ home: h, away: a, p })));
+  const top = grid ? all.sort((x, y) => y.p! - x.p!).slice(0, 6) : [
+    { home: 1, away: 0, p: null }, { home: 1, away: 1, p: null }, { home: 2, away: 1, p: null }, { home: 0, away: 1, p: null }, { home: 2, away: 0, p: null }, { home: 0, away: 0, p: null },
+  ];
+  if (pick && !top.some((s) => s.home === pick.home && s.away === pick.away)) top.push({ ...pick, p: grid?.[pick.home]?.[pick.away] ?? null });
+  return top;
 }
 
-interface OddsItem {
-  sel: Selection;
-  label: string;
-  hint?: string;
-}
-
-function Market({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+/** Chance over time: one 2px line per result, recessive grid, crosshair and tooltip on hover. */
+function ChanceChart({ points, outcomes, mounted }: { points: { t: string; home: number; draw: number; away: number }[]; outcomes: { k: Outcome; name: string; color: string }[]; mounted: boolean }) {
+  const ref = useRef<SVGSVGElement>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const [W, setW] = useState(640);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => e && setW(Math.max(240, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const H = 200, R = 40, T = 8, B = 22;
+  const t0 = Date.parse(points[0]!.t), t1 = Date.parse(points.at(-1)!.t);
+  const x = (t: string) => (t1 === t0 ? 0 : ((Date.parse(t) - t0) / (t1 - t0)) * (W - R));
+  const y = (p: number) => T + (1 - p) * (H - T - B);
+  // Step lines: a chance holds until the next update.
+  const path = (k: Outcome) => points.map((pt, i) => `${i === 0 ? "M" : `H${x(pt.t).toFixed(1)}V`}${i === 0 ? `${x(pt.t).toFixed(1)},${y(pt[k]).toFixed(1)}` : y(pt[k]).toFixed(1)}`).join("");
+  const fmt = (t: string) => new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", ...(mounted ? { hour: "2-digit", minute: "2-digit" } : { timeZone: "Africa/Lagos" }) });
+  function onMove(e: React.PointerEvent<SVGSVGElement>) {
+    const box = ref.current?.getBoundingClientRect();
+    if (!box) return;
+    const px = ((e.clientX - box.left) / box.width) * W;
+    let best = 0;
+    points.forEach((pt, i) => {
+      if (Math.abs(x(pt.t) - px) < Math.abs(x(points[best]!.t) - px)) best = i;
+    });
+    setHover(best);
+  }
+  const hp = hover === null ? null : points[hover]!;
+  const hx = hp ? x(hp.t) : 0;
   return (
-    <section className="rounded-xl border border-line bg-white">
-      <header className="flex items-baseline justify-between border-b border-line px-3 py-2">
-        <h3 className="text-[14px] font-medium">{title}</h3>
-        {sub ? <span className="text-[11px] text-muted">{sub}</span> : null}
-      </header>
-      <div className="p-2">{children}</div>
-    </section>
-  );
-}
-
-function Odds({ items, cols, ctx }: { items: OddsItem[]; cols: 2 | 3; ctx: MarketCtx }) {
-  return (
-    <div className={`grid gap-1.5 ${cols === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-      {items.map((it) => (
-        <OddsButton key={it.label} item={it} ctx={ctx} />
-      ))}
-    </div>
-  );
-}
-
-/** One selection: label (and hint) on the left, crowd odds on the right; green when it is your pick. */
-function OddsButton({ item, ctx }: { item: OddsItem; ctx: MarketCtx }) {
-  const on = ctx.pick ? satisfies(ctx.pick, item.sel) : false;
-  const won = ctx.final ? satisfies(ctx.final, item.sel) : false;
-  const odds = selectionOdds(ctx.grid, item.sel)?.odds ?? null;
-  return (
-    <button
-      type="button"
-      disabled={ctx.disabled}
-      aria-pressed={on}
-      onClick={() => ctx.onSelect(item.sel)}
-      title={item.hint}
-      className={`flex h-11 w-full min-w-0 items-center justify-between gap-1.5 rounded-lg px-2.5 text-left transition-colors disabled:cursor-default ${
-        on ? "bg-accent text-accent-ink" : "bg-subtle text-ink hover:bg-line disabled:hover:bg-subtle"
-      } ${won ? "ring-2 ring-ink ring-offset-1" : ""}`}
-    >
-      <span className="min-w-0">
-        <span className="block truncate text-[13px] font-medium leading-4">{item.label}</span>
-        {item.hint ? <span className={`block truncate text-[10px] leading-3 ${on ? "text-accent-ink/70" : "text-muted"}`}>{item.hint}</span> : null}
-      </span>
-      <span className={`shrink-0 font-mono text-[13px] font-medium tabular-nums ${on ? "" : odds ? "text-accent-deep" : "text-line-strong"}`}>{odds ?? "–"}</span>
-    </button>
+    <figure className="relative mt-3">
+      <svg
+        ref={ref}
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-[200px] w-full touch-none select-none"
+        role="img"
+        aria-label={`Chance over time: ${outcomes.map((o) => `${o.name} ${Math.round(points.at(-1)![o.k] * 100)}%`).join(", ")}`}
+        onPointerMove={onMove}
+        onPointerDown={onMove}
+        onPointerLeave={() => setHover(null)}
+      >
+        {[0, 0.25, 0.5, 0.75, 1].map((g) => (
+          <g key={g}>
+            <line x1={0} x2={W - R} y1={y(g)} y2={y(g)} stroke="var(--color-line)" strokeDasharray={g === 0 ? undefined : "2 4"} vectorEffect="non-scaling-stroke" />
+            <text x={W - R + 6} y={y(g) + 4} className="fill-muted font-mono text-[11px]">
+              {g * 100}%
+            </text>
+          </g>
+        ))}
+        {outcomes.map((o) => (
+          <path key={o.k} d={path(o.k)} fill="none" stroke={o.color} strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        ))}
+        {outcomes.map((o) => (
+          <circle key={o.k} cx={x(points.at(-1)!.t)} cy={y(points.at(-1)![o.k])} r={4} fill={o.color} stroke="white" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        ))}
+        {hp ? <line x1={hx} x2={hx} y1={T} y2={H - B} stroke="var(--color-ink)" strokeOpacity={0.35} vectorEffect="non-scaling-stroke" /> : null}
+        <text x={0} y={H - 6} className="fill-muted font-mono text-[11px]">
+          {fmt(points[0]!.t)}
+        </text>
+        <text x={W - R} y={H - 6} textAnchor="end" className="fill-muted font-mono text-[11px]">
+          {fmt(points.at(-1)!.t)}
+        </text>
+      </svg>
+      {hp ? (
+        <div
+          className="pointer-events-none absolute top-0 z-10 rounded-lg bg-ink px-2.5 py-2 text-[12px] text-white shadow-lg"
+          style={{ left: `${(hx / W) * 100}%`, transform: hx > W / 2 ? "translateX(calc(-100% - 8px))" : "translateX(8px)" }}
+        >
+          <p className="mb-1 font-mono text-[11px] text-white/60">{fmt(hp.t)}</p>
+          {outcomes.map((o) => (
+            <p key={o.k} className="flex items-center gap-1.5 whitespace-nowrap">
+              <span aria-hidden className="size-2 rounded-full" style={{ background: o.color }} />
+              {o.name} <b className="ml-auto pl-3 font-medium tabular-nums">{Math.round(hp[o.k] * 100)}%</b>
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </figure>
   );
 }

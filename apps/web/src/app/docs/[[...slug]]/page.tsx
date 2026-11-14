@@ -111,7 +111,7 @@ function HowItWorks() {
         <p>Crowd odds show how everyone is calling each game (1 · X · 2). They appear once 5 players have sealed.</p>
       </Section>
       <Section id="odds" title="Odds">
-        <p>Every market shows Northeside odds from a statistical model of team strength (Dixon–Coles), updated every 6 hours from real results. Once 5 players have sealed, their picks move the odds like a market. Odds are for fun: nothing is staked and points do not depend on them.</p>
+        <p>Each game shows the chance of every result from a statistical model of team strength (Dixon–Coles), updated every 6 hours from real results. Once 5 players have sealed, their picks move the chances like a market, and the chart shows how they moved. Chances are for fun: nothing is staked and points do not depend on them.</p>
       </Section>
       <Section id="banker" title="Banker">
         <p>Star one game as your Banker. Its points, bonus included, count double. It is sealed with your picks.</p>

@@ -14,11 +14,13 @@ Dixon–Coles Poisson model, the standard approach for football scores:
   365 days old counts half as much. A ridge prior pulls teams with little data towards a prior mean;
   promoted teams (not in last season's results) start a little below average.
 - The score grid (0–0 to 9–9) uses the Dixon–Coles low-score correction (rho = −0.08) and is
-  normalised to 1. Every market is read from it: 1X2, Double Chance, Over/Under 2.5, GG/NG and
-  Correct Score.
+  normalised to 1. The match page reads two markets from it, Polymarket-style: the result (each
+  side and the draw as a % chance with Yes/No) and the likeliest exact scores. A chance-over-time
+  chart replays every stored fit and the crowd as it sealed (seal times rounded up to the hour,
+  crowd included only from 5 seals), frozen at lock. The board shows the same 1X2 chances.
 - **Crowd blend**: once 5 wallets have sealed, the crowd's picks are blended in, each pick counting
   as one observation against 30 pseudo-observations from the model, so the odds move like a market.
-- **Fair odds** = 1 ÷ probability, rounded down to 2 decimals, between 1.01 and 500. No margin.
+- Chances are shown as percentages (no decimal odds, no margin).
 
 ## Data and refresh
 

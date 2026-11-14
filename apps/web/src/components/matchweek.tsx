@@ -599,8 +599,8 @@ function ChallengeButton({ mwId }: { mwId: number }) {
 }
 
 /**
- * Betting-board result buttons: 1 (home) · X (draw) · 2 (away). They show the crowd split once
- * enough players have sealed, and the bonus a right call earns; tapping one sets a typical score.
+ * Board result buttons: 1 (home) · X (draw) · 2 (away), each with its chance (model blended with
+ * the crowd) and the bonus a right call earns; tapping one sets a typical score.
  */
 function OddsButtons({
   c,
@@ -644,10 +644,10 @@ function OddsButtons({
               mine ? "bg-ink text-white" : "bg-subtle text-ink hover:bg-line disabled:hover:bg-subtle"
             }`}
           >
-            {/* Polymarket-style fill: how much of the crowd is on this result. */}
+            {/* Polymarket-style: chance of this result, as text and as a fill. */}
             {o ? <span aria-hidden className={`absolute inset-y-0 left-0 ${mine ? "bg-accent/25" : "bg-accent/15"}`} style={{ width: `${Math.round(o.p * 100)}%` }} /> : null}
             <span className={`relative font-mono text-[11px] ${mine ? "text-white/60" : "text-muted"}`}>{label}</span>
-            <span className="relative font-medium">{o ? o.odds : "–"}</span>
+            <span className="relative font-medium">{pct}</span>
             {bonus ? <span className={`relative font-mono text-[10px] ${mine ? "text-accent" : "text-accent-deep"}`}>+{bonus}</span> : null}
           </button>
         );

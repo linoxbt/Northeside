@@ -1,6 +1,6 @@
 import { schema } from "@northeside/db";
 import { TheSportsDbClient, type MatchResult as ProviderResult } from "@northeside/football";
-import { PROMOTED_PRIOR, expectedGoals, fitRatings, key, type MatchResult } from "@northeside/odds";
+import { PROMOTED_PRIOR, expectedGoals, fitRatings, key, probabilityOf, scoreGrid, type MatchResult } from "@northeside/odds";
 import { asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 
@@ -84,6 +84,9 @@ export async function computeOdds(ctx: CoreContext, opts: { history?: MatchResul
       }),
     };
     await setSetting(ctx, `odds:${mw.id}`, value);
+    // Keep every fit (30 days at one fit per 6 hours) for the chance-over-time chart.
+    const hist = (await getSetting<HistoryEntry[]>(ctx, `oddshist:${mw.id}`)) ?? [];
+    await setSetting(ctx, `oddshist:${mw.id}`, [...hist, { t: value.fittedAt, fixtures: value.fixtures }].slice(-120));
     done.push({ matchweekId: mw.id, fixtures: value.fixtures.length });
   }
   return { fittedOn: ratings.matches, homeAdvantage: +ratings.home.toFixed(3), matchweeks: done };
@@ -92,4 +95,74 @@ export async function computeOdds(ctx: CoreContext, opts: { history?: MatchResul
 /** Stored expected goals for a matchweek (null before the first fit). */
 export async function oddsFor(ctx: CoreContext, matchweekId: number): Promise<MatchweekOdds | null> {
   return getSetting<MatchweekOdds>(ctx, `odds:${matchweekId}`);
+}
+
+interface HistoryEntry {
+  t: string;
+  fixtures: MatchweekOdds["fixtures"];
+}
+
+/** Every stored fit for one game, oldest first (falls back to the current fit). */
+export async function fitsFor(ctx: CoreContext, matchweekId: number, index: number): Promise<{ t: string; home: number; away: number }[]> {
+  let hist = await getSetting<HistoryEntry[]>(ctx, `oddshist:${matchweekId}`);
+  if (!hist?.length) {
+    const cur = await oddsFor(ctx, matchweekId);
+    hist = cur ? [{ t: cur.fittedAt, fixtures: cur.fixtures }] : [];
+  }
+  return hist.flatMap((h) => {
+    const f = h.fixtures.find((x) => x.index === index);
+    return f ? [{ t: h.t, home: f.home, away: f.away }] : [];
+  });
+}
+
+export type Outcome = "home" | "draw" | "away";
+export interface ChancePoint {
+  t: string;
+  home: number;
+  draw: number;
+  away: number;
+}
+
+/** 1X2 chances from expected goals (Dixon-Coles grid). */
+export function resultChances(xg: { home: number; away: number }) {
+  const g = scoreGrid(xg.home, xg.away);
+  return { home: probabilityOf(g, (h, a) => h > a), draw: probabilityOf(g, (h, a) => h === a), away: probabilityOf(g, (h, a) => h < a) };
+}
+
+/**
+ * Chance over time for one game, as on the match page: the model's latest fit at each moment,
+ * blended with the picks sealed by then (each pick counts 1 against k for the model) once at
+ * least minCrowd have sealed. Seal times are rounded up to the hour; the series ends at `end`.
+ */
+export function chanceSeries(
+  fits: { t: string; home: number; away: number }[],
+  seals: { t: Date; outcome: Outcome }[],
+  opts: { end: Date; minCrowd: number; k?: number; maxPoints?: number },
+): ChancePoint[] {
+  const k = opts.k ?? 30;
+  const end = opts.end.getTime();
+  const fitList = fits.map((f) => ({ t: Date.parse(f.t), p: resultChances(f) })).filter((f) => f.t <= end).sort((a, b) => a.t - b.t);
+  if (fitList.length === 0) return [];
+  const hour = 3_600_000;
+  const sealList = seals.map((s) => ({ t: Math.ceil(s.t.getTime() / hour) * hour, outcome: s.outcome })).sort((a, b) => a.t - b.t);
+  const start = fitList[0]!.t;
+  const times = [...new Set([...fitList.map((f) => f.t), ...sealList.map((s) => s.t), end])].filter((t) => t >= start && t <= end).sort((a, b) => a - b);
+  const points = times.map((t) => {
+    let fit = fitList[0]!;
+    for (const f of fitList) if (f.t <= t) fit = f;
+    const c = { home: 0, draw: 0, away: 0 };
+    let n = 0;
+    for (const s of sealList) if (s.t <= t) {
+      c[s.outcome]++;
+      n++;
+    }
+    const blend = n >= opts.minCrowd;
+    const p = (o: Outcome) => +(blend ? (k * fit.p[o] + c[o]) / (k + n) : fit.p[o]).toFixed(4);
+    return { t: new Date(t).toISOString(), home: p("home"), draw: p("draw"), away: p("away") };
+  });
+  // Thin evenly to maxPoints, always keeping the first and last.
+  const max = opts.maxPoints ?? 200;
+  if (points.length <= max) return points;
+  const step = (points.length - 1) / (max - 1);
+  return Array.from({ length: max }, (_, i) => points[Math.round(i * step)]!);
 }
