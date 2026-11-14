@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiFootballClient, FootballDataClient, changedKickoffs, crossCheck, teamKey, type FetchLike } from "../src";
+import { ApiFootballClient, FootballDataClient, apiFootballOk, changedKickoffs, crossCheck, teamKey, type FetchLike } from "../src";
 
 const fdMatches = {
   matches: [
@@ -153,5 +153,17 @@ describe("changedKickoffs", () => {
     const a = { externalId: 1, index: 0, home: "A", away: "B", kickoff: 100 };
     const b = { externalId: 2, index: 1, home: "C", away: "D", kickoff: 200 };
     expect(changedKickoffs([a, b], [{ ...a, kickoff: 160 }]).map((x) => x.before.externalId)).toEqual([1, 2]);
+  });
+});
+
+describe("apiFootballOk (final review M-4)", () => {
+  it("treats an HTTP 200 error body (bad key, spent quota) as a failure, not as no results", () => {
+    expect(() => apiFootballOk({ errors: { requests: "You have reached the request limit for the day" }, response: [] })).toThrow(/request limit/);
+    expect(() => apiFootballOk({ errors: ["bad"], response: [] })).toThrow();
+  });
+  it("passes a normal body through", () => {
+    const ok = { errors: [], response: [] };
+    expect(apiFootballOk(ok)).toBe(ok);
+    expect(apiFootballOk({ errors: {}, response: [] })).toEqual({ errors: {}, response: [] });
   });
 });

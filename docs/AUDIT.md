@@ -83,3 +83,39 @@ deploy; until it is, the v1 mitigations are operational: the operator never post
 expiry (enforced in code), and on a key compromise the admin first revokes the operator's
 `PAUSER_ROLE`/`OPERATOR_ROLE`, then pauses. No campaign exists on v1 yet, so moving to v1.1 needs
 no migration.
+
+---
+
+# Full-project audit: fix status (14 November 2026)
+
+The full-project audit (contracts, backend, frontend, operations) is worked through in commits
+`af8a28a`..`HEAD` on this branch (FR-14, FR-07, FR-31, FR-01, FR-26, FR-33, FR-28). Status of the
+Critical and High items:
+
+| ID | Severity | Finding | Status |
+| --- | --- | --- | --- |
+| B1 | Critical | Wallet sign-in impossible with Privy on | Fixed: Privy email wallet with setup/retry states, external wallets through Privy, e2e-tested |
+| B2 | Critical | A late seal blocks finalize | Fixed: reveals frozen at proposal, checked against DB and chain; e2e and pipeline tests |
+| G2 | Critical | Fixture import cannot run | Code fixed (refresh, moved-kickoff voiding, loud failure). **Owner:** add `FOOTBALL_DATA_API_KEY` and `API_FOOTBALL_KEY` on Netlify |
+| G1 | Critical | QIE Pass has no mainnet provider | Cannot be fixed in code. Mitigated: verification and host payouts shown as "coming", never faked; mock mode refused on mainnet |
+| S1 | High | Secrets exposed to every deploy context | Fixed: all secrets production-only on Netlify (22 preview/branch values removed) |
+| S2 | High | Operator key holds pause; admin is the only challenger | Fixed in v1.1 source (admin-only unpause; deploy script refuses pauser == operator and challenger == admin). **Owner:** mainnet still runs v1 until v1.1 is deployed with a separate pauser and two independent challengers |
+
+All Medium/Low items in the report (B3-B19, P1-P6, G3-G13, S3-S9, L-1..L-4) are fixed in code and
+covered by tests, except the ones that need an owner decision listed in `docs/DEPLOYMENT.md`.
+
+## Final independent review (14 November 2026)
+
+A fresh reviewer re-read the fixed code end to end. Findings and fixes:
+
+| ID | Severity | Finding | Fix | Verified by |
+| --- | --- | --- | --- | --- |
+| H-1 | High | v1.1 `replaceRoot` after a refund could raise a campaign's allocation above what was left, paying hosts out of another campaign's escrow (PoC). **v1 on mainnet is not affected** (its `replaceRoot` stops at expiry, before refunds open). | `replaceRoot` requires `allocated + refunded <= budget`. Invariant `allocated + refunded <= budget` for active campaigns; deterministic handler sequence refund → larger replace → claims. | 2 new forge tests fail without the fix and pass with it; 105 forge tests |
+| H-2 | High | Payload upload stayed open until results were proposed, so a player who sealed different picks from several wallets could reveal only the best one after the games; `/reveal` also skipped the 18+ check. | Payloads (both `/sealed` and `/reveal`) are accepted only until 10 minutes after the first kickoff; `/reveal` requires 18+. | unit test of the window; e2e |
+| M-3 | Medium | A root the admin voided would be re-posted automatically. | A stored root that reached the chain and is gone is marked `voided` and never re-posted (alert). `pnpm cli reset-reward-root` after review. | pipeline test: void → skipped twice → reset → fresh post → claim |
+| M-4 | Medium | Missing/pending results stalled publishing silently; API-Football error bodies (HTTP 200) read as "no results"; the 5-minute worker asked providers every 5 minutes. | Error bodies throw; provider calls at most every 15 min per matchweek; alert every 6 h while games are missing 12 h after the last kickoff. | football unit tests |
+| M-5 | Medium | If the indexer recorded `Finalized` first, ranks were never stored. | The finalize job also picks up recently finalized matchweeks without ranks; `finalizedAt` keeps the chain's time. | pipeline test: finalize by hand → index → job stores ranks once |
+
+Minor, accepted: the drip's daily-cap check runs outside the nonce lock, so concurrent requests can
+exceed the cap by a few drips (0.00025 QIEV3 each); unique limits per user, wallet, device, email
+and IP still hold.

@@ -48,8 +48,19 @@ export class ApiFootballClient {
       this.opts.fetch,
       { backoffMs: this.opts.backoffMs ?? 6_500 },
     );
-    return response.parse(json).response.map(toResult);
+    return response.parse(apiFootballOk(json)).response.map(toResult);
   }
+}
+
+/**
+ * API-Football answers HTTP 200 with `{ errors: {...}, response: [] }` for a bad key or a spent
+ * daily quota. Treat that as a failure, not as "no results" (final review M-4).
+ */
+export function apiFootballOk(json: unknown): unknown {
+  const errors = (json as { errors?: unknown } | null)?.errors;
+  const has = Array.isArray(errors) ? errors.length > 0 : errors !== null && typeof errors === "object" && Object.keys(errors).length > 0;
+  if (has) throw new Error(`api-football: ${JSON.stringify(errors).slice(0, 200)}`);
+  return json;
 }
 
 export function toResult(i: Item): MatchResult {

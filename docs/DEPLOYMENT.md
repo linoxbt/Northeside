@@ -195,13 +195,13 @@ scheduled function `cron-ops`. Each start makes one pass of every job (about 15 
 | --- | --- |
 | `index-chain` | mirrors contract events into Postgres (one transaction per chunk; stops and alerts on a reorg) |
 | `import-fixtures` | every 6 h: refreshes draft matchweeks, re-checks open ones for moved kickoffs, imports the next matchday |
-| `lock-and-reveal` | after lock, reveals and verifies every stored payload (until results are proposed) |
-| `fetch-results` | compares both football providers after the last game in the matchweek window |
+| `lock-and-reveal` | after lock, reveals and verifies every stored payload. Payloads are accepted only until 10 minutes after the first kickoff, so nobody can pick which seal to reveal once scores are known |
+| `fetch-results` | compares both football providers after the last game in the matchweek window (at most every 15 min per matchweek, to save API quota); alerts on conflicts, and every 6 h while games are still missing 12 h after the last kickoff |
 | `notify` | lock reminders and results notices with rank change |
 | `drip-health` | drip balance alert at one day of cap; frees dropped drips |
 | `open-matchweeks` | creates each imported matchweek on-chain once its lock is within `OPEN_DAYS_BEFORE_LOCK` days (default 6) |
 | `publish-results` | when both providers agree (fresh check) and the chain allows it (last kickoff + `RESULTS_BUFFER_SECONDS`, default 3 h): closes reveals, scores, and proposes the results, reveals and scores roots |
-| `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks |
+| `finalize` | after the 12-hour challenge window: confirms the roots and stores ranks (also for a matchweek finalized by hand or first seen by the indexer) |
 | `post-reward-roots` | posts each active campaign's host payout root; hosts can claim 24 h later |
 
 Needs a person:
@@ -210,9 +210,9 @@ Needs a person:
 | --- | --- |
 | providers disagree | investigate; `pnpm cli publish-results <id> --override results.json --reason "…"` |
 | results challenged | automation stops for that matchweek; publish corrected results with the CLI |
-| wrong reward root, nothing claimed yet | `replaceRoot` on `HostRewards` (operator key), restarts the 24-hour delay |
+| wrong reward root, nothing claimed yet | `replaceRoot` on `HostRewards` (operator key), restarts the 24-hour delay; or the admin calls `voidRoot` (v1.1). Automation never re-posts a voided root: after fixing the cause, `pnpm cli reset-reward-root <campaign> <mw>` and the next run posts a fresh one |
 | sponsor signs | `pnpm cli create-campaign …`, then the sponsor funds |
-| stop all automated transactions | set `AUTOMATION_PAUSED=1` on Netlify and redeploy |
-| emergency | `pnpm cli pause matchweeks` / `pnpm cli pause rewards` (pauser = operator key) |
+| stop all automated transactions | `pnpm cli automation pause` (no redeploy), or `AUTOMATION_PAUSED=1` on Netlify and redeploy |
+| emergency | `pnpm cli pause matchweeks` / `pnpm cli pause rewards` (PAUSER_PRIVATE_KEY; on v1 the pauser is the operator key). Only the admin can unpause on v1.1 |
 
 `/api/v1/status` shows indexer lag, drip balance and the last job runs.

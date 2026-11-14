@@ -308,8 +308,11 @@ export const rewardRoots = pgTable(
     reportUri: text("report_uri").notNull(),
     tree: jsonb("tree").notNull(),
     txHash: text("tx_hash"),
-    /** "pending" is written before postRoot is sent, so a crash after mining never loses the proofs. */
-    status: text("status", { enum: ["pending", "confirmed"] }).notNull().default("confirmed"),
+    /**
+     * "pending" is written before postRoot is sent, so a crash after mining never loses the proofs.
+     * "voided": the root reached the chain and the admin removed it (voidRoot); never re-posted.
+     */
+    status: text("status", { enum: ["pending", "confirmed", "voided"] }).notNull().default("confirmed"),
     createdAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.campaignId, t.matchweekId] })],

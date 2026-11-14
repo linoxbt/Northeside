@@ -1,6 +1,6 @@
 import { schema } from "@northeside/db";
 import { applyMigrations } from "@northeside/db/migrations";
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { dripConfigFromEnv, dripHealth } from "./drip";
 import { indexChain } from "./indexer";
@@ -134,12 +134,28 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
       // The last game inside the matchweek window, not one already rescheduled weeks out (audit B10).
       const { last } = matchWindow(fx.map((f) => Math.floor(f.kickoff.getTime() / 1000)));
       if (ctx.now().getTime() < last * 1000 + 2 * 3600_000) continue;
-      const check = await fetchResults(ctx, mw.id);
+      // The worker starts every 5 minutes; ask the providers at most once per 15 minutes per
+      // matchweek so a free API quota lasts (final review M-4).
+      const quarter = `${mw.id}:${hourKey()}:${Math.floor(new Date().getUTCMinutes() / 15)}`;
+      let check: Awaited<ReturnType<typeof fetchResults>> | undefined;
+      const run = await runJob(ctx, "fetch-results-mw", quarter, async () => (check = await fetchResults(ctx, mw.id)));
+      if (!check) {
+        out.push({ id: mw.id, skipped: run.status === "skipped" ? run.reason : run.status });
+        continue;
+      }
       if (check.agreed) {
         await runJob(ctx, "results-ready-alert", String(mw.id), async () => ctx.alert(`matchweek ${mw.id}: both sources agree; results will be proposed automatically once the chain allows`));
       } else {
         const conflicts = check.rows.filter((r) => r.state === "conflict");
         if (conflicts.length) await ctx.alert(`matchweek ${mw.id}: ${conflicts.length} result conflict(s) between providers`);
+        // Missing or unfinished games can stall a matchweek silently: say so every 6 hours once the
+        // last game is 12 hours past (final review M-4).
+        const open = check.rows.filter((r) => r.state === "pending" || r.state === "missing");
+        if (open.length && ctx.now().getTime() >= last * 1000 + 12 * 3600_000) {
+          await runJob(ctx, "results-stalled-alert", `${mw.id}:${sixHourKey()}`, async () =>
+            ctx.alert(`matchweek ${mw.id}: results still incomplete ${Math.round((ctx.now().getTime() / 1000 - last) / 3600)} h after the last kickoff: ${open.length} game(s) ${[...new Set(open.map((r) => r.state))].join("/")}. Check both providers, or publish with a manual override.`),
+          );
+        }
       }
       out.push({ id: mw.id, agreed: check.agreed });
     }
@@ -209,10 +225,34 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   finalize: async () => {
     const ctx = getCtx();
     if (await paused(ctx)) return { skipped: "automation paused" };
-    const rows = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.status, "results_proposed"));
+    // Also recently finalized rows: the indexer may record the Finalized event before this job
+    // stores ranks (a crash after the transaction, or a manual finalize). runJob keys each
+    // matchweek once, so a matchweek whose ranks are stored is skipped (final review M-5).
+    const rows = await ctx.db
+      .select()
+      .from(schema.matchweeks)
+      .where(
+        or(
+          eq(schema.matchweeks.status, "results_proposed"),
+          and(eq(schema.matchweeks.status, "finalized"), gte(schema.matchweeks.finalizedAt, new Date(ctx.now().getTime() - 14 * 24 * 3600_000))),
+        ),
+      );
+    const done = new Set(
+      (await ctx.db.select({ key: schema.jobRuns.runKey }).from(schema.jobRuns).where(and(eq(schema.jobRuns.job, "finalize"), eq(schema.jobRuns.status, "ok")))).map((r) => r.key),
+    );
+    const finalizedIds = rows.filter((r) => r.status === "finalized").map((r) => r.id);
+    if (finalizedIds.length) {
+      // Ranks already stored (e.g. by `pnpm cli finalize`): nothing to do.
+      const ranked = await ctx.db
+        .selectDistinct({ id: schema.predictions.matchweekId })
+        .from(schema.predictions)
+        .where(and(inArray(schema.predictions.matchweekId, finalizedIds), isNotNull(schema.predictions.rank)));
+      for (const r of ranked) done.add(String(r.id));
+    }
     const now = BigInt(Math.floor((await chainNow(ctx)).getTime() / 1000));
     const ready = [];
     for (const mw of rows) {
+      if (mw.status === "finalized" && done.has(String(mw.id))) continue;
       const chain = await onChainMatchweek(ctx, mw.id);
       if (chain.status === ChainStatus.ResultsProposed && now >= chain.disputeEnds) ready.push(mw);
       else if (chain.status === ChainStatus.Finalized) ready.push(mw); // finalized by hand: still store ranks

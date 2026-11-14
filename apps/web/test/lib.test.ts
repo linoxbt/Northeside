@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatQusdc } from "../src/lib/money";
+import { LATE_PAYLOAD_GRACE_MS, payloadWindowOpen } from "../src/lib/payload-window";
 import { isWalletRoute, prefetchFor } from "../src/lib/routes";
 import { safeNext } from "../src/lib/safe-next";
 import { txError } from "../src/lib/client/tx-errors";
@@ -48,5 +49,17 @@ describe("txError (audit B13)", () => {
     expect(txError(new Error("insufficient funds for gas * price + value"))).toMatch(/Not enough QIEV3/);
     expect(txError(new Error("The current chain of the wallet (id: 1) does not match the target chain"))).toMatch(/another network/);
     expect(txError(new Error("Connector not connected."))).toMatch(/not connected/);
+  });
+});
+
+describe("payloadWindowOpen (final review H-2)", () => {
+  const lock = new Date("2026-11-21T12:30:00Z");
+  it("accepts payloads before lock and during the short grace", () => {
+    expect(payloadWindowOpen(lock, new Date("2026-11-21T12:00:00Z"))).toBe(true);
+    expect(payloadWindowOpen(lock, new Date(lock.getTime() + LATE_PAYLOAD_GRACE_MS - 1))).toBe(true);
+  });
+  it("refuses payloads once the grace has passed, so nobody picks a reveal after seeing scores", () => {
+    expect(payloadWindowOpen(lock, new Date(lock.getTime() + LATE_PAYLOAD_GRACE_MS))).toBe(false);
+    expect(payloadWindowOpen(lock, new Date("2026-11-21T17:00:00Z"))).toBe(false);
   });
 });

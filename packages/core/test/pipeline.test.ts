@@ -29,12 +29,14 @@ import { FieldCrypto, schema, type Database } from "@northeside/db";
 import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from "@northeside/football";
 import {
   createCampaign,
+  createJobs,
   DripRefused,
   requestDrip,
   finalizeAndScore,
   refreshFixtures,
   notifyJob,
   refundCampaign,
+  resetVoidedRewardRoot,
   fetchResults,
   fundCampaign,
   importFixtures,
@@ -424,7 +426,22 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       });
       expect(await revealMatchweek(ctx, 12)).toMatchObject({ skipped: expect.stringMatching(/frozen/) });
       await advance(12 * 3600 + 60);
-      await finalizeAndScore(ctx, 12);
+      // Final review M-5: finalized on-chain outside the job, and the indexer records it first.
+      // The finalize job must still store points and ranks.
+      const finTx = await wallet(KEYS.results).writeContract({ address: ctx.deployment.matchweeks, abi: matchweeksAbi, functionName: "finalize", args: [12] });
+      expect((await pub.waitForTransactionReceipt({ hash: finTx })).status).toBe("success");
+      await mine();
+      await indexChain(ctx);
+      const [mw12] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, 12));
+      expect(mw12?.status).toBe("finalized");
+      const unranked = await ctx.db.select().from(schema.predictions).where(eq(schema.predictions.matchweekId, 12));
+      expect(unranked.every((p) => p.rank === null)).toBe(true);
+      const jobs = createJobs(() => ctx, {});
+      // Matchweek 11 already has ranks (finalized directly above), so only 12 is picked up.
+      expect(await jobs.finalize()).toEqual([expect.objectContaining({ id: 12, status: "ok" })]);
+      const ranked = await ctx.db.select().from(schema.predictions).where(eq(schema.predictions.matchweekId, 12));
+      expect(ranked.some((p) => p.rank !== null)).toBe(true);
+      expect(await jobs.finalize()).toEqual([]); // stored once; not redone every pass
 
       // FR-29: results notice with rank change, only to reachable users, never twice.
       for (const u of [u1, u2, u3]) await ctx.db.insert(schema.notificationPrefs).values({ userId: u.id }).onConflictDoNothing();
@@ -451,6 +468,17 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       // Returning + verified: p1 and p2 count; p3 is unverified. 2 players x 1 QUSDC.
       const root = await postRewardRoot(ctx, campaign.id, 12);
       expect(root).toMatchObject({ total: 2_000_000n, hosts: 1 });
+
+      // Final review M-3: a root the admin voids is never re-posted automatically; after review the
+      // operator resets it and a fresh root is computed and posted.
+      const voidTx = await wallet(KEYS.admin).writeContract({ address: ctx.deployment.hostRewards, abi: hostRewardsAbi, functionName: "voidRoot", args: [BigInt(campaign.id), 12] });
+      expect((await pub.waitForTransactionReceipt({ hash: voidTx })).status).toBe("success");
+      expect(await postRewardRoot(ctx, campaign.id, 12)).toMatchObject({ skipped: "root was voided on-chain" });
+      expect(await postRewardRoot(ctx, campaign.id, 12)).toMatchObject({ skipped: "root was voided on-chain" });
+      const [voided] = await ctx.db.select().from(schema.rewardRoots).where(eq(schema.rewardRoots.matchweekId, 12));
+      expect(voided?.status).toBe("voided");
+      expect(await resetVoidedRewardRoot(ctx, campaign.id, 12)).toMatchObject({ forgot: voided!.root });
+      expect(await postRewardRoot(ctx, campaign.id, 12)).toMatchObject({ total: 2_000_000n, hosts: 1 });
 
       const [leaf] = await ctx.db.select().from(schema.rewardLeaves).where(eq(schema.rewardLeaves.matchweekId, 12));
       expect(leaf).toMatchObject({ countablePlayers: 2, amount: 2_000_000n });

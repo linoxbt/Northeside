@@ -20,6 +20,7 @@ import {
   publishResults,
   revealMatchweek,
   refundCampaign,
+  resetVoidedRewardRoot,
   setAutomationPaused,
   automationPaused,
   bigintReplacer,
@@ -51,6 +52,7 @@ Host rewards
                   [--leagues a,b] [--self-funded]
   fund-campaign <id>                   fund from SPONSOR_PRIVATE_KEY (operator-assisted or self-funded)
   post-reward-root <campaign> <mw>     compute payouts and post the root (never within 26 h of expiry)
+  reset-reward-root <campaign> <mw>    after an admin voidRoot: forget the stored tree so a fresh root is computed
   refund <campaign>                    return unused money to the sponsor's refund recipient (after expiry)
 
 Operations
@@ -136,6 +138,8 @@ async function main() {
     }
     case "post-reward-root":
       return out(await postRewardRoot(ctx, int(a.positional[0], "campaign"), int(a.positional[1], "mw")));
+    case "reset-reward-root":
+      return out(await resetVoidedRewardRoot(ctx, int(a.positional[0], "campaign"), int(a.positional[1], "mw")));
     case "index":
       return out(await indexChain(ctx));
     case "refund": {
