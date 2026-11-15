@@ -1,6 +1,8 @@
 /* Northeside service worker: offline shell and web push. Kept minimal on purpose. */
-const CACHE = "northeside-v2";
-const SHELL = ["/", "/how-it-works", "/icon.svg"];
+// v3: never serve a cached copy of the app's pages (an old copy points at stylesheets a newer
+// deploy has removed and renders unstyled). Offline, show a self-contained page instead.
+const CACHE = "northeside-v3";
+const SHELL = ["/offline.html", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -12,12 +14,12 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// Network first for pages (live data); fall back to the cached shell offline. Never cache the API.
+// Pages always come from the network; offline, the self-contained offline page. Never cache the API.
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
   if (e.request.mode === "navigate") {
-    e.respondWith(fetch(e.request).catch(() => caches.match("/").then((r) => r || Response.error())));
+    e.respondWith(fetch(e.request).catch(() => caches.match("/offline.html").then((r) => r || Response.error())));
   }
 });
 
