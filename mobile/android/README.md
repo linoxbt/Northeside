@@ -33,5 +33,9 @@ installed app.
 3. Update `apps/web/src/lib/app-release.ts` (version, file, size, `sha256sum` of the APK).
 4. Deploy the web app. The download page at `/app` serves the new file.
 
+Launch tests (Robolectric, no device needed): `./gradlew testReleaseUnitTest`. They open the
+launcher on Android 7 and 14 with no browser, a browser without TWA support (the site must open
+inside the app) and Chrome (picked to open the site full-screen).
+
 Check a build: `apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`
 (the certificate SHA-256 must equal the one in `assetlinks.json`).
