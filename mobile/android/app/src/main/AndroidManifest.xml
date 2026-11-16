@@ -13,7 +13,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/appName"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        android:theme="@style/LaunchTheme">
 
         <meta-data
             android:name="asset_statements"
@@ -26,12 +26,11 @@
             <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="@string/launchUrl" />
             <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/statusBar" />
             <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/navigationBar" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE" android:resource="@drawable/splash" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR" android:resource="@color/splashBackground" />
-            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION" android:value="300" />
             <meta-data android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY" android:value="@string/providerAuthority" />
             <meta-data android:name="android.support.customtabs.trusted.SCREEN_ORIENTATION" android:value="portrait" />
-            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="customtabs" />
+            <!-- No browser that supports Trusted Web Activities (e.g. Chrome is missing or disabled):
+                 open the site inside the app instead of handing off to another browser. -->
+            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="webview" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

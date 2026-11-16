@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Opaque, branded launch screen: shown for the moment it takes the browser engine to open the site. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:statusBarColor">@color/statusBar</item>
+        <item name="android:navigationBarColor">@color/splashBackground</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>
