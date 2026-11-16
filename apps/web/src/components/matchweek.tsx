@@ -2,6 +2,7 @@
 
 import { crowdBonus, type FixtureBreakdown } from "@northeside/scoring";
 import { resultOdds } from "@/lib/markets";
+import { SealCelebration, type SealMoment } from "./fun";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -308,6 +309,28 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     [mw.id, persist],
   );
 
+  // Bold calls: picks whose result the odds (model blended with the crowd) give under 25%.
+  const boldFixtures = useMemo(() => {
+    const out = new Set<number>();
+    for (const f of mw.fixtures) {
+      const o = outcomeOf(picks.home[f.index] ?? null, picks.away[f.index] ?? null);
+      if (!o) continue;
+      const cf = crowd.data?.shown ? crowd.data.fixtures.find((x) => x.index === f.index) : undefined;
+      const p = resultOdds(f.xg, cf)[o]?.p;
+      if (p !== undefined && p < 0.25) out.add(f.index);
+    }
+    return out;
+  }, [mw.fixtures, picks, crowd.data]);
+  const [moment, setMoment] = useState<SealMoment | null>(null);
+  const onSealed = useCallback(
+    (fresh?: boolean) => {
+      void qc.invalidateQueries({ queryKey: ["mine", mw.id] });
+      void qc.invalidateQueries({ queryKey: ["card"] });
+      if (fresh) setMoment({ matchweekId: mw.id, picked, total: mw.fixtures.length, banker: v2 && picks.banker !== null && picks.banker !== undefined, bold: boldFixtures.size, resealed: !!sealed });
+    },
+    [qc, mw.id, mw.fixtures.length, picked, v2, picks.banker, boldFixtures, sealed],
+  );
+
   // Most a slip can score if every pick is exact: 5 each, plus the crowd bonus for that result, Banker x2.
   const maxPoints = useMemo(() => {
     let total = 0;
@@ -324,6 +347,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
   return (
     <div className="space-y-3">
+      {moment ? <SealCelebration moment={moment} onClose={() => setMoment(null)} /> : null}
       {/* Dashboard header */}
       <header className="rounded-2xl bg-ink px-4 py-3 text-white sm:px-5 sm:py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -441,6 +465,11 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                                   {state !== "scheduled" && state !== "void" ? <b className="hidden font-mono text-[13px] font-medium md:inline">{score.split("–")[1]}</b> : null}
                                 </p>
                               </Link>
+                              {open && boldFixtures.has(f.index) ? (
+                                <span title="Upset call: the odds give your result under 25%" className="shrink-0 rounded bg-[#eb6834]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#9a3a12]">
+                                  UPSET
+                                </span>
+                              ) : null}
                             </div>
                             <div className="order-last col-span-2 flex min-w-0 items-center gap-1.5 md:order-none md:col-span-1">
                               <div className="min-w-0 flex-1">
@@ -534,7 +563,12 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       <span className="min-w-0 truncate">
                         {f.home} v {f.away}
                       </span>
-                      <span className="shrink-0 font-mono">
+                      <span className="flex shrink-0 items-center gap-1.5 font-mono">
+                        {set && boldFixtures.has(f.index) ? (
+                          <span className="rounded bg-[#eb6834]/15 px-1 py-px font-sans text-[10px] font-medium text-[#9a3a12]" title="Upset call: the odds give this result under 25%">
+                            UPSET
+                          </span>
+                        ) : null}
                         {set ? `${h}–${a}` : "–"}
                         {v2 && picks.banker === f.index ? " ★" : ""}
                       </span>
@@ -542,6 +576,12 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                   );
                 })}
               </ul>
+              {boldFixtures.size ? (
+                <p className="flex items-center justify-between text-[13px]">
+                  <span className="text-muted">Upset calls</span>
+                  <span className="font-medium">💥 {boldFixtures.size}</span>
+                </p>
+              ) : null}
               <div className="flex items-center justify-between border-t border-line pt-3 text-[14px]">
                 <span className="text-muted">Max points</span>
                 <b className="font-mono text-[20px] font-medium tabular-nums">{maxPoints}</b>
@@ -550,7 +590,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
           ) : null}
 
           {user && user.adultConfirmed && open ? (
-            <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} version={v2 ? 2 : 1} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={() => qc.invalidateQueries({ queryKey: ["mine", mw.id] })} />
+            <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} version={v2 ? 2 : 1} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={onSealed} />
           ) : null}
 
           {user && user.adultConfirmed && open ? <ChallengeButton mwId={mw.id} /> : null}

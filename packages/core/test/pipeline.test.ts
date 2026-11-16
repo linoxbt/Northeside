@@ -38,6 +38,11 @@ import {
   nsdClaimsFor,
   createChallenge,
   acceptChallenge,
+  playerCard,
+  inviteCodeFor,
+  creditInvite,
+  squadOf,
+  topScouts,
   challengeView,
   crowdView,
   liveView,
@@ -430,6 +435,29 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(h2h!.challenger.picks).toEqual({ home: [1, 0, 2], away: [0, 2, 2], banker: 1 });
       expect(h2h!.opponent!.fixtures[0]).toMatchObject({ points: 10, banker: true });
       await expect(createChallenge(ctx, u1.id, 11)).rejects.toThrow(/not open|locked/);
+
+      // Fun layer (FR-38): Bo's card after a final matchweek: 14 points (Fan), exact score, Banker
+      // hit, head-to-head win over Ada. 3 players, so no podium (needs 5+).
+      const boCard = await playerCard(ctx, u2.id);
+      expect(boCard).toMatchObject({ points: 14, level: { name: "Fan", next: { name: "Regular", min: 25 } }, streak: { best: 1 } });
+      const earned = (c: typeof boCard) => c.badges.filter((b) => b.earned).map((b) => b.id);
+      expect(earned(boCard)).toEqual(expect.arrayContaining(["first-seal", "full-slip", "sniper", "banker", "rival"]));
+      expect(earned(boCard)).not.toContain("podium");
+      expect(earned(boCard)).not.toContain("hat-trick");
+      expect(boCard.badges.find((b) => b.id === "sniper")!.matchweek).toBe(11);
+      const adaCard = await playerCard(ctx, u1.id);
+      expect(adaCard.points).toBe(10);
+      expect(earned(adaCard)).not.toContain("rival");
+      // Invites: Bo invites Cy; Cy has sealed, so Bo has one recruit and tops the scouts board.
+      const boCode = await inviteCodeFor(ctx, u2.id);
+      expect(await inviteCodeFor(ctx, u2.id)).toBe(boCode); // stable
+      expect(boCode).toMatch(/^[a-z2-9]{7}$/);
+      expect(await creditInvite(ctx, u2.id, boCode)).toBe(false); // never yourself
+      expect(await creditInvite(ctx, u3.id, boCode)).toBe(true);
+      expect(await creditInvite(ctx, u3.id, await inviteCodeFor(ctx, u1.id))).toBe(false); // first invite wins
+      expect(await squadOf(ctx, u2.id)).toEqual({ joined: 1, sealed: 1 });
+      expect((await playerCard(ctx, u2.id)).badges.find((b) => b.id === "recruiter")).toMatchObject({ earned: false, progress: { n: 1, target: 3 } });
+      expect(await topScouts(ctx)).toEqual([{ rank: 1, userId: u2.id, name: "Bo", recruits: 1 }]);
 
       // $NSD rewards for matchweek 11: verified people only. Bo (14) and Ada (10) are verified; Cy is
       // not and earns nothing. Pool 10,000 NSD split 50/30/20 by position.

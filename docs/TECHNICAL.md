@@ -61,6 +61,17 @@ disagreement), a background worker that runs every 5 minutes (index the chain, l
 fetch results, propose, finalize, post reward roots), Privy email sign-in with an embedded wallet,
 or QIE Wallet directly.
 
+## Engagement (no prizes)
+
+- **Odds and chances**: a Dixon-Coles model of team strength, blended with sealed picks once 5
+  players have sealed; each match page charts the chances over time ([ODDS.md](ODDS.md)).
+- **Levels, streaks and 12 badges** from final matchweeks (exact scores, Banker hits, upset calls,
+  head-to-head wins, sealing streaks).
+- **Invites**: every player has a personal link; friends who join with it and seal a slip count
+  towards the public Scouts table. This is the main growth loop, measured from on-chain seals.
+- **Seal celebration** with one-tap sharing to WhatsApp, X and Telegram, and head-to-head
+  challenges.
+
 ## Quality
 
 - 127 Foundry tests: unit, fuzz and invariant suites (solvency, accounting, one claim per person),

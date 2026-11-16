@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { BottomNav } from "@/components/bottom-nav";
 import { CookieNotice } from "@/components/cookie-notice";
+import { InviteWelcome } from "@/components/fun";
 import { QueryProvider } from "@/components/query-provider";
 import { SiteChrome } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <SiteChrome>
             <SiteHeader />
           </SiteChrome>
+          <InviteWelcome />
           <main id="main">{children}</main>
           <SiteChrome landingOnly>
             <SiteFooter />

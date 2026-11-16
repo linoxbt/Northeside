@@ -200,11 +200,17 @@ async function signInWithQie(page) {
   throw new Error(`sign-in did not return to ${back}`);
 }
 
-async function playerSeals(browser, keyIndex, name, picks) {
+async function playerSeals(browser, keyIndex, name, picks, invite) {
   const { ctx, account } = await walletContext(browser, keyIndex);
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
+  if (invite) {
+    // FR-38: an invite link welcomes the visitor by the inviter's name and is credited at sign-up.
+    await page.goto(`${APP}/?inv=${invite.code}&src=whatsapp`);
+    await page.getByText(`${invite.from} invited you.`).waitFor({ timeout: 30_000 });
+    check(true, `${name}: invite link shows who invited them`);
+  }
   await page.goto(`${APP}/l/e2e-league`);
   await signInWithQie(page);
   await confirmAdult(page, name); // FR-34: joining needs the 18+ confirmation first
@@ -227,6 +233,13 @@ async function playerSeals(browser, keyIndex, name, picks) {
   await page.screenshot({ path: join(OUT, `${name}-picks-desktop.png`), fullPage: true });
   await page.setViewportSize({ width: 412, height: 915 });
   await page.getByRole("button", { name: "Seal predictions" }).click();
+  // FR-38: a fresh seal is celebrated, with a share sheet that carries the player's invite link.
+  const dialog = page.getByRole("dialog", { name: "Sealed!" });
+  await dialog.waitFor({ timeout: 60_000 });
+  await dialog.getByRole("link", { name: "WhatsApp" }).waitFor({ timeout: 15_000 });
+  check(/inv%3D[a-z2-9]{7}/.test((await dialog.getByRole("link", { name: "WhatsApp" }).getAttribute("href")) ?? ""), `${name}: the seal celebration shares an invite link`);
+  await page.screenshot({ path: join(OUT, `${name}-celebration.png`) });
+  await dialog.getByRole("button", { name: "Done" }).click();
   await page.getByText(/Sealed · v1/).waitFor({ timeout: 60_000 });
   if (name === "Ada") {
     // Editing after sealing warns that the change is not sealed, and can be undone (audit B7).
@@ -370,7 +383,19 @@ async function main() {
 
   // ---------------------------------------------------------------- two players seal from their own wallets
   const ada = await playerSeals(browser, 7, "Ada", [{ h: 2, a: 1 }, { h: 1, a: 1 }, { h: 0, a: 0 }]);
-  const bo = await playerSeals(browser, 5, "Bo", [{ h: 1, a: 0 }, { h: 0, a: 2 }, { h: 2, a: 2 }]);
+  // Ada's profile: player card (level, streak, badges) and her invite link; Bo joins through it.
+  await ada.page.goto(`${APP}/me`, { waitUntil: "networkidle" });
+  await ada.page.getByText("Bring your squad").waitFor({ timeout: 30_000 });
+  const adaInvite = ((await ada.page.locator("code").filter({ hasText: "inv=" }).first().innerText()).match(/inv=([a-z2-9]{7})/) ?? [])[1];
+  check(
+    !!adaInvite && (await ada.page.getByText("Rookie", { exact: true }).count()) === 1 && (await ada.page.locator("li", { hasText: "First seal" }).filter({ hasText: /MW 11/ }).count()) === 1,
+    "profile shows the player card, earned badges and a personal invite link",
+  );
+  await ada.page.screenshot({ path: join(OUT, "profile-card.png"), fullPage: true });
+  const bo = await playerSeals(browser, 5, "Bo", [{ h: 1, a: 0 }, { h: 0, a: 2 }, { h: 2, a: 2 }], { code: adaInvite, from: "Ada" });
+  await ada.page.goto(`${APP}/table?board=scouts`, { waitUntil: "networkidle" });
+  check((await ada.page.locator("li", { hasText: "Ada" }).filter({ hasText: "1 friend" }).count()) === 1, "Top scouts: Ada has 1 invited friend who sealed");
+  await ada.page.screenshot({ path: join(OUT, "scouts.png"), fullPage: true });
 
   // the commit was sent by the player's wallet, not a relayer
   const commits = await rpc("eth_getLogs", [{ address: dep.matchweeks, fromBlock: "0x0", toBlock: "latest" }]);
@@ -418,7 +443,8 @@ async function main() {
   await rpc("evm_mine");
 
   // after lock the UI must refuse changes
-  await ada.page.reload();
+  await ada.page.goto(`${APP}/play`);
+  await ada.page.getByText("Locked").first().waitFor({ timeout: 30_000 }).catch(() => {});
   check(await ada.page.getByText("Locked").first().isVisible(), "UI shows the matchweek as locked after kickoff");
 
   const rev = await cli(env, "reveal", "11");

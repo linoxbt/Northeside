@@ -14,3 +14,4 @@ export * from "./live";
 export * from "./h2h";
 export * from "./nsd";
 export * from "./odds";
+export * from "./fun";

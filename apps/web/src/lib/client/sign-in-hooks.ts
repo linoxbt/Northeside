@@ -51,6 +51,7 @@ export function useSignIn() {
           privyToken,
           ref: localStorage.getItem("ns_ref") ?? undefined,
           source: localStorage.getItem("ns_src") ?? undefined,
+          invite: localStorage.getItem("ns_inv") ?? undefined,
         },
       });
       await qc.invalidateQueries();

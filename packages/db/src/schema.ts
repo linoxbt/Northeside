@@ -49,11 +49,16 @@ export const users = pgTable(
     /** FR-19: the first host link a player joins through is their attributed league for the season. */
     attributedLeagueId: uuid("attributed_league_id"),
     attributionSource: text("attribution_source"),
+    /** FR-38: personal invite code (lazily created) and who invited this player (new accounts only). */
+    inviteCode: text("invite_code").unique(),
+    invitedBy: uuid("invited_by"),
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     /** Bumped on sign-out-everywhere and deletion; sessions carrying an older version are rejected. */
     sessionVersion: integer("session_version").notNull().default(0),
     createdAt: createdAt(),
   },
+  (t) => [index("users_invited_by_idx").on(t.invitedBy)],
 );
 
 export const wallets = pgTable(

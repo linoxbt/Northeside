@@ -120,6 +120,12 @@ function HowItWorks() {
         <p>Challenge a friend with a link. During games, the live table updates every minute.</p>
         <p className="break-all font-mono text-[12px] text-muted">Rules v2 hash {RULES_V2_HASH} (from matchweek 12) · v1 {RULES_V1_HASH}</p>
       </Section>
+      <Section id="levels" title="Levels, streaks and badges">
+        <p>Points from final matchweeks take you from Rookie to Legend. Seal every matchweek to grow your streak, and collect 12 badges, from Sniper (an exact score) to Upset caller (a result the odds gave under 25%). They are for fun and bragging rights only.</p>
+      </Section>
+      <Section id="invite" title="Invite friends">
+        <p>Your profile has a personal invite link. Friends who join with it and seal a slip join your squad, and the Scouts table ranks who brought the most.</p>
+      </Section>
       <Section id="sealing" title="Sealing">
         <p>Your picks are hashed with a random salt; your wallet seals only the hash on QIE. Re-seal until the first kickoff, then the contract locks.</p>
       </Section>

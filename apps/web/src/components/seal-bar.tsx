@@ -37,7 +37,8 @@ function SealBar(props: {
   total: number;
   resealing: boolean;
   unsealed: boolean;
-  onSealed(): void;
+  /** fresh: a seal just confirmed in this session (not a background retry of an earlier one). */
+  onSealed(fresh?: boolean): void;
 }) {
   const { address, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -162,7 +163,7 @@ function SealBar(props: {
       setStep("Saving your receipt…");
       await syncSeal(props.mwId, wallet, { payload, txHash: hash, synced: false }).catch(() => {});
       setStep(null);
-      props.onSealed();
+      props.onSealed(true);
     } catch (e) {
       setStep(null);
       // A cancelled or failed send leaves nothing pending; a timeout keeps it for the check on reload.

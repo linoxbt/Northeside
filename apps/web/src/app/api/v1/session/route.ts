@@ -1,3 +1,4 @@
+import { creditInvite } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { eq } from "drizzle-orm";
 import { getAddress } from "viem";
@@ -43,6 +44,8 @@ const body = z.object({
   privyToken: z.string().max(4000).optional(),
   ref: z.string().regex(/^[a-z0-9-]{2,32}$/i).optional(),
   source: z.enum(["whatsapp", "x", "telegram", "direct"]).optional(),
+  /** FR-38: a player's personal invite code (credited only when this sign-in creates the account). */
+  invite: z.string().regex(/^[a-z0-9]{4,16}$/i).optional(),
 });
 
 /** POST /api/v1/session: sign in with a wallet signature (EIP-4361), optionally with a Privy email. */
@@ -92,6 +95,7 @@ export const POST = route(async (req) => {
   if (!userId) {
     const [created] = await ctx.db.insert(schema.users).values({}).returning();
     userId = created!.id;
+    if (input.invite) await creditInvite(ctx, userId, input.invite).catch(() => false);
   }
   if (!walletRow) {
     await ctx.db.insert(schema.wallets).values({ address: wallet, userId, kind: input.walletKind }).onConflictDoNothing();
