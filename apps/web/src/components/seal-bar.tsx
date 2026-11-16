@@ -178,14 +178,39 @@ function SealBar(props: {
       <Card className="flex items-center justify-between gap-3 !rounded-[22px] border-ink/10 !py-3 !pl-5 !pr-3 shadow-[0_20px_50px_-20px_rgba(10,11,13,0.35)]">
         <div className="min-w-0 text-[14px]">
           <p className="font-medium tracking-[-0.01em]">{props.picked}/{props.total} picked</p>
-          <p className="text-muted">{step ?? (props.unsealed ? "Re-seal to keep your changes" : props.resealing ? "Sealed. You can re-seal until lock" : "Seal before the first kickoff")}</p>
+          <p className="text-muted">
+            {step ??
+              (!props.complete
+                ? `Pick all ${props.total} games to seal (${props.total - props.picked} left)`
+                : props.unsealed
+                  ? "Re-seal to keep your changes"
+                  : props.resealing
+                    ? "Sealed. You can re-seal until lock"
+                    : "Seal before the first kickoff")}
+          </p>
           {error ? <p role="alert" className="text-bad">{error}</p> : null}
         </div>
-        <Button variant="accent" className="shrink-0" disabled={!props.complete || step !== null} onClick={() => void seal()}>
-          {props.resealing ? "Re-seal" : "Seal predictions"}
-        </Button>
+        {props.complete ? (
+          <Button variant="accent" className="shrink-0" disabled={step !== null} onClick={() => void seal()}>
+            {props.resealing ? "Re-seal" : "Seal predictions"}
+          </Button>
+        ) : (
+          // Not every game has a score yet: take the player to the first empty one.
+          <Button variant="secondary" className="shrink-0" onClick={() => goToFirstEmpty(props.picks)}>
+            {props.total - props.picked} to go
+          </Button>
+        )}
       </Card>
     </div>
   );
 }
 
+/** Scroll to the first game without a full score and flash it. */
+function goToFirstEmpty(picks: Picks) {
+  const i = picks.home.findIndex((h, j) => h === null || h === undefined || picks.away[j] === null || picks.away[j] === undefined);
+  const el = i >= 0 ? document.getElementById(`game-${i}`) : null;
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("bg-accent/20");
+  setTimeout(() => el.classList.remove("bg-accent/20"), 1400);
+}

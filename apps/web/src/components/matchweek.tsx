@@ -435,7 +435,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       const score = lf && lf.state !== "scheduled" ? `${lf.home}–${lf.away}` : `${f.homeGoals}–${f.awayGoals}`;
                       const editable = open && !!user;
                       return (
-                        <li key={f.index} className={`px-3 py-2 sm:px-4 ${isBanker ? "bg-accent/5" : ""}`}>
+                        <li key={f.index} id={`game-${f.index}`} className={`scroll-mt-24 px-3 py-2 transition-colors duration-700 sm:px-4 ${isBanker ? "bg-accent/5" : ""}`}>
                           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_228px_auto]">
                             <div className="flex min-w-0 items-center gap-2.5">
                               <span className="w-10 shrink-0 font-mono text-[11px] leading-4 text-muted">
