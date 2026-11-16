@@ -48,6 +48,22 @@ public class LaunchTest {
         return i;
     }
 
+    /**
+     * Every launch enables/disables the library's ManageDataLauncherActivity (site settings). On a
+     * real phone that throws "Component class ... does not exist" unless the manifest declares it,
+     * crashing the app on open (Robolectric's package manager does not enforce this, so check it).
+     */
+    @Test
+    public void everyComponentTheLauncherTogglesIsDeclared() throws Exception {
+        android.content.Context ctx = ApplicationProvider.getApplicationContext();
+        for (Class<?> c : new Class<?>[] {
+                com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity.class,
+                com.google.androidbrowserhelper.trusted.WebViewFallbackActivity.class,
+                LauncherActivity.class}) {
+            ctx.getPackageManager().getActivityInfo(new ComponentName(ctx, c), 0);
+        }
+    }
+
     @Test
     public void noBrowserAtAll_opensTheSiteInsideTheApp() {
         ActivityController<LauncherActivity> c = Robolectric.buildActivity(LauncherActivity.class, launcherIntent()).setup();

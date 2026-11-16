@@ -12,6 +12,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/appName"
+        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
         android:supportsRtl="true"
         android:theme="@style/LaunchTheme">
 
@@ -43,6 +44,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="@string/hostName" />
             </intent-filter>
+        </activity>
+
+        <!-- Required: every launch enables/disables this ("Site settings" shortcut). Without the
+             declaration Android throws "Component class does not exist" and the app crashes. -->
+        <activity android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity">
+            <meta-data android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL" android:value="@string/launchUrl" />
         </activity>
 
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
