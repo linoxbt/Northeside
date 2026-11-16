@@ -35,5 +35,11 @@ export const MIGRATIONS: { tag: string; when: number; hash: string; sql: string 
     "when": 1794663968277,
     "hash": "c417608085c32f78ded365467efabe3cb649aaaf4445c2435a37ac23de3ce0cb",
     "sql": "CREATE TABLE \"nsd_leaves\" (\n\t\"matchweek_id\" integer NOT NULL,\n\t\"wallet\" text NOT NULL,\n\t\"amount\" numeric(78, 0) NOT NULL,\n\t\"rank\" integer NOT NULL,\n\t\"points\" integer NOT NULL,\n\t\"proof\" jsonb NOT NULL,\n\t\"claim_tx\" text,\n\t\"claimed_at\" timestamp with time zone,\n\tCONSTRAINT \"nsd_leaves_matchweek_id_wallet_pk\" PRIMARY KEY(\"matchweek_id\",\"wallet\")\n);\n--> statement-breakpoint\nCREATE TABLE \"nsd_roots\" (\n\t\"matchweek_id\" integer PRIMARY KEY NOT NULL,\n\t\"root\" text NOT NULL,\n\t\"total\" numeric(78, 0) NOT NULL,\n\t\"report_uri\" text NOT NULL,\n\t\"tree\" jsonb NOT NULL,\n\t\"tx_hash\" text,\n\t\"status\" text DEFAULT 'pending' NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"nsd_roots\" ADD CONSTRAINT \"nsd_roots_matchweek_id_matchweeks_id_fk\" FOREIGN KEY (\"matchweek_id\") REFERENCES \"public\".\"matchweeks\"(\"id\") ON DELETE no action ON UPDATE no action;--> statement-breakpoint\nCREATE INDEX \"nsd_leaves_wallet_idx\" ON \"nsd_leaves\" USING btree (\"wallet\");--> statement-breakpoint\nALTER TABLE \"nsd_roots\" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint\nALTER TABLE \"nsd_leaves\" ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "tag": "0006_invites",
+    "when": 1794852307948,
+    "hash": "848a6cebe9292218a066e389741c3bfedebce34f97f4a1cbcc7e6c6492794138",
+    "sql": "ALTER TABLE \"users\" ADD COLUMN \"invite_code\" text;--> statement-breakpoint\nALTER TABLE \"users\" ADD COLUMN \"invited_by\" uuid;--> statement-breakpoint\nALTER TABLE \"users\" ADD COLUMN \"invited_at\" timestamp with time zone;--> statement-breakpoint\nCREATE INDEX \"users_invited_by_idx\" ON \"users\" USING btree (\"invited_by\");--> statement-breakpoint\nALTER TABLE \"users\" ADD CONSTRAINT \"users_invite_code_unique\" UNIQUE(\"invite_code\");"
   }
 ];

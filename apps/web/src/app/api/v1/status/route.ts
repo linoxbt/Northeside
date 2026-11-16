@@ -1,5 +1,5 @@
 import { schema } from "@northeside/db";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { formatEther } from "viem";
 import { automationPaused } from "@northeside/core";
 import { json, route } from "@/lib/server/api";
@@ -15,6 +15,11 @@ export const GET = route(async () => {
   const jobs = await ctx.db.select().from(schema.jobRuns).orderBy(desc(schema.jobRuns.startedAt)).limit(25);
   const drip = ctx.drip ? await ctx.publicClient.getBalance({ address: ctx.drip.account.address }).catch(() => null) : null;
   const [lease] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, "lease:ops-worker"));
+  // Applied database migrations (the worker applies pending ones at the start of every run).
+  const migrations = await ctx.db
+    .execute(sql`select count(*)::int as n from "drizzle"."__drizzle_migrations"`)
+    .then((r) => Number(((Array.isArray(r) ? r : (r as unknown as { rows: { n: number }[] }).rows)[0] as { n: number } | undefined)?.n ?? 0))
+    .catch(() => null);
   const lag = head !== null && state ? head - state.lastBlock : null;
   // A monitor can alert on `healthy: false` (indexer stalled, worker not running, alerting missing).
   const workerSeen = lease?.updatedAt ?? null;
@@ -30,6 +35,7 @@ export const GET = route(async () => {
     indexedBlock: state?.lastBlock ?? null,
     lagBlocks: lag,
     indexerUpdatedAt: state?.updatedAt ?? null,
+    migrations,
     drip: ctx.drip ? { address: ctx.drip.account.address, balance: drip === null ? null : formatEther(drip) } : null,
     jobs: jobs.map((j) => ({ job: j.job, runKey: j.runKey, status: j.status, startedAt: j.startedAt, finishedAt: j.finishedAt, error: j.error })),
   });
