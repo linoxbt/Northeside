@@ -26,6 +26,7 @@ const MENU = [
     items: [
       { href: "/leagues", label: "Leagues", icon: "M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8M21 20v-2a4 4 0 0 0-3-3.9M16 2.1a4 4 0 0 1 0 7.8" },
       { href: "/host", label: "Host a league", icon: "M5 21V4M5 4h12l-3 4 3 4H5" },
+      { href: "/app", label: "Get the app", icon: "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2" },
     ],
   },
   {

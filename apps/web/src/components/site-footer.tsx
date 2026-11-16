@@ -8,7 +8,7 @@ import { api } from "@/lib/client/api";
 import { isPreview } from "@/lib/client/env";
 
 const COLUMNS: { title: string; links: [string, string][] }[] = [
-  { title: "Play", links: [["/", "Matches"], ["/live", "Live"], ["/table", "Table"], ["/leagues", "Leagues"], ["/host", "Host a league"]] },
+  { title: "Play", links: [["/", "Matches"], ["/live", "Live"], ["/table", "Table"], ["/leagues", "Leagues"], ["/host", "Host a league"], ["/app", "Get the app"]] },
   { title: "Proof", links: [["/proof", "Proof"], ["/stats", "Live stats"]] },
   { title: "Docs", links: [["/about", "About"], ["/docs", "How it works"], ["/docs/sponsors", "Sponsors"], ["/docs/terms", "Terms"], ["/docs/privacy", "Privacy"]] },
 ];

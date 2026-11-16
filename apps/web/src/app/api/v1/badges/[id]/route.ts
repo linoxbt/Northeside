@@ -9,7 +9,8 @@ export const GET = route(async (req, { params }: { params: Promise<{ id: string 
   const n = /^\d{1,3}$/.test(raw) ? Number(raw) : NaN;
   const b = Number.isInteger(n) ? badgeById(n) : null;
   if (!b) throw new HttpError(404, "not_found", "No such badge");
-  const origin = new URL(req.url).origin;
+  // Canonical site URL (a deploy-specific host would break explorers' cached images).
+  const origin = (process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin).replace(/\/$/, "");
   return json(
     {
       name: `Northeside · ${b.name}`,

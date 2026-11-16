@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.northeside.app",
+      "sha256_cert_fingerprints": ["D6:76:94:5A:36:A0:D5:91:DE:91:F0:11:1C:14:76:3E:4B:D9:58:B9:31:34:E7:D3:64:17:D6:53:89:C2:12:9D"]
+    }
+  }
+]

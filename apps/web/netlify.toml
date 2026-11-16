@@ -13,3 +13,16 @@
   directory = "apps/web/netlify/functions"
   # ops-worker imports the TypeScript workspace packages; esbuild bundles them.
   node_bundler = "esbuild"
+
+# Android app download and Digital Asset Links (served as static files from apps/web/public).
+[[headers]]
+  for = "/downloads/*"
+  [headers.values]
+    Content-Type = "application/vnd.android.package-archive"
+    Content-Disposition = "attachment"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/.well-known/assetlinks.json"
+  [headers.values]
+    Content-Type = "application/json"

@@ -35,7 +35,19 @@ const config: NextConfig = {
   },
   async headers() {
     // frame-ancestors (above) replaces X-Frame-Options, which cannot allow Telegram.
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Android app download (FR-40) and the app-to-site link Android verifies.
+      {
+        source: "/downloads/:file*",
+        headers: [
+          { key: "Content-Type", value: "application/vnd.android.package-archive" },
+          { key: "Content-Disposition", value: "attachment" },
+          { key: "Cache-Control", value: "public, max-age=3600" },
+        ],
+      },
+      { source: "/.well-known/assetlinks.json", headers: [{ key: "Content-Type", value: "application/json" }] },
+    ];
   },
 };
 

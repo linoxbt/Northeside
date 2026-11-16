@@ -573,6 +573,19 @@ async function main() {
   const og = await fetch(`${APP}/api/v1/og/result/11.${addr(7)}?format=story`);
   check(og.ok && og.headers.get("content-type")?.includes("image/png"), "share card renders");
 
+  // FR-40: the app download page, the APK and the Digital Asset Links file for the Android app.
+  await page.goto(`${APP}/app`, { waitUntil: "networkidle" });
+  const apkHref = await page.getByRole("link", { name: /Download for Android/ }).getAttribute("href");
+  const apk = await fetch(`${APP}${apkHref}`);
+  const apkBytes = Buffer.from(await apk.arrayBuffer());
+  check(
+    apk.ok && apk.headers.get("content-type") === "application/vnd.android.package-archive" && apkBytes.subarray(0, 2).toString() === "PK" && apkBytes.length > 1_000_000,
+    "app page links to the Android APK, served as an Android package",
+  );
+  const links = await (await fetch(`${APP}/.well-known/assetlinks.json`)).json();
+  check(links[0]?.target?.package_name === "com.northeside.app" && links[0].target.sha256_cert_fingerprints.length === 1, "assetlinks.json verifies the Android app");
+  await page.screenshot({ path: join(OUT, "app-download.png"), fullPage: true });
+
   const status = await (await fetch(`${APP}/api/v1/status`)).json();
   check(status.indexedBlock !== null, "status page reports the indexed block");
 
