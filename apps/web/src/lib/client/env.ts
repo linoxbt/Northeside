@@ -9,6 +9,7 @@ export const publicEnv = {
   identity: process.env.NEXT_PUBLIC_IDENTITY_ADDRESS as Address,
   /** $NSD rewards pool; empty until deployed. */
   nsdRewards: (process.env.NEXT_PUBLIC_NSD_REWARDS_ADDRESS || undefined) as Address | undefined,
+  badges: (process.env.NEXT_PUBLIC_BADGES_ADDRESS || undefined) as Address | undefined,
   qusdc: process.env.NEXT_PUBLIC_QUSDC_ADDRESS as Address,
   privyAppId: process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "",

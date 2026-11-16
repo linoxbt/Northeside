@@ -10,6 +10,8 @@ export interface Deployment {
   /** $NSD token and rewards pool; absent until they are deployed. */
   nsdToken?: Address;
   nsdRewards?: Address;
+  /** Soulbound achievement badges; absent until deployed. */
+  badges?: Address;
 }
 
 type Env = Record<string, string | undefined>;
@@ -44,6 +46,7 @@ export function deploymentFromEnv(env: Env): Deployment {
     deployedAtBlock: BigInt(deployedAt ?? "0"),
     ...(pick("NEXT_PUBLIC_NSD_TOKEN_ADDRESS", "NSD_TOKEN_ADDRESS") ? { nsdToken: addr("NEXT_PUBLIC_NSD_TOKEN_ADDRESS", "NSD_TOKEN_ADDRESS") } : {}),
     ...(pick("NEXT_PUBLIC_NSD_REWARDS_ADDRESS", "NSD_REWARDS_ADDRESS") ? { nsdRewards: addr("NEXT_PUBLIC_NSD_REWARDS_ADDRESS", "NSD_REWARDS_ADDRESS") } : {}),
+    ...(pick("NEXT_PUBLIC_BADGES_ADDRESS", "BADGES_ADDRESS") ? { badges: addr("NEXT_PUBLIC_BADGES_ADDRESS", "BADGES_ADDRESS") } : {}),
   };
 }
 

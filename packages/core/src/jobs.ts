@@ -22,6 +22,7 @@ import { reportError, runJob } from "./ops";
 import { postRewardRootsForMatchweek } from "./rewards";
 import { nsdConfigFromEnv, postNsdRoot } from "./nsd";
 import { computeOdds } from "./odds";
+import { postBadgeRoot } from "./badges";
 
 type Env = Record<string, string | undefined>;
 
@@ -307,6 +308,13 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   "compute-odds": async () => {
     const ctx = getCtx();
     return runJob(ctx, "compute-odds", sixHourKey(), () => computeOdds(ctx));
+  },
+
+  /** Every 6 hours: post the cumulative root of earned badges (FR-39), once the contract is configured. */
+  "post-badge-roots": async () => {
+    const ctx = getCtx();
+    if (!ctx.deployment.badges) return { skipped: "badges contract not configured" };
+    return runJob(ctx, "post-badge-roots", sixHourKey(), () => postBadgeRoot(ctx));
   },
 
   migrate: async () => applyMigrations(getCtx().db),

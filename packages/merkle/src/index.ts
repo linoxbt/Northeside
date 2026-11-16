@@ -12,6 +12,7 @@ export const LEAF_TYPES = {
   scores: ["address", "uint32", "uint16", "uint8"],
   hostRewards: ["uint256", "uint32", "address", "uint128", "uint32"],
   nsdRewards: ["uint32", "address", "uint128"],
+  badges: ["address", "uint8"],
 } as const;
 
 /** Root used when a tree would be empty (e.g. no reveals). The contract rejects a zero root. */
@@ -54,6 +55,12 @@ export interface NsdRewardLeaf {
   matchweekId: number;
   wallet: Address;
   amount: bigint;
+}
+
+/** FR-39: one earned badge for one wallet (NorthesideBadges.leafHash). */
+export interface BadgeLeaf {
+  wallet: Address;
+  badgeId: number;
 }
 
 export interface HostRewardLeaf {
@@ -124,6 +131,8 @@ export const buildHostRewardsTree = (leaves: HostRewardLeaf[]) =>
 
 export const buildNsdRewardsTree = (leaves: NsdRewardLeaf[]) =>
   build(leaves, LEAF_TYPES.nsdRewards, (l) => [l.matchweekId, getAddress(l.wallet), l.amount]);
+
+export const buildBadgesTree = (leaves: BadgeLeaf[]) => build(leaves, LEAF_TYPES.badges, (l) => [getAddress(l.wallet), l.badgeId]);
 
 /** Verify a proof exactly as OpenZeppelin MerkleProof does on-chain. */
 export function verifyProof(root: Hex, leafHash: Hex, proof: Hex[]): boolean {

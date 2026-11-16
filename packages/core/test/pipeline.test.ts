@@ -23,7 +23,7 @@ import {
   type PublicClient,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi, nsdRewardsAbi, nsdTokenAbi } from "@northeside/chain";
+import { badgesAbi, erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi, nsdRewardsAbi, nsdTokenAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
 import { rulesVersion } from "@northeside/scoring";
 import { FieldCrypto, schema, type Database } from "@northeside/db";
@@ -39,10 +39,14 @@ import {
   createChallenge,
   acceptChallenge,
   playerCard,
+  recapFor,
+  recapEmoji,
   inviteCodeFor,
   creditInvite,
   squadOf,
   topScouts,
+  postBadgeRoot,
+  badgeClaimsFor,
   challengeView,
   crowdView,
   liveView,
@@ -204,6 +208,8 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     await pub.waitForTransactionReceipt({
       hash: await deployer.writeContract({ address: nsdToken, abi: nsdTokenAbi, functionName: "transfer", args: [nsdRewards, 1_000_000n * 10n ** 18n] }),
     });
+    // FR-39: soulbound achievement badges, roots posted by the operator.
+    const badges = await deploy("NorthesideBadges.sol/NorthesideBadges.json", [acct(KEYS.admin).address, acct(KEYS.operator).address, acct(KEYS.attester).address, "https://northeside.test/api/v1/badges/"]);
     const mint = artifact("MockERC20.sol/MockERC20.json");
     await pub.waitForTransactionReceipt({
       hash: await deployer.writeContract({ address: qusdc, abi: mint.abi, functionName: "mint", args: [acct(KEYS.sponsor).address, 1_000_000_000n] }),
@@ -219,7 +225,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     ctx = {
       db,
       chain: local,
-      deployment: { chainId: 31337, matchweeks, hostRewards, identity, qusdc, deployedAtBlock: 0n, nsdToken, nsdRewards },
+      deployment: { chainId: 31337, matchweeks, hostRewards, identity, qusdc, deployedAtBlock: 0n, nsdToken, nsdRewards, badges },
       publicClient: pub,
       crypto: new FieldCrypto(Buffer.alloc(32, 9).toString("base64")),
       pepper: `0x${"77".repeat(32)}`,
@@ -448,6 +454,14 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       const adaCard = await playerCard(ctx, u1.id);
       expect(adaCard.points).toBe(10);
       expect(earned(adaCard)).not.toContain("rival");
+      // Weekly recap: Bo won MW11 (beat 100%), Ada beat half the others.
+      const boRecap = await recapFor(ctx, 11, u2.id);
+      expect(boRecap).toMatchObject({ ready: true, final: true, name: "Bo", points: 14, rank: 1, players: 3, beatPct: 100, exact: 1, results: 2, games: 2 });
+      expect(boRecap!.grid).toEqual([{ cell: "result", banker: false }, { cell: "exact", banker: true }, { cell: "void", banker: false }]);
+      expect(boRecap!.bestCall).toMatchObject({ home: "Everton", away: "Liverpool", pickHome: 0, pickAway: 2, exact: true, sharePct: 33 });
+      expect(boRecap!.banker).toMatchObject({ home: "Everton", away: "Liverpool", points: 12 });
+      expect(recapEmoji(boRecap!.grid)).toBe("🟨🟩▫️");
+      expect(await recapFor(ctx, 11, u1.id)).toMatchObject({ points: 10, rank: 2, beatPct: 50, grid: [{ cell: "exact", banker: true }, { cell: "miss" }, { cell: "void" }] });
       // Invites: Bo invites Cy; Cy has sealed, so Bo has one recruit and tops the scouts board.
       const boCode = await inviteCodeFor(ctx, u2.id);
       expect(await inviteCodeFor(ctx, u2.id)).toBe(boCode); // stable
@@ -458,6 +472,24 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(await squadOf(ctx, u2.id)).toEqual({ joined: 1, sealed: 1 });
       expect((await playerCard(ctx, u2.id)).badges.find((b) => b.id === "recruiter")).toMatchObject({ earned: false, progress: { n: 1, target: 3 } });
       expect(await topScouts(ctx)).toEqual([{ rank: 1, userId: u2.id, name: "Bo", recruits: 1 }]);
+
+      // On-chain badges (FR-39): the operator posts one cumulative root; Bo mints Sniper himself.
+      const posted1 = await postBadgeRoot(ctx);
+      expect(posted1).toMatchObject({ round: 1 });
+      expect(await postBadgeRoot(ctx)).toMatchObject({ skipped: "no new badges", round: 1 });
+      const boWallet = acct(KEYS.p2).address;
+      const { claims: boClaims } = await badgeClaimsFor(ctx, [boWallet]);
+      expect(boClaims.map((c) => c.slug)).toEqual(expect.arrayContaining(["first-seal", "sniper", "banker", "rival"]));
+      const sniper = boClaims.find((c) => c.slug === "sniper")!;
+      expect(sniper).toMatchObject({ badgeId: 5, round: 1, claimed: false });
+      const mintTx = await wallet(KEYS.p2).writeContract({ address: ctx.deployment.badges!, abi: badgesAbi, functionName: "claim", args: [BigInt(sniper.round), sniper.badgeId, sniper.proof] });
+      expect((await pub.waitForTransactionReceipt({ hash: mintTx })).status).toBe("success");
+      expect(await pub.readContract({ address: ctx.deployment.badges!, abi: badgesAbi, functionName: "balanceOf", args: [boWallet, 5n] })).toBe(1n);
+      expect((await badgeClaimsFor(ctx, [boWallet])).claims.find((c) => c.slug === "sniper")!.claimed).toBe(true);
+      // Ada cannot use Bo's proof.
+      await expect(
+        wallet(KEYS.p1).writeContract({ address: ctx.deployment.badges!, abi: badgesAbi, functionName: "claim", args: [BigInt(sniper.round), sniper.badgeId, sniper.proof] }),
+      ).rejects.toThrow();
 
       // $NSD rewards for matchweek 11: verified people only. Bo (14) and Ada (10) are verified; Cy is
       // not and earns nothing. Pool 10,000 NSD split 50/30/20 by position.

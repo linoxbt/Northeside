@@ -71,10 +71,16 @@ or QIE Wallet directly.
   towards the public Scouts table. This is the main growth loop, measured from on-chain seals.
 - **Seal celebration** with one-tap sharing to WhatsApp, X and Telegram, and head-to-head
   challenges.
+- **Weekly recap card**: points, rank, "beat N% of players", a 🟩🟨⬛ grid of the picks and the
+  best call, with a share image; the recap link doubles as an invite.
+- **On-chain badges** (`NorthesideBadges`, built and tested, deploy pending): soulbound ERC-1155
+  tokens on QIE. The operator posts one cumulative Merkle root of every (wallet, badge) earned from
+  on-chain play; each player mints from their own wallet. Not transferable, no value, never paid
+  out. Deploy with `forge script script/DeployBadges.s.sol`, then set `NEXT_PUBLIC_BADGES_ADDRESS`.
 
 ## Quality
 
-- 127 Foundry tests: unit, fuzz and invariant suites (solvency, accounting, one claim per person),
+- 138 Foundry tests: unit, fuzz and invariant suites (solvency, accounting, one claim per person),
   deploy-script tests and golden vectors shared with the TypeScript code; Slither reviewed.
 - Package and API tests, plus an end-to-end run on a local chain that drives the real UI: sign-in,
   seal from the player's wallet, lock, reveal, two-source results, finalize, proof verification.

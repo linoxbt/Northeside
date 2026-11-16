@@ -1,4 +1,4 @@
-import { leaderboard } from "@northeside/core";
+import { leaderboard, recapFor, userByInviteCode } from "@northeside/core";
 import { ImageResponse } from "next/og";
 import { getCtx } from "@/lib/server/ctx";
 import { leagueBySlug } from "@/lib/server/services/leagues";
@@ -92,6 +92,51 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
             <div style={{ fontSize: story ? 40 : 30, color: C.muted }}>{me?.name ?? ""}</div>
           </div>
         </Frame>
+      ),
+      { ...size, headers: { "cache-control": "public, max-age=300" } },
+    ));
+  }
+
+  if (kind === "recap") {
+    // /api/v1/og/recap/:matchweek.:inviteCode — the weekly recap card (Wordle-style grid).
+    const [mwRaw, code] = id.split(".");
+    const mw = Number(mwRaw);
+    const ctx = getCtx();
+    const owner = Number.isInteger(mw) && code ? await userByInviteCode(ctx, code.toLowerCase()).catch(() => null) : null;
+    const r = owner ? await recapFor(ctx, mw, owner.id).catch(() => null) : null;
+    const W = { bg: "#0a0b0d", ink: "#ffffff", muted: "#9ba0a8", accent: "#19e07a", exact: "#19e07a", result: "#eda100", miss: "#2b2e33", void: "#4a4e55" };
+    const sq = story ? 76 : 64;
+    return rendered(new ImageResponse(
+      (
+        <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: W.bg, color: W.ink, padding: story ? 96 : 60, fontFamily: "sans-serif" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: story ? 40 : 30 }}>
+            <span style={{ color: W.accent, fontWeight: 700 }}>Northeside</span>
+            <span style={{ color: W.muted }}>{`Matchweek ${mwRaw}${r && !r.final ? " · provisional" : ""}`}</span>
+          </div>
+          {r ? (
+            <div style={{ display: "flex", flexDirection: story ? "column" : "row", gap: story ? 64 : 56, alignItems: story ? "flex-start" : "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: story ? 44 : 32, color: W.muted }}>{r.name}</span>
+                <span style={{ fontSize: story ? 180 : 132, fontWeight: 800, lineHeight: 1 }}>{`${r.points} pts`}</span>
+                <span style={{ fontSize: story ? 48 : 36 }}>{`#${r.rank} of ${r.players}${r.beatPct > 0 ? ` · beat ${r.beatPct}%` : ""}`}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, maxWidth: (sq + 10) * 5 }}>
+                  {r.grid.map((g, i) => (
+                    <div key={i} style={{ width: sq, height: sq, borderRadius: 12, background: W[g.cell], display: "flex", alignItems: "center", justifyContent: "center", fontSize: sq * 0.5, color: "#0a0b0d" }}>
+                      {g.banker ? "★" : ""}
+                    </div>
+                  ))}
+                </div>
+                <span style={{ fontSize: story ? 34 : 26, color: W.muted }}>{`${r.exact} exact · ${r.results} right result${r.results === 1 ? "" : "s"}${r.streak > 1 ? ` · ${r.streak}-week streak` : ""}`}</span>
+                {r.bestCall ? <span style={{ fontSize: story ? 34 : 26 }}>{`Best call: ${r.bestCall.home} ${r.bestCall.pickHome}–${r.bestCall.pickAway} ${r.bestCall.away} (${r.bestCall.sharePct}% did)`}</span> : null}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", fontSize: 72, fontWeight: 800 }}>Call the score. Seal it on QIE.</div>
+          )}
+          <div style={{ display: "flex", fontSize: story ? 32 : 24, color: W.muted }}>Free weekly Premier League predictions · can you beat this?</div>
+        </div>
       ),
       { ...size, headers: { "cache-control": "public, max-age=300" } },
     ));

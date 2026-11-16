@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useCard } from "./fun";
 import { SignInPanel } from "./sign-in";
 import { Card, Pill } from "./ui";
 import { api } from "@/lib/client/api";
@@ -26,6 +27,8 @@ export function MySlips() {
   const session = useSession();
   const user = session.data?.user;
   const q = useQuery({ queryKey: ["slips"], enabled: !!user, queryFn: () => api<{ slips: Slip[] }>("/api/v1/slips/me") });
+  const card = useCard(!!user);
+  const code = card.data?.inviteCode;
   if (session.isLoading) return <Card className="h-40 animate-pulse">{null}</Card>;
   if (!user) return <SignInPanel title="Sign in to see your slips" />;
   const slips = q.data?.slips ?? [];
@@ -72,6 +75,11 @@ export function MySlips() {
                 </div>
               </div>
             </Link>
+            {s.state === "settled" && code ? (
+              <Link href={`/recap/${s.matchweekId}/${code}`} prefetch={false} className="mt-1 flex items-center justify-end gap-2 px-2 text-[13px] text-accent-deep">
+                <span aria-hidden>🟩🟨⬛</span> Share recap
+              </Link>
+            ) : null}
           </li>
         ))}
       </ul>

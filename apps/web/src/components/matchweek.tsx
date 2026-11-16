@@ -2,7 +2,7 @@
 
 import { crowdBonus, type FixtureBreakdown } from "@northeside/scoring";
 import { resultOdds } from "@/lib/markets";
-import { SealCelebration, type SealMoment } from "./fun";
+import { RecapLink, SealCelebration, type SealMoment } from "./fun";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -595,6 +595,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
           {user && user.adultConfirmed && open ? <ChallengeButton mwId={mw.id} /> : null}
 
+          {user && mine.data?.commitment && !open && live.data?.fixtures.length && live.data.fixtures.every((x) => x.state === "ft" || x.state === "void") ? (
+            <RecapLink matchweekId={mw.id} final={finalized} />
+          ) : null}
           {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
 
           <p className="text-center text-[13px] text-muted">

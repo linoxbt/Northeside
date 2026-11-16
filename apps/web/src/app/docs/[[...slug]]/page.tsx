@@ -122,6 +122,7 @@ function HowItWorks() {
       </Section>
       <Section id="levels" title="Levels, streaks and badges">
         <p>Points from final matchweeks take you from Rookie to Legend. Seal every matchweek to grow your streak, and collect 12 badges, from Sniper (an exact score) to Upset caller (a result the odds gave under 25%). They are for fun and bragging rights only.</p>
+        <p>Earned badges can be minted on QIE from your own wallet as non-transferable tokens: proof of how you played, with no monetary value. After every matchweek your recap card shows your picks as a 🟩🟨⬛ grid to share.</p>
       </Section>
       <Section id="invite" title="Invite friends">
         <p>Your profile has a personal invite link. Friends who join with it and seal a slip join your squad, and the Scouts table ranks who brought the most.</p>

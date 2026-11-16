@@ -1,6 +1,6 @@
 import { sealedPayloadSchema } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { breakdown, rank, rulesVersion } from "@northeside/scoring";
+import { breakdown, crowdCounts, rank, rulesVersion } from "@northeside/scoring";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
@@ -290,4 +290,106 @@ export async function topScouts(ctx: CoreContext, limit = 20) {
     const w = wallets.find((x) => x.userId === r.id)?.address ?? "0x0000000000000000000000000000000000000000";
     return { rank: rk, userId: r.id, name: displayName(r, w), recruits: r.n };
   });
+}
+
+// ---------------------------------------------------------------- weekly recap
+
+export type RecapCell = "exact" | "result" | "miss" | "void";
+
+export interface Recap {
+  matchweekId: number;
+  /** True once every game is over; final once the matchweek is finalized on-chain. */
+  ready: boolean;
+  final: boolean;
+  name: string;
+  points: number;
+  rank: number;
+  players: number;
+  /** Share of the other players this one finished above (0-100). */
+  beatPct: number;
+  exact: number;
+  results: number;
+  games: number;
+  grid: { cell: RecapCell; banker: boolean }[];
+  banker: { home: string; away: string; points: number } | null;
+  /** The right call the fewest players made. */
+  bestCall: { home: string; away: string; pickHome: number; pickAway: number; exact: boolean; sharePct: number } | null;
+  streak: number;
+  level: string;
+}
+
+/** One player's matchweek in a shareable shape. Null if they had no revealed slip. */
+export async function recapFor(ctx: CoreContext, matchweekId: number, userId: string): Promise<Recap | null> {
+  const [mw] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, matchweekId));
+  if (!mw || ctx.now() < mw.lockTime) return null;
+  const fixtures = await fixtureRows(ctx, mw.id);
+  const version = rulesVersion(mw.scoringRulesHash);
+  const live = await provisional(ctx, mw.id, version, fixtures);
+  const me = sideFor(live.scored, userId);
+  if (!me) return null;
+  const ready = live.view.every((f) => f.state === "ft" || f.state === "void");
+
+  // One entry per person (first-sealed wallet), ranked like the leaderboard.
+  const people = [...new Set(live.scored.map((e) => e.userId))].map((u) => sideFor(live.scored, u)!);
+  const ranked = rank(people.map((e) => ({ ...e, id: e.userId })));
+  const mine = ranked.find((r) => r.entry.userId === userId)!;
+  const below = ranked.filter((r) => r.rank > mine.rank).length;
+  const players = ranked.length;
+
+  const b = breakdown(version, me, live.entries, live.results);
+  const crowd = crowdCounts(live.entries, fixtures.length);
+  const grid = fixtures.map((f) => {
+    const x = b.find((y) => y.index === f.idx);
+    const r = live.results.find((y) => y.index === f.idx);
+    const cell: RecapCell = !r || r.status === "void" ? "void" : x?.exact ? "exact" : (x?.points ?? 0) > 0 ? "result" : "miss";
+    return { cell, banker: me.banker === f.idx };
+  });
+  let bestCall: Recap["bestCall"] = null;
+  for (const x of b) {
+    const r = live.results.find((y) => y.index === x.index);
+    if (!r || r.status === "void" || x.points <= 0) continue;
+    const c = crowd[x.index]!;
+    const total = c.home + c.draw + c.away || 1;
+    const o = r.homeGoals > r.awayGoals ? c.home : r.homeGoals === r.awayGoals ? c.draw : c.away;
+    const sharePct = Math.round((o * 100) / total);
+    const f = fixtures.find((y) => y.idx === x.index)!;
+    if (sharePct >= 100) continue; // everyone called it: not a "best call"
+    if (!bestCall || sharePct < bestCall.sharePct || (sharePct === bestCall.sharePct && x.exact && !bestCall.exact)) {
+      bestCall = { home: f.home, away: f.away, pickHome: me.home[x.index]!, pickAway: me.away[x.index]!, exact: x.exact, sharePct };
+    }
+  }
+  const bk = b.find((x) => x.banker);
+  const bkF = bk ? fixtures.find((y) => y.idx === bk.index) : undefined;
+  const [u] = await ctx.db.select().from(schema.users).where(eq(schema.users.id, userId));
+  const card = await playerCard(ctx, userId);
+  return {
+    matchweekId: mw.id,
+    ready,
+    final: mw.status === "finalized",
+    name: u && !u.deletedAt ? displayName(u, me.wallet) : "Player",
+    points: me.points,
+    rank: mine.rank,
+    players,
+    beatPct: players > 1 ? Math.round((below * 100) / (players - 1)) : 100,
+    exact: grid.filter((g) => g.cell === "exact").length,
+    results: grid.filter((g) => g.cell === "exact" || g.cell === "result").length,
+    games: grid.filter((g) => g.cell !== "void").length,
+    grid,
+    banker: bk && bkF ? { home: bkF.home, away: bkF.away, points: bk.points } : null,
+    bestCall,
+    streak: card.streak.current,
+    level: card.level.name,
+  };
+}
+
+/** The player behind an invite code (recap links use it so no wallet appears in the URL). */
+export async function userByInviteCode(ctx: CoreContext, code: string) {
+  if (!/^[a-z0-9]{4,16}$/.test(code)) return null;
+  const [u] = await ctx.db.select().from(schema.users).where(eq(schema.users.inviteCode, code));
+  return u && !u.deletedAt ? u : null;
+}
+
+/** Wordle-style share line: 🟩 exact, 🟨 right result, ⬛ miss, ▫️ void. */
+export function recapEmoji(grid: Recap["grid"]) {
+  return grid.map((g) => (g.cell === "exact" ? "🟩" : g.cell === "result" ? "🟨" : g.cell === "miss" ? "⬛" : "▫️")).join("");
 }

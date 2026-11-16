@@ -7,6 +7,7 @@ import type { Hex } from "viem";
 import { safeGas } from "@/lib/client/gas";
 import { NsdRewards } from "./nsd-rewards";
 import { PlayerCard } from "./fun";
+import { useBadgeMint } from "./badge-mint";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { txError } from "@/lib/client/tx-errors";
 import { useAuthBridge } from "./auth-bridge";
@@ -39,6 +40,7 @@ export function Profile() {
   const bridge = useAuthBridge();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState("");
+  const badgeMint = useBadgeMint(!!user);
 
   useEffect(() => {
     if (user) {
@@ -107,7 +109,7 @@ export function Profile() {
 
   return (
     <div className="space-y-4">
-      <PlayerCard name={user.qieId ?? user.displayName ?? short(session.data!.wallet!)} />
+      <PlayerCard name={user.qieId ?? user.displayName ?? short(session.data!.wallet!)} badgeSlot={badgeMint.slot} badgeError={badgeMint.error} />
       <NsdRewards />
       <Card className="space-y-3">
         <div className="flex items-center justify-between">

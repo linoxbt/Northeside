@@ -7,7 +7,7 @@
 import { gzipSync } from "node:zlib";
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -292,6 +292,13 @@ async function main() {
     stdio: "inherit",
   });
   const dep = JSON.parse(readFileSync(join(ROOT, "contracts/deployments/31337.json"), "utf8"));
+  // FR-39: soulbound badges, from their own deploy script.
+  execFileSync("forge", ["script", "script/DeployBadges.s.sol", "--rpc-url", RPC, "--broadcast", "--silent"], {
+    cwd: join(ROOT, "contracts"),
+    env: { ...process.env, DEPLOYER_PRIVATE_KEY: KEYS[0], ADMIN_ADDRESS: addr(1), OPERATOR_ADDRESS: addr(2), PAUSER_ADDRESS: "0x00000000000000000000000000000000000000A8", BADGES_BASE_URI: `${APP}/api/v1/badges/` },
+    stdio: "inherit",
+  });
+  dep.badges = JSON.parse(readFileSync(join(ROOT, "contracts/deployments/31337-badges.json"), "utf8")).badges;
   log("deployed", dep);
 
   // ---------------------------------------------------------------- database
@@ -320,6 +327,7 @@ async function main() {
     NEXT_PUBLIC_HOST_REWARDS_ADDRESS: dep.hostRewards,
     NEXT_PUBLIC_IDENTITY_ADDRESS: dep.identity,
     NEXT_PUBLIC_QUSDC_ADDRESS: dep.qusdc,
+    NEXT_PUBLIC_BADGES_ADDRESS: dep.badges,
     NEXT_PUBLIC_DEPLOYED_AT_BLOCK: "0",
     NEXT_PUBLIC_SITE_URL: APP,
     QIE_RPC_URLS: RPC,
@@ -529,6 +537,35 @@ async function main() {
   await page.getByText("Sealed receipt").waitFor();
   check(await page.getByText(/^5$/).first().isVisible().catch(() => false), "receipt shows Ada's 5 points");
   await page.screenshot({ path: join(OUT, "results.png"), fullPage: true });
+  // FR-39: the board links to the weekly recap; the public recap card has the grid and share buttons.
+  await page.getByRole("link", { name: /Your Matchweek 11 recap/ }).waitFor({ timeout: 30_000 });
+  check(true, "board links to the weekly recap once the games are over");
+  await page.goto(`${APP}/recap/11/${adaInvite}`, { waitUntil: "networkidle" });
+  check(
+    (await page.getByText("Matchweek 11 recap").count()) === 1 &&
+      (await page.locator('ol[aria-label^="Picks"] li').count()) === 3 &&
+      (await page.getByRole("link", { name: "WhatsApp" }).getAttribute("href"))?.includes(encodeURIComponent("🟩")),
+    "public recap card shows the pick grid and a Wordle-style share",
+  );
+  await page.screenshot({ path: join(OUT, "recap.png"), fullPage: true });
+  const recapOg = await fetch(`${APP}/api/v1/og/recap/11.${adaInvite}`);
+  check(recapOg.ok && recapOg.headers.get("content-type")?.includes("image/png"), "recap share image renders");
+  writeFileSync(join(OUT, "recap-og.png"), Buffer.from(await recapOg.arrayBuffer()));
+
+  // FR-39: the worker posts the badge root; Ada mints "First seal" on QIE from her own wallet.
+  const badgeRoot = await cronJob("post-badge-roots");
+  check(badgeRoot?.detail?.round === 1 && badgeRoot.detail.leaves >= 4, "worker posts the cumulative badge root on-chain");
+  await page.goto(`${APP}/me`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Got it" }).click({ timeout: 2_000 }).catch(() => {});
+  const firstSeal = page.locator("li", { hasText: "First seal" });
+  await firstSeal.getByRole("button", { name: "Mint on QIE" }).waitFor({ timeout: 30_000 });
+  await firstSeal.getByRole("button", { name: "Mint on QIE" }).click();
+  await firstSeal.getByText("ON QIE ✓").waitFor({ timeout: 90_000 });
+  const minted = await rpc("eth_call", [{ to: dep.badges, data: `0x00fdd58e${addr(7).slice(2).toLowerCase().padStart(64, "0")}${"1".padStart(64, "0")}` }, "latest"]);
+  check(BigInt(minted) === 1n, "Ada minted her First seal badge on-chain from her own wallet (soulbound)");
+  const meta = await (await fetch(`${APP}/api/v1/badges/1`)).json();
+  check(meta.name === "Northeside · First seal" && meta.attributes.some((a) => a.value === "No"), "badge metadata is served for explorers");
+  await page.screenshot({ path: join(OUT, "badges-minted.png"), fullPage: true });
 
   const stats = await (await fetch(`${APP}/api/v1/stats`)).json();
   check(stats.activatedWallets === 2 && stats.transactions.commits === 2, "stats count 2 activated wallets and 2 commits");

@@ -163,7 +163,7 @@ export function InviteWelcome() {
 
 // ---------------------------------------------------------------- player card
 
-export function PlayerCard({ name }: { name: string }) {
+export function PlayerCard({ name, badgeSlot, badgeError }: { name: string; badgeSlot?: (slug: string) => React.ReactNode; badgeError?: string | null }) {
   const q = useCard();
   const [copied, setCopied] = useState(false);
   // New badges since the last visit: celebrate once.
@@ -252,9 +252,11 @@ export function PlayerCard({ name }: { name: string }) {
               <span className="mt-0.5 text-[10px] leading-3 text-muted">
                 {b.earned ? (b.matchweek ? `MW ${b.matchweek}` : "Earned") : b.progress ? `${b.progress.n}/${b.progress.target}` : b.how}
               </span>
+              {b.earned && badgeSlot ? badgeSlot(b.id) : null}
             </li>
           ))}
         </ul>
+        {badgeError ? <p className="text-[13px] text-bad">{badgeError}</p> : null}
       </Card>
 
       <Card className="space-y-3">
@@ -380,5 +382,30 @@ export function SealCelebration({ moment, onClose }: { moment: SealMoment; onClo
         </button>
       </div>
     </div>
+  );
+}
+
+/** "Your recap is ready": shown once a matchweek's games are over, links to the shareable card. */
+export function RecapLink({ matchweekId, final }: { matchweekId: number; final: boolean }) {
+  const card = useCard();
+  if (!card.data) return null;
+  return (
+    <Link
+      href={`/recap/${matchweekId}/${card.data.inviteCode}`}
+      prefetch={false}
+      onClick={() => track("recap_opened", { matchweek_id: matchweekId })}
+      className="flex items-center gap-3 rounded-2xl bg-ink px-4 py-3.5 text-white"
+    >
+      <span className="font-mono text-[15px] tracking-[0.1em]" aria-hidden>
+        🟩🟨⬛
+      </span>
+      <span className="min-w-0 flex-1">
+        <b className="block text-[15px] font-medium">Your Matchweek {matchweekId} recap</b>
+        <span className="text-[12px] text-white/60">{final ? "Final" : "Provisional"} · share it and dare your friends</span>
+      </span>
+      <span aria-hidden className="text-accent">
+        →
+      </span>
+    </Link>
   );
 }

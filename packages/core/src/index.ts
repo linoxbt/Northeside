@@ -15,3 +15,4 @@ export * from "./h2h";
 export * from "./nsd";
 export * from "./odds";
 export * from "./fun";
+export * from "./badges";
