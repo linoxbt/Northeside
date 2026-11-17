@@ -138,7 +138,10 @@ describe("FieldCrypto", () => {
     const a = c.encrypt("x", "user-1");
     expect(() => c.decrypt(a, "user-2")).toThrow();
     const parts = a.split(".");
-    parts[3] = Buffer.from("y").toString("base64url");
+    // Flip one bit of the ciphertext (replacing it with a fixed byte matched the real one 1 time in 256).
+    const ct = Buffer.from(parts[3]!, "base64url");
+    ct[0] = ct[0]! ^ 0x01;
+    parts[3] = ct.toString("base64url");
     expect(() => c.decrypt(parts.join("."), "user-1")).toThrow();
   });
 
