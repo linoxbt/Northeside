@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { AnalyticsChoice } from "@/components/analytics-choice";
+import { OverviewDoc, TechnicalDoc } from "@/components/docs-content";
 import { ButtonLink, Container } from "@/components/ui";
 import { contactHref } from "@/lib/contact";
 import { LEGAL, LEGAL_VERSION } from "@/lib/legal";
@@ -11,6 +12,8 @@ import { LEGAL, LEGAL_VERSION } from "@/lib/legal";
 /** Everything that is reading rather than playing lives here: how it works, hosts, sponsors, legal. */
 const GUIDES = [
   { slug: "", title: "How it works" },
+  { slug: "overview", title: "Overview" },
+  { slug: "technical", title: "Technical" },
   { slug: "hosts", title: "Hosts" },
   { slug: "sponsors", title: "Sponsors" },
 ] as const;
@@ -24,7 +27,12 @@ const titleOf = (slug: string) => GUIDES.find((g) => g.slug === slug)?.title ?? 
 
 export async function generateMetadata({ params }: { params: Promise<{ slug?: string[] }> }): Promise<Metadata> {
   const slug = (await params).slug?.[0] ?? "";
-  return { title: slug ? (titleOf(slug) ?? "Docs") : "Docs", description: LEGAL[slug]?.summary ?? "How Northeside works: scoring, sealing, results, hosts, sponsors and legal." };
+  const descriptions: Record<string, string> = {
+    overview: "Northeside: free weekly Premier League predictions sealed on QIE mainnet. Product, business model, use of QIE and roadmap.",
+    technical: "Northeside technical documentation: contracts on QIE mainnet, commit-reveal protocol, results and finality, identity and verification.",
+  };
+  const title = slug === "overview" ? "Northeside overview" : slug === "technical" ? "Northeside technical documentation" : slug ? (titleOf(slug) ?? "Docs") : "Docs";
+  return { title, description: descriptions[slug] ?? LEGAL[slug]?.summary ?? "How Northeside works: scoring, sealing, results, hosts, sponsors and legal." };
 }
 
 export default async function DocsPage({ params }: { params: Promise<{ slug?: string[] }> }) {
@@ -55,10 +63,13 @@ export default async function DocsPage({ params }: { params: Promise<{ slug?: st
         </aside>
 
         <article className="min-w-0 max-w-2xl">
-          <h1 className="display text-[36px] sm:text-[48px]">{titleOf(slug)}</h1>
+          <h1 className="display text-[36px] sm:text-[48px]">{slug === "overview" ? "Northeside" : slug === "technical" ? "Technical documentation" : titleOf(slug)}</h1>
+          {slug === "overview" || slug === "technical" ? <p className="mt-2 font-mono text-[12px] text-muted">Updated 17 November 2026 · QIE mainnet (chain 1990)</p> : null}
           {legal ? <p className="mt-2 font-mono text-[12px] text-muted">Version {LEGAL_VERSION}</p> : null}
           <div className="mt-10 space-y-12">
             {slug === "" ? <HowItWorks /> : null}
+            {slug === "overview" ? <OverviewDoc /> : null}
+            {slug === "technical" ? <TechnicalDoc /> : null}
             {slug === "hosts" ? <Hosts /> : null}
             {slug === "sponsors" ? <Sponsors /> : null}
             {legal
