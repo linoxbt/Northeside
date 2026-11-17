@@ -1,7 +1,7 @@
 import "server-only";
 import { bigintReplacer, reportError } from "@northeside/core";
 import { safeEqual, schema } from "@northeside/db";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
@@ -82,7 +82,9 @@ export async function quotaLeft(key: string, limit: number, windowSeconds: numbe
   const [row] = await db
     .select({ count: schema.rateLimits.count })
     .from(schema.rateLimits)
-    .where(sql`${schema.rateLimits.key} = ${key} and ${schema.rateLimits.windowStart} = ${windowStart}`);
+    // Typed column comparisons: postgres-js rejects a JS Date inside a raw sql`` fragment (PGlite in
+    // tests accepts it, which hid this until production: every drip request failed with a 500).
+    .where(and(eq(schema.rateLimits.key, key), eq(schema.rateLimits.windowStart, windowStart)));
   if ((row?.count ?? 0) >= limit) throw new HttpError(429, "rate_limited", "Too many requests from this network today");
 }
 

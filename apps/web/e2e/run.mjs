@@ -586,6 +586,13 @@ async function main() {
   check(links[0]?.target?.package_name === "com.northeside.app" && links[0].target.sha256_cert_fingerprints.length === 1, "assetlinks.json verifies the Android app");
   await page.screenshot({ path: join(OUT, "app-download.png"), fullPage: true });
 
+  // The gas drip route runs its per-network quota query on real Postgres (it used to fail with a 500
+  // in production: a JS Date in a raw SQL fragment). Ada's wallet is funded, so expect a refusal.
+  const dripStatus = await page.evaluate(() =>
+    fetch("/api/v1/drip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deviceId: "e2e-device-000000000001" }) }).then((r) => r.status),
+  );
+  check([409, 503].includes(dripStatus), `gas drip request is answered without a server error (${dripStatus})`);
+
   const status = await (await fetch(`${APP}/api/v1/status`)).json();
   check(status.indexedBlock !== null, "status page reports the indexed block");
 
