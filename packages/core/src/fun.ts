@@ -272,7 +272,7 @@ export async function topScouts(ctx: CoreContext, limit = 20) {
     .groupBy(schema.users.invitedBy)
     .as("recruits");
   const rows = await ctx.db
-    .select({ id: schema.users.id, displayName: schema.users.displayName, qieId: schema.users.qieId, deletedAt: schema.users.deletedAt, n: recruits.n })
+    .select({ id: schema.users.id, displayName: schema.users.displayName, qieId: schema.users.qieId, qieIdResolved: schema.users.qieIdResolved, deletedAt: schema.users.deletedAt, n: recruits.n })
     .from(recruits)
     .innerJoin(schema.users, eq(schema.users.id, recruits.scout))
     .orderBy(sql`${recruits.n} desc`, asc(schema.users.createdAt))

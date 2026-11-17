@@ -41,7 +41,7 @@ export async function leagueBySlug(slug: string) {
     slug: league.slug,
     name: league.name,
     privacy: league.privacy,
-    host: host?.qieId ?? host?.displayName ?? "Host",
+    host: (host?.qieIdResolved ? host.qieId : null) ?? host?.displayName ?? "Host",
     members: Number(members),
   };
 }
@@ -53,7 +53,7 @@ export async function leagueDirectory(limit = 48) {
     .select({
       slug: schema.leagues.slug,
       name: schema.leagues.name,
-      hostName: sql<string | null>`coalesce(${schema.users.qieId}, ${schema.users.displayName})`,
+      hostName: sql<string | null>`coalesce(case when ${schema.users.qieIdResolved} then ${schema.users.qieId} end, ${schema.users.displayName})`,
       members: sql<number>`(select count(*)::int from ${schema.leagueMembers} m where m.league_id = ${schema.leagues.id})`,
       createdAt: schema.leagues.createdAt,
     })

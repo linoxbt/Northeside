@@ -16,3 +16,4 @@ export * from "./nsd";
 export * from "./odds";
 export * from "./fun";
 export * from "./badges";
+export * from "./qieid";

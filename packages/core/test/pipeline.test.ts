@@ -47,6 +47,10 @@ import {
   topScouts,
   postBadgeRoot,
   badgeClaimsFor,
+  qieNameOf,
+  ownsQieName,
+  refreshQieId,
+  displayName,
   challengeView,
   crowdView,
   liveView,
@@ -718,6 +722,51 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     },
     120_000,
   );
+  it("QIE ID: verified .qie names only (reverse lookup confirmed by the owner lookup)", async () => {
+    const reg = artifact("MockQieRegistry.sol/MockQieRegistry.json");
+    const deployTx = await wallet(KEYS.deployer).deployContract({ abi: reg.abi, bytecode: reg.bytecode, args: [] });
+    const registry = (await pub.waitForTransactionReceipt({ hash: deployTx })).contractAddress!;
+    const qctx = { ...ctx, deployment: { ...ctx.deployment, qieIdRegistry: registry } };
+    const send = async (fn: string, args: unknown[]) =>
+      pub.waitForTransactionReceipt({ hash: await wallet(KEYS.deployer).writeContract({ address: registry, abi: reg.abi, functionName: fn, args }) });
+    const player = async (name: string) => {
+      const k = generatePrivateKey();
+      const [u] = await ctx.db.insert(schema.users).values({ displayName: name }).returning();
+      await ctx.db.insert(schema.wallets).values({ address: acct(k).address.toLowerCase(), userId: u!.id, kind: "external" });
+      return { userId: u!.id, wallet: acct(k).address };
+    };
+    const row = async (userId: string) => (await ctx.db.select().from(schema.users).where(eq(schema.users.id, userId)))[0]!;
+
+    const ana = await player("Ana");
+    const ben = await player("Ben");
+    const cat = await player("Cat");
+    await send("setName", [ana.wallet, "ana.qie"]);
+    await send("setName", [ben.wallet, "ben.qie"]);
+    await send("setOwner", ["ben.qie", cat.wallet]); // Ben's reverse record is stale: Cat owns ben.qie now
+
+    expect(await qieNameOf(qctx, ana.wallet)).toBe("ana.qie");
+    expect(await qieNameOf(qctx, ben.wallet)).toBeNull();
+    expect(await ownsQieName(qctx, "ben.qie", [cat.wallet])).toBe(true);
+    expect(await ownsQieName(qctx, "ben.qie", [ben.wallet])).toBe(false);
+    expect(await qieNameOf(ctx, ana.wallet)).toBeNull(); // no registry configured: no names
+
+    expect(await refreshQieId(qctx, ana.userId)).toEqual({ qieId: "ana.qie", resolved: true, changed: true });
+    expect(await refreshQieId(qctx, ana.userId)).toMatchObject({ qieId: "ana.qie", changed: false });
+    expect(await refreshQieId(qctx, ben.userId)).toEqual({ qieId: null, resolved: false, changed: false });
+    const a = await row(ana.userId);
+    expect(displayName(a, ana.wallet)).toBe("ana.qie");
+
+    // A typed-in name that was never verified is not shown; refresh removes it.
+    await ctx.db.update(schema.users).set({ qieId: "ana.qie", qieIdResolved: false }).where(eq(schema.users.id, ben.userId));
+    expect(displayName(await row(ben.userId), ben.wallet)).toBe("Ben");
+    expect(await refreshQieId(qctx, ben.userId)).toEqual({ qieId: null, resolved: false, changed: true });
+
+    // Ana gives her name away: it disappears from her profile on the next refresh.
+    await send("setOwner", ["ana.qie", cat.wallet]);
+    expect(await refreshQieId(qctx, ana.userId)).toEqual({ qieId: null, resolved: false, changed: true });
+    expect(displayName(await row(ana.userId), ana.wallet)).toBe("Ana");
+  });
+
   it("gas drip: once per email, wallet and device; empty wallets only; daily cap", async () => {
     const dctx = { ...ctx, drip: wallet(KEYS.deployer) };
     const cfg = { amountWei: parseEther("0.01"), dailyCapWei: parseEther("0.025") };

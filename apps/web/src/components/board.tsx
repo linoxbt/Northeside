@@ -28,7 +28,7 @@ export function Board({ rows, empty = "No scores yet. Tables fill in once a matc
             <td className="px-5 py-3.5 font-mono text-[13px] text-muted">{String(r.rank).padStart(2, "0")}</td>
             <td className="py-3.5">
               <span className="tracking-[-0.01em]">{r.name}</span> {r.verified ? <VerifiedBadge /> : null}
-              {r.qieId && !r.qieIdResolved ? <span className="ml-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">self-reported</span> : null}
+              {r.qieId && r.qieIdResolved ? <span title="Name verified on QIE ID" className="ml-1.5 text-[12px] text-accent-deep">✓</span> : null}
             </td>
             <td className="py-3.5 text-right font-mono text-[14px] text-ink-2">{r.exactScores}</td>
             <td className="px-5 py-3.5 text-right text-[17px] tracking-[-0.02em]">{r.points}</td>

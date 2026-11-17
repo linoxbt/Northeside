@@ -121,20 +121,55 @@ export function Profile() {
           <span className="text-[14px] text-muted">Display name</span>
           <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
-        <label className="block text-sm">
-          <span className="text-[14px] text-muted">QIE ID (e.g. yourname.qie), self-reported</span>
-          <input value={qieId} maxLength={40} onChange={(e) => setQieId(e.target.value.toLowerCase())} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
-        </label>
-        <Button
-          onClick={() =>
-            void run(
-              () => api("/api/v1/profile", { method: "POST", json: { ...(name.trim().length >= 2 ? { displayName: name.trim() } : {}), qieId: qieId.trim() ? qieId.trim() : null } }),
-              "Saved",
-            )
-          }
-        >
+        <Button onClick={() => void run(() => api("/api/v1/profile", { method: "POST", json: name.trim().length >= 2 ? { displayName: name.trim() } : {} }), "Saved")}>
           Save
         </Button>
+        <div className="space-y-2 border-t border-line pt-4">
+          <p className="text-[14px] text-muted">QIE ID</p>
+          {user.qieId && user.qieIdResolved ? (
+            <p className="flex flex-wrap items-center gap-2 text-[16px]">
+              <span className="rounded-full bg-accent/15 px-3 py-1 font-medium text-accent-deep">✓ {user.qieId}</span>
+              <span className="text-[13px] text-muted">Verified on QIE ID. Shown on tables instead of your display name.</span>
+            </p>
+          ) : (
+            <p className="text-[14px] leading-6 text-ink-2">
+              No .qie name on your wallet yet.{" "}
+              <a href="https://id.qie.digital" target="_blank" rel="noreferrer" className="text-accent-deep underline underline-offset-4">
+                Get your .qie name
+              </a>{" "}
+              on QIE ID, then check again.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void run(async () => {
+                  const r = await api<{ available: boolean; qieId: string | null; resolved: boolean }>("/api/v1/profile/qie-id", { method: "POST" });
+                  if (!r.available) throw new Error("QIE ID names are not available right now");
+                  if (!r.qieId) throw new Error("No .qie name found for your wallet");
+                }, "QIE ID checked")
+              }
+            >
+              Check QIE ID
+            </Button>
+          </div>
+          <details className="text-[13px] text-muted">
+            <summary className="cursor-pointer">Own several .qie names? Choose one</summary>
+            <div className="mt-2 flex gap-2">
+              <input
+                value={qieId}
+                maxLength={40}
+                placeholder="yourname.qie"
+                onChange={(e) => setQieId(e.target.value.toLowerCase())}
+                className="min-h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-white px-3 text-[15px] text-ink outline-none focus:border-ink"
+              />
+              <Button variant="secondary" onClick={() => void run(() => api("/api/v1/profile", { method: "POST", json: { qieId: qieId.trim() || null } }), "QIE ID saved")}>
+                Use
+              </Button>
+            </div>
+          </details>
+        </div>
       </Card>
 
       <Card className="space-y-2">

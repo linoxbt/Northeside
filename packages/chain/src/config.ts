@@ -12,6 +12,8 @@ export interface Deployment {
   nsdRewards?: Address;
   /** Soulbound achievement badges; absent until deployed. */
   badges?: Address;
+  /** QIE ID name registry (QIE's contract, read-only): wallet -> .qie name. Absent disables names. */
+  qieIdRegistry?: Address;
 }
 
 type Env = Record<string, string | undefined>;
@@ -47,6 +49,9 @@ export function deploymentFromEnv(env: Env): Deployment {
     ...(pick("NEXT_PUBLIC_NSD_TOKEN_ADDRESS", "NSD_TOKEN_ADDRESS") ? { nsdToken: addr("NEXT_PUBLIC_NSD_TOKEN_ADDRESS", "NSD_TOKEN_ADDRESS") } : {}),
     ...(pick("NEXT_PUBLIC_NSD_REWARDS_ADDRESS", "NSD_REWARDS_ADDRESS") ? { nsdRewards: addr("NEXT_PUBLIC_NSD_REWARDS_ADDRESS", "NSD_REWARDS_ADDRESS") } : {}),
     ...(pick("NEXT_PUBLIC_BADGES_ADDRESS", "BADGES_ADDRESS") ? { badges: addr("NEXT_PUBLIC_BADGES_ADDRESS", "BADGES_ADDRESS") } : {}),
+    ...(pick("NEXT_PUBLIC_QIE_ID_REGISTRY_ADDRESS", "QIE_ID_REGISTRY_ADDRESS")
+      ? { qieIdRegistry: addr("NEXT_PUBLIC_QIE_ID_REGISTRY_ADDRESS", "QIE_ID_REGISTRY_ADDRESS") }
+      : {}),
   };
 }
 

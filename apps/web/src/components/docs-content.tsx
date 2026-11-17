@@ -175,8 +175,9 @@ export function OverviewDoc() {
             <b className="font-medium text-ink">QUSDC:</b> sponsor escrow and host payouts by Merkle proof.
           </li>
           <li>
-            <b className="font-medium text-ink">QIE ID:</b> readable .qie names on tables and profiles, and QIE ID verification as the basis for
-            &ldquo;one person, one player&rdquo; (leaderboards, host payouts and future rewards count a person once).
+            <b className="font-medium text-ink">QIE ID:</b> a player&apos;s .qie name is read from the QIE ID registry and shown on tables and
+            profiles; QIE ID verification is the planned basis for &ldquo;one person, one player&rdquo; (leaderboards, host payouts and future
+            rewards count a person once).
           </li>
           <li>
             <b className="font-medium text-ink">QIE Wallet:</b> supported directly, alongside email sign-in with an embedded wallet for newcomers.
@@ -191,7 +192,8 @@ export function OverviewDoc() {
             ["Core game, proofs, leagues, sponsor escrow", "Live on QIE mainnet"],
             ["Odds engine, live centre, head-to-head, levels, badges, recap, invites", "Live"],
             ["Android app and installable web app", "Live"],
-            ["QIE ID names and verification", "Integrating with the QIE ID team"],
+            ["QIE ID .qie names on tables and profiles", "Live (read from the QIE ID registry on-chain)"],
+            ["QIE ID verification for one person, one player", "Awaiting partner access from the QIE ID team"],
             ["On-chain, non-transferable achievement badges", "Built and tested; deployment pending"],
             ["$NSD season rewards for top verified players", "Designed; launches only after identity verification and legal review"],
           ]}
@@ -246,6 +248,7 @@ export function TechnicalDoc() {
             ["QUSDC (QIE token)", <Addr key="q" a={publicEnv.qusdc} />, "Sponsor payments (6 decimals)"],
             ["NorthesideBadges", <Addr key="b" a={publicEnv.badges} />, "Soulbound ERC-1155 achievement badges, minted by players with Merkle proofs"],
             ["NSDRewards / NorthesideToken", <Addr key="n" a={publicEnv.nsdRewards} />, "Season rewards for verified top players (not live)"],
+            ["QIE ID registry (QIE)", <Addr key="r" a={process.env.NEXT_PUBLIC_QIE_ID_REGISTRY_ADDRESS} />, "Read only: a wallet's .qie name (reverse lookup) and a name's owner"],
           ]}
         />
         <p>
@@ -295,9 +298,16 @@ commitment      = keccak256(abi.encode(chainId, matchweeksContract, player, matc
           verifier.
         </p>
         <p>
-          <b className="font-medium text-ink">QIE ID</b> is the verification source, as recommended by the QIE team: a player&apos;s readable .qie
-          name is shown on tables and profiles, and the attestation is issued once QIE ID confirms the person. Until verification is live, every
-          player can play and appears on the tables; the &ldquo;verified only&rdquo; view and host payouts wait for it.
+          <b className="font-medium text-ink">.qie names (live):</b> Northeside reads a wallet&apos;s name from the QIE ID registry with{" "}
+          <span className="font-mono text-[14px]">userDomain(wallet)</span> and shows it only if{" "}
+          <span className="font-mono text-[14px]">resolver(name)</span> returns the same wallet as owner, so stale records and names a player
+          does not own are never displayed. Names are picked up at sign-in, on request from the profile, and refreshed daily; choosing a specific
+          name is checked the same way.
+        </p>
+        <p>
+          <b className="font-medium text-ink">Verification (QIE ID, as recommended by the QIE team):</b> once QIE ID confirms a person, Northeside
+          issues the attestation above, so each verified person counts once. The integration is waiting on partner access from the QIE ID team.
+          Until then every player can play and appears on the tables; the &ldquo;verified only&rdquo; view and host payouts wait for it.
         </p>
       </Block>
 

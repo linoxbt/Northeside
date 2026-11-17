@@ -145,7 +145,7 @@ function HowItWorks() {
         <p>Two independent data providers must agree. Results then stay open to challenge for 12 hours before they are final.</p>
       </Section>
       <Section id="identity" title="Identity">
-        <p>QIE Pass will mark verified people. Up to three wallets count as one person. Verification is not live yet.</p>
+        <p>Your .qie name from QIE ID appears on the tables once your wallet has one (check it from your profile). QIE ID verification will mark verified people; up to three wallets count as one person. Verification is not live yet.</p>
       </Section>
       <Section id="free" title="Free">
         <p>No purchase, no stakes, no betting at odds, no prizes. 18+.</p>

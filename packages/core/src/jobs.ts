@@ -23,6 +23,7 @@ import { postRewardRootsForMatchweek } from "./rewards";
 import { nsdConfigFromEnv, postNsdRoot } from "./nsd";
 import { computeOdds } from "./odds";
 import { postBadgeRoot } from "./badges";
+import { refreshAllQieIds } from "./qieid";
 
 type Env = Record<string, string | undefined>;
 
@@ -315,6 +316,13 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
     const ctx = getCtx();
     if (!ctx.deployment.badges) return { skipped: "badges contract not configured" };
     return runJob(ctx, "post-badge-roots", sixHourKey(), () => postBadgeRoot(ctx));
+  },
+
+  /** Daily: refresh players' verified .qie names from the QIE ID registry. */
+  "refresh-qie-names": async () => {
+    const ctx = getCtx();
+    if (!ctx.deployment.qieIdRegistry) return { skipped: "QIE ID registry not configured" };
+    return runJob(ctx, "refresh-qie-names", new Date(ctx.now()).toISOString().slice(0, 10), () => refreshAllQieIds(ctx));
   },
 
   migrate: async () => applyMigrations(getCtx().db),

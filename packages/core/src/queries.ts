@@ -46,8 +46,9 @@ export interface BoardRow {
   wallet: string;
 }
 
-export function displayName(u: { displayName: string | null; qieId: string | null }, wallet: string) {
-  return u.qieId ?? u.displayName ?? `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+/** Public name: a verified .qie name (QIE ID), else the chosen display name, else the short wallet. */
+export function displayName(u: { displayName: string | null; qieId: string | null; qieIdResolved: boolean }, wallet: string) {
+  return (u.qieIdResolved ? u.qieId : null) ?? u.displayName ?? `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
 }
 
 /** FR-17: matchweek or season board; optional league and verified-only filters. */

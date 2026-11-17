@@ -1,4 +1,4 @@
-import { creditInvite } from "@northeside/core";
+import { creditInvite, refreshQieId } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { eq } from "drizzle-orm";
 import { getAddress } from "viem";
@@ -126,6 +126,8 @@ export const POST = route(async (req) => {
   // Joining a league waits for the 18+ confirmation (FR-34); the invite is remembered in the browser.
   if (input.ref && user.adultConfirmedAt) await joinLeague(userId, input.ref, input.source ?? "direct").catch(() => null);
   await ctx.db.insert(schema.notificationPrefs).values({ userId }).onConflictDoNothing();
+  // QIE ID: show the wallet's verified .qie name (best effort, at most 2.5 s).
+  await Promise.race([refreshQieId(ctx, userId).catch(() => null), new Promise((r) => setTimeout(r, 2500))]);
 
   await setSessionCookie({ userId, wallet: getAddress(wallet), sv: user.sessionVersion });
   return json({ ok: true, userId, wallet: getAddress(wallet) });

@@ -124,7 +124,7 @@ export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: 
   const ranked = rank([...first.values()].map((s) => ({ ...s, id: s.userId })));
   const users = ranked.length
     ? await ctx.db
-        .select({ id: schema.users.id, displayName: schema.users.displayName, qieId: schema.users.qieId, deletedAt: schema.users.deletedAt })
+        .select({ id: schema.users.id, displayName: schema.users.displayName, qieId: schema.users.qieId, qieIdResolved: schema.users.qieIdResolved, deletedAt: schema.users.deletedAt })
         .from(schema.users)
         .where(inArray(schema.users.id, ranked.map((r) => r.entry.userId)))
     : [];
@@ -141,7 +141,7 @@ export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: 
     players: visible.length,
     table: visible.slice(0, 10).map((r) => ({
       rank: r.rank,
-      name: displayName(byId.get(r.entry.userId) ?? { displayName: null, qieId: null }, r.entry.wallet),
+      name: displayName(byId.get(r.entry.userId) ?? { displayName: null, qieId: null, qieIdResolved: false }, r.entry.wallet),
       points: r.entry.points,
       exactScores: r.entry.exactScores,
       me: r.entry.userId === viewer?.userId,

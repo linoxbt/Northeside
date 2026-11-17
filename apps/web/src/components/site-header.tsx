@@ -129,7 +129,7 @@ export function SiteHeader() {
     href === "/"
       ? path === "/" || path.startsWith("/play") || path.startsWith("/match/")
       : path === href || path.startsWith(`${href}/`) || (href === "/leagues" && path.startsWith("/l/"));
-  const account = user ? (user.qieId ?? user.displayName ?? short(session.data!.wallet!)) : null;
+  const account = user ? ((user.qieIdResolved ? user.qieId : null) ?? user.displayName ?? short(session.data!.wallet!)) : null;
 
   return (
     <>
