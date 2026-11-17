@@ -40,6 +40,8 @@ import {
   acceptChallenge,
   playerCard,
   recapFor,
+  assistantFacts,
+  factsBlock,
   recapEmoji,
   inviteCodeFor,
   creditInvite,
@@ -384,6 +386,20 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       // Crowd odds before lock stay hidden until enough wallets have sealed (no single pick shows).
       expect(await crowdView(ctx, 11)).toMatchObject({ players: 3, shown: false, fixtures: [] });
       expect(await liveView(ctx, 11, { userId: u2.id })).toMatchObject({ started: false });
+      // Assistant facts before lock (FR-33): model chances, Bo's own sealed picks, no crowd yet
+      // (under 5 sealed), and nothing from anyone else's slip.
+      const boFacts = await assistantFacts(ctx, { userId: u2.id });
+      expect(boFacts.matchweek).toMatchObject({ id: 11, locked: false });
+      expect(boFacts.games).toHaveLength(3);
+      expect(boFacts.games[0]!.modelChance).not.toBeNull();
+      expect(boFacts.games[0]!.likeliestScores).toHaveLength(3);
+      expect(boFacts.games.every((g) => g.crowd === null)).toBe(true);
+      expect(boFacts.games[1]!.yourPick).toBe("You called Liverpool to win 0–2. An exact score earns 5 points and the right result 2. It is your Banker, so its points count double. (sealed)");
+      expect(boFacts.games[0]!.yourPick).toContain("Arsenal to win 1–0");
+      for (const other of ["Arsenal to win 2–1", "Arsenal to win 3–0", "Everton to win 3–0"]) expect(factsBlock(boFacts)).not.toContain(other); // Ada's and Cy's picks
+      const guestFacts = await assistantFacts(ctx, { userId: null });
+      expect(guestFacts.you).toBeNull();
+      expect(guestFacts.games.every((g) => g.yourPick === null)).toBe(true);
       // Head-to-head: Bo challenges Ada before lock. Picks stay hidden until lock.
       const ch = await createChallenge(ctx, u2.id, 11);
       expect(ch.code).toMatch(/^[a-z2-9]{10}$/);
@@ -469,6 +485,11 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
         "Exact score: you called Liverpool to win 0–2 and Liverpool won 0–2. That is 5 points, plus 1 for beating the crowd (only 33% of players called it). It was your Banker, so it doubled to 12 points.",
       );
       expect(boRecap!.lines[2]!.text).toContain("postponed or void");
+      // Assistant facts after the final whistle: the score, Bo's recap line and his week.
+      const boAfter = await assistantFacts(ctx, { userId: u2.id, focus: { matchweekId: 11, index: 1 } });
+      expect(boAfter).toMatchObject({ focusGame: 2, matchweek: { id: 11, locked: true, finalized: true }, you: { seasonPoints: 14, thisWeek: { points: 14, rank: 1, players: 3 } } });
+      expect(boAfter.games[1]).toMatchObject({ state: "ft", score: "0–2", underReview: null, crowd: { players: 3, home: 33, draw: 33, away: 33 } });
+      expect(boAfter.games[1]!.yourPick).toBe(boRecap!.lines[1]!.text);
       expect(await recapFor(ctx, 11, u1.id)).toMatchObject({ points: 10, rank: 2, beatPct: 50, grid: [{ cell: "exact", banker: true }, { cell: "miss" }, { cell: "void" }] });
       // Invites: Bo invites Cy; Cy has sealed, so Bo has one recruit and tops the scouts board.
       const boCode = await inviteCodeFor(ctx, u2.id);

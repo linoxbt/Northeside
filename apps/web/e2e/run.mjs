@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createWalletClient, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import postgres from "postgres";
+import { startMockAnthropic } from "./mock-anthropic.mjs";
 import { startMockFootball } from "./mock-football.mjs";
 
 const require = createRequire(import.meta.url);
@@ -312,6 +313,7 @@ async function main() {
 
   // ---------------------------------------------------------------- env
   const { url: footballUrl } = await startMockFootball(4010);
+  const { url: anthropicUrl } = await startMockAnthropic(4011);
   const env = {
     ...process.env,
     NODE_ENV: "production",
@@ -341,6 +343,8 @@ async function main() {
     MIN_LEAD_SECONDS: "60",
     QIE_PASS_MODE: "mock",
     SEASON: "2026",
+    ANTHROPIC_API_KEY: "e2e",
+    ANTHROPIC_BASE_URL: anthropicUrl,
   };
 
   // ---------------------------------------------------------------- web app
@@ -592,6 +596,39 @@ async function main() {
     fetch("/api/v1/drip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deviceId: "e2e-device-000000000001" }) }).then((r) => r.status),
   );
   check([409, 503].includes(dripStatus), `gas drip request is answered without a server error (${dripStatus})`);
+
+  // Ask Northeside (FR-33): signed-in players get an answer; the model is sent the rules and the
+  // app's facts for the game (with the player's own pick), never another player's slip.
+  const askStatus = await page.evaluate(() => fetch("/api/v1/assistant").then((r) => r.json()));
+  check(askStatus.enabled === true && askStatus.signedIn === true, "assistant is on for a signed-in player");
+  const ask = await page.evaluate(() =>
+    fetch("/api/v1/assistant", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: "Who was favourite here?", focus: { matchweekId: 11, index: 0 } }),
+    }).then(async (r) => ({ status: r.status, body: await r.json() })),
+  );
+  check(ask.status === 200 && /favourites/.test(ask.body.answer ?? ""), `assistant answers a question (${ask.status} ${ask.body.error ?? ""})`);
+  const sent = await (await fetch(`${anthropicUrl}/__last`)).json();
+  const factsText = sent?.body?.messages?.at(-1)?.content?.[0]?.text ?? "";
+  const facts = JSON.parse(factsText.replace(/^<facts>\n|\n<\/facts>$/g, "") || "{}");
+  check(
+    sent?.body?.model === "claude-opus-5-5" && sent.body.fallbacks === "default" && /server-side-fallback/.test(sent.headers["anthropic-beta"] ?? "") && /Northeside assistant/.test(sent.body.system?.[0]?.text ?? ""),
+    "assistant calls Claude with the fixed rules and server-side fallbacks",
+  );
+  check(facts.focusGame === 1 && facts.games?.[0]?.home === "Arsenal" && facts.games.length === 3, "assistant sends the facts for the focused game");
+  check(
+    facts.games.every((g) => g.yourPick === null || /^(You |Exact score: you|Right result: you)|was postponed or void/.test(g.yourPick)),
+    `assistant facts hold only the player's own picks (${facts.games.map((g) => g.yourPick).join(" | ")})`,
+  );
+  const askAnon = await fetch(`${APP}/api/v1/assistant`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: "hi" }) });
+  check(askAnon.status === 401, "assistant refuses players who are not signed in");
+  await page.goto(`${APP}/match/11/0`);
+  await page.getByRole("heading", { name: "Ask Northeside" }).waitFor({ timeout: 15_000 });
+  await page.getByRole("button", { name: "What is the likeliest score?" }).click();
+  await page.getByText("the final score was 2–1").waitFor({ timeout: 15_000 });
+  check(true, "match page shows Ask Northeside and an answer to a suggested question");
+  await page.screenshot({ path: join(OUT, "assistant.png"), fullPage: true });
 
   const status = await (await fetch(`${APP}/api/v1/status`)).json();
   check(status.indexedBlock !== null, "status page reports the indexed block");

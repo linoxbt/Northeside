@@ -22,6 +22,7 @@ const PATHS: Record<DocIcon | "tip" | "note" | "warning" | "arrow", string> = {
   megaphone: "M3 10v4h3l7 5V5L6 10zM17 9a4 4 0 0 1 0 6",
   file: "M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6",
   users: "M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 20v-2a4 4 0 0 0-3-3.9M16 2.1a4 4 0 0 1 0 7.8",
+  chat: "M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12zM9 10h6M9 14h4",
   tip: "M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10.5c-.8.7-1 1.5-1 2.5H9c0-1-.2-1.8-1-2.5A6 6 0 0 1 12 3z",
   note: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v6M12 7.5h.01",
   warning: "M12 3l10 18H2zM12 10v5M12 18h.01",

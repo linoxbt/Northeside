@@ -57,6 +57,18 @@ export async function loadHistory(ctx: CoreContext, uptoRound: number, opts: { c
 }
 
 /**
+ * The results already cached by loadHistory (last season and this season before `uptoRound`), with
+ * no network calls: for read paths such as recent form.
+ */
+export async function cachedHistory(ctx: CoreContext, uptoRound: number): Promise<MatchResult[]> {
+  const keys: string[] = [];
+  for (let r = 1; r <= ROUNDS_PER_SEASON; r++) keys.push(`history:${seasonLabel(ctx.season - 1)}:${r}`);
+  for (let r = 1; r < uptoRound; r++) keys.push(`history:${seasonLabel(ctx.season)}:${r}`);
+  const rows = await ctx.db.select().from(schema.appSettings).where(inArray(schema.appSettings.key, keys));
+  return rows.flatMap((r) => (r.value as MatchResult[] | null) ?? []);
+}
+
+/**
  * Fit the model and store expected goals for every matchweek that has not locked yet. Promoted
  * teams (not in last season's results) start from a below-average prior.
  */

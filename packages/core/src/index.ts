@@ -17,3 +17,4 @@ export * from "./odds";
 export * from "./fun";
 export * from "./badges";
 export * from "./qieid";
+export * from "./assistant";

@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "northeside": "./src/index.ts" },
+  "bin": {
+    "northeside": "./src/index.ts"
+  },
   "scripts": {
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
@@ -13,6 +15,7 @@
     "@northeside/chain": "workspace:*",
     "@northeside/core": "workspace:*",
     "@northeside/db": "workspace:*",
+    "@opentelemetry/api": "1.10.0",
     "drizzle-orm": "0.45.4",
     "viem": "2.57.19"
   }

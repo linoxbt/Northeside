@@ -4,6 +4,7 @@ import type { MatchView } from "@northeside/core";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Assistant } from "./assistant";
 import { Card } from "./ui";
 import { probabilityOf } from "@northeside/odds/grid";
 import { crowdBonus, explainPick, explainResult } from "@northeside/scoring";
@@ -354,6 +355,8 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
           </ul>
         </Card>
       ) : null}
+
+      <Assistant focus={{ matchweekId: v.matchweekId, index: v.index, home: v.home, away: v.away }} />
     </div>
   );
 }

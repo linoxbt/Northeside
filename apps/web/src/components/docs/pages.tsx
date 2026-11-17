@@ -232,6 +232,46 @@ function Progress() {
 
 // --------------------------------------------------------------------------------------- Protocol
 
+function AssistantDoc() {
+  return (
+    <>
+      <P>
+        Ask Northeside answers questions about this matchweek in plain English: which game is the closest call, where you could beat the crowd, how
+        your Banker scored, how a team has been playing. Find it on every game page and at <A href="/ask">/ask</A>.
+      </P>
+      <H2 id="what-it-uses">What it uses</H2>
+      <P>Every question is answered from facts the app builds at that moment, from the same data the rest of Northeside shows:</P>
+      <List
+        items={[
+          "The odds model's chance of each result and the likeliest scores for every game",
+          "The crowd split, only once enough players have sealed that no single pick shows (always after lock)",
+          "Each team's last five league results",
+          "Live and final scores, and any result still under review",
+          "Your own picks, points, level, streak and your last few matchweeks",
+          "The scoring rules for the matchweek",
+        ]}
+      />
+      <H2 id="what-it-never-does">What it never does</H2>
+      <List
+        items={[
+          "Decide or change a result. Results come from two independent data providers and are settled on QIE; the assistant can only read them.",
+          "See anyone else's picks. Crowd numbers are totals.",
+          "Seal or change your slip. It has no tools: it can only write a reply. Every pick is still yours to make and seal from your wallet.",
+          "Talk about betting or money. Northeside is free to play.",
+        ]}
+      />
+      <Callout type="note">
+        Answers are written by Claude, a model made by Anthropic, and can be wrong. The numbers on the game pages are the reference.
+      </Callout>
+      <H2 id="privacy">Privacy and limits</H2>
+      <P>
+        To write an answer, your question, the conversation so far and the facts above (including your own picks) are sent to Anthropic. Your
+        wallet, email and name are not. Signed-in players can ask up to 25 questions a day.
+      </P>
+    </>
+  );
+}
+
 function Technical() {
   return (
     <>
@@ -596,6 +636,7 @@ function Legal({ slug }: { slug: string }) {
 }
 
 const CONTENT: Record<string, () => ReactNode> = {
+  assistant: AssistantDoc,
   "how-to-play": HowToPlay,
   app: AppPage,
   scoring: Scoring,

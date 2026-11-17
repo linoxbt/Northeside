@@ -1,7 +1,7 @@
 import { sealedPayloadSchema, type SealedPayload } from "@northeside/commitments";
 import { schema } from "@northeside/db";
 import { breakdown, crowdCounts, rank, rulesVersion, scoreEntries, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
 import { chanceSeries, fitsFor, oddsFor, type ChancePoint } from "./odds";
@@ -286,6 +286,34 @@ export interface MatchView {
   meetings: { date: string; home: string; away: string; homeGoals: number | null; awayGoals: number | null }[];
 }
 
+/**
+ * A player's own slip before reveal: their sealed payload (decrypted) or, if they have not sealed,
+ * their draft. The first-sealed wallet counts, as on the table. Never another player's slip.
+ */
+export async function ownSlip(
+  ctx: CoreContext,
+  id: number,
+  userId: string,
+): Promise<{ home: (number | null)[]; away: (number | null)[]; banker: number | null; sealed: boolean } | null> {
+  const rows = await ctx.db
+    .select()
+    .from(schema.predictions)
+    .where(and(eq(schema.predictions.matchweekId, id), eq(schema.predictions.userId, userId)));
+  const row = rows.sort((a, b) => (a.sealedAt?.getTime() ?? Infinity) - (b.sealedAt?.getTime() ?? Infinity))[0];
+  if (!row) return null;
+  let picks: { home: (number | null)[]; away: (number | null)[]; banker?: number | null } | null = null;
+  if (row.payloadEnc) {
+    try {
+      picks = sealedPayloadSchema.parse(JSON.parse(ctx.crypto.decrypt(row.payloadEnc, payloadAad(row.wallet, id))));
+    } catch {
+      picks = null;
+    }
+  }
+  if (!picks && row.draft) picks = row.draft as { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
+  if (!picks) return null;
+  return { home: picks.home, away: picks.away, banker: picks.banker ?? null, sealed: row.txStatus === "confirmed" };
+}
+
 /** One game in detail: live state, the crowd market on it, your pick and points, earlier meetings. */
 export async function matchView(ctx: CoreContext, id: number, index: number, viewer?: { userId: string } | null): Promise<MatchView | null> {
   const mw = await matchweekRow(ctx, id);
@@ -352,28 +380,8 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
       const b = breakdown(version, side, live.entries, live.results).find((x) => x.index === index) ?? null;
       mine = { home: side.home[index] ?? null, away: side.away[index] ?? null, banker: side.banker === index, sealed: true, points: b };
     } else {
-      const rows = await ctx.db.select().from(schema.predictions).where(eq(schema.predictions.matchweekId, id));
-      const row = rows.filter((r) => r.userId === viewer.userId).sort((a, b) => (a.sealedAt?.getTime() ?? Infinity) - (b.sealedAt?.getTime() ?? Infinity))[0];
-      if (row) {
-        let picks: { home: (number | null)[]; away: (number | null)[]; banker?: number | null } | null = null;
-        if (row.payloadEnc) {
-          try {
-            picks = sealedPayloadSchema.parse(JSON.parse(ctx.crypto.decrypt(row.payloadEnc, payloadAad(row.wallet, id))));
-          } catch {
-            picks = null;
-          }
-        }
-        if (!picks && row.draft) picks = row.draft as { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
-        if (picks) {
-          mine = {
-            home: picks.home[index] ?? null,
-            away: picks.away[index] ?? null,
-            banker: picks.banker === index,
-            sealed: row.txStatus === "confirmed",
-            points: null,
-          };
-        }
-      }
+      const slip = await ownSlip(ctx, id, viewer.userId);
+      if (slip) mine = { home: slip.home[index] ?? null, away: slip.away[index] ?? null, banker: slip.banker === index, sealed: slip.sealed, points: null };
     }
   }
 

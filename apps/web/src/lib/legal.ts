@@ -1,6 +1,6 @@
 import { contactText } from "./contact";
 
-export const LEGAL_VERSION = "1.1 · 14 November 2026 · pending review by Nigerian counsel before launch";
+export const LEGAL_VERSION = "1.2 · 17 November 2026 · pending review by Nigerian counsel before launch";
 
 export interface LegalSection {
   /** Anchor id, so other pages can link to a section (e.g. /docs/privacy#cookies). */
@@ -124,6 +124,7 @@ export const LEGAL: Record<string, LegalDoc> = {
           "Account: your wallet addresses, a display name if you set one, and your email if you sign in with email (stored encrypted).",
           "Game: your predictions, sealed hashes, league memberships and the transactions you send.",
           "Verification: if you verify with QIE Pass, a verified flag and an encrypted, salted reference from QIE. We never receive identity documents or selfies; QIE Pass and its provider handle those.",
+          "Assistant: if you use Ask Northeside, the questions you ask. We count them for the daily limit; we do not store the conversation.",
           "Technical: IP address and device details in short-lived security logs, used for rate limits and abuse prevention.",
         ],
       },
@@ -147,7 +148,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "sharing",
         heading: "Who we share it with",
         body: [
-          "Service providers that host or operate parts of Northeside for us: hosting (Netlify), database (Supabase), error monitoring (Sentry: technical error details, no email or name), football data providers (fixtures and results only, no personal data), and, if you use them, Privy for email sign-in, QIE Pass for verification and, only with your consent, PostHog for product analytics.",
+          "Service providers that host or operate parts of Northeside for us: hosting (Netlify), database (Supabase), error monitoring (Sentry: technical error details, no email or name), football data providers (fixtures and results only, no personal data), and, if you use them, Privy for email sign-in, QIE Pass for verification, Anthropic to answer questions you ask the Ask Northeside assistant (your question, the conversation and the game facts behind the answer, including your own picks; never your email, name or wallet) and, only with your consent, PostHog for product analytics.",
           "Sponsors receive reports with hashed identifiers and counts only, never your email or name. We do not sell personal data.",
         ],
       },
