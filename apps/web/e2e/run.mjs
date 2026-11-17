@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { createWalletClient, http, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import postgres from "postgres";
-import { startMockAnthropic } from "./mock-anthropic.mjs";
+import { startMockFortytwo } from "./mock-fortytwo.mjs";
 import { startMockFootball } from "./mock-football.mjs";
 
 const require = createRequire(import.meta.url);
@@ -313,7 +313,7 @@ async function main() {
 
   // ---------------------------------------------------------------- env
   const { url: footballUrl } = await startMockFootball(4010);
-  const { url: anthropicUrl } = await startMockAnthropic(4011);
+  const { url: fortytwoUrl } = await startMockFortytwo(4011);
   const env = {
     ...process.env,
     NODE_ENV: "production",
@@ -343,8 +343,8 @@ async function main() {
     MIN_LEAD_SECONDS: "60",
     QIE_PASS_MODE: "mock",
     SEASON: "2026",
-    ANTHROPIC_API_KEY: "e2e",
-    ANTHROPIC_BASE_URL: anthropicUrl,
+    FORTYTWO_API_KEY: "sk-ft-v1-e2e",
+    FORTYTWO_BASE_URL: `${fortytwoUrl}/v1`,
   };
 
   // ---------------------------------------------------------------- web app
@@ -608,13 +608,13 @@ async function main() {
       body: JSON.stringify({ question: "Who was favourite here?", focus: { matchweekId: 11, index: 0 } }),
     }).then(async (r) => ({ status: r.status, body: await r.json() })),
   );
-  check(ask.status === 200 && /favourites/.test(ask.body.answer ?? ""), `assistant answers a question (${ask.status} ${ask.body.error ?? ""})`);
-  const sent = await (await fetch(`${anthropicUrl}/__last`)).json();
-  const factsText = sent?.body?.messages?.at(-1)?.content?.[0]?.text ?? "";
-  const facts = JSON.parse(factsText.replace(/^<facts>\n|\n<\/facts>$/g, "") || "{}");
+  check(ask.status === 200 && /favourites/.test(ask.body.answer ?? "") && !/hidden reasoning/.test(JSON.stringify(ask.body)), `assistant answers a question (${ask.status} ${ask.body.error ?? ""})`);
+  const sent = await (await fetch(`${fortytwoUrl}/__last`)).json();
+  const userText = sent?.body?.messages?.at(-1)?.content ?? "";
+  const facts = JSON.parse(userText.match(/<facts>\n([\s\S]*)\n<\/facts>/)?.[1] ?? "{}");
   check(
-    sent?.body?.model === "claude-opus-5-5" && sent.body.fallbacks === "default" && /server-side-fallback/.test(sent.headers["anthropic-beta"] ?? "") && /Northeside assistant/.test(sent.body.system?.[0]?.text ?? ""),
-    "assistant calls Claude with the fixed rules and server-side fallbacks",
+    sent?.authorized && sent.body.model === "qwen/qwen3.8-27b" && sent.body.messages[0].role === "system" && /Northeside assistant/.test(sent.body.messages[0].content) && sent.body.store === false,
+    "assistant calls Qwen on Fortytwo with the fixed rules (server-side key, no storage)",
   );
   check(facts.focusGame === 1 && facts.games?.[0]?.home === "Arsenal" && facts.games.length === 3, "assistant sends the facts for the focused game");
   check(

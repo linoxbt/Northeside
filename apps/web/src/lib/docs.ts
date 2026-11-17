@@ -52,7 +52,7 @@ export const PAGES: DocPage[] = [
   { slug: "scoring", title: "Scoring and bonuses", description: "Exact score 5, right result 2, a Banker that doubles one match and a bonus for beating the crowd.", tab: "learn", group: "The game", icon: "target", keywords: "points banker crowd bonus rules ties rank" },
   { slug: "odds", title: "Odds and markets", description: "How the chance of every result is estimated, and how sealed picks move it.", tab: "learn", group: "The game", icon: "chart", keywords: "dixon coles model probability crowd chart market" },
   { slug: "leagues", title: "Leagues and head-to-head", description: "Play in leagues run by creators and communities, and challenge a friend for a matchweek.", tab: "learn", group: "The game", icon: "users", keywords: "league host challenge friend h2h live" },
-  { slug: "assistant", title: "Ask Northeside", description: "An AI assistant for the odds, team form, the rules and your own picks. It explains; it never decides a result.", tab: "learn", group: "The game", icon: "chat", keywords: "ai assistant claude ask question chat form" },
+  { slug: "assistant", title: "Ask Northeside", description: "An AI assistant for the odds, team form, the rules and your own picks. It explains; it never decides a result.", tab: "learn", group: "The game", icon: "chat", keywords: "ai assistant qwen fortytwo ask question chat form" },
   { slug: "progress", title: "Levels, badges and recaps", description: "Levels, sealing streaks, 12 badges, the weekly recap card and invite links.", tab: "learn", group: "The game", icon: "medal", keywords: "level streak badge recap invite scouts squad" },
 
   // Protocol

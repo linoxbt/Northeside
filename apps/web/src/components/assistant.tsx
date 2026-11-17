@@ -25,8 +25,8 @@ function suggestions(focus?: AssistantFocus) {
 }
 
 /**
- * Ask Northeside: questions about the odds, form, the rules and your own picks, answered by Claude
- * from the app's own data. Hidden when the assistant is not switched on.
+ * Ask Northeside: questions about the odds, form, the rules and your own picks, answered by Qwen
+ * (on the Fortytwo network) from the app's own data. Hidden when the assistant is not switched on.
  */
 export function Assistant({ focus, className = "" }: { focus?: AssistantFocus; className?: string }) {
   const path = usePathname();
@@ -173,7 +173,7 @@ export function Assistant({ focus, className = "" }: { focus?: AssistantFocus; c
         </>
       )}
       <p className="mt-3 text-[12px] leading-5 text-muted">
-        Answers are written by Claude (Anthropic) from Northeside&apos;s data and can be wrong. Your question and your own picks are sent to write the answer; nobody else&apos;s picks are. Up to {status.data.perDay} questions a day.
+        Answers are written by Qwen, an AI model run on the Fortytwo network, from Northeside&apos;s data, and can be wrong. Your question and your own picks are sent to write the answer; nobody else&apos;s picks are. Up to {status.data.perDay} questions a day.
       </p>
     </section>
   );

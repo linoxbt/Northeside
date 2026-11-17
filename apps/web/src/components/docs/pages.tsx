@@ -261,11 +261,11 @@ function AssistantDoc() {
         ]}
       />
       <Callout type="note">
-        Answers are written by Claude, a model made by Anthropic, and can be wrong. The numbers on the game pages are the reference.
+        Answers are written by Qwen (Qwen3.8-27B, an open model from the Qwen team at Alibaba Cloud), run on the Fortytwo decentralized inference network. They can be wrong. The numbers on the game pages are the reference.
       </Callout>
       <H2 id="privacy">Privacy and limits</H2>
       <P>
-        To write an answer, your question, the conversation so far and the facts above (including your own picks) are sent to Anthropic. Your
+        To write an answer, your question, the conversation so far and the facts above (including your own picks) are sent to Fortytwo, which does not keep them (zero data retention). Your
         wallet, email and name are not. Signed-in players can ask up to 25 questions a day.
       </P>
     </>

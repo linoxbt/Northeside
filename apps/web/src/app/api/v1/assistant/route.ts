@@ -1,8 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { ASSISTANT_LIMITS, assistantFacts, sanitizeConversation } from "@northeside/core";
 import { z } from "zod";
 import { HttpError, json, limitWrites, quotaLeft, rateLimit, requireSession, route } from "@/lib/server/api";
-import { askClaude, assistantEnabled } from "@/lib/server/assistant";
+import { AssistantUpstreamError, askModel, assistantEnabled } from "@/lib/server/assistant";
 import { getCtx } from "@/lib/server/ctx";
 import { getSession } from "@/lib/server/session";
 
@@ -52,16 +51,16 @@ export const POST = route(async (req) => {
 
   const facts = await assistantFacts(getCtx(), { userId: s.userId, focus: input.focus ?? null });
   try {
-    const { text } = await askClaude(facts, history, question);
+    const { text } = await askModel(facts, history, question);
     await rateLimit(dayKey(s.userId), Number.MAX_SAFE_INTEGER, DAY); // count only answered questions
     return json({ answer: text });
   } catch (e) {
-    if (e instanceof Anthropic.RateLimitError || e instanceof Anthropic.InternalServerError || e instanceof Anthropic.APIConnectionError) {
+    if (e instanceof AssistantUpstreamError) {
+      if (e.kind === "unavailable") {
+        getCtx().log.error("assistant: Fortytwo refused the key or credits ran out", { status: e.status });
+        throw new HttpError(503, "assistant_off", "The assistant is not available right now");
+      }
       throw new HttpError(503, "assistant_busy", "The assistant is busy right now. Try again in a minute.");
-    }
-    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
-      getCtx().log.error("assistant: Anthropic key rejected", { status: e.status });
-      throw new HttpError(503, "assistant_off", "The assistant is not available right now");
     }
     throw e;
   }

@@ -80,7 +80,9 @@ contract Deploy {
         vm.startBroadcast(deployerKey);
 
         if (c.qusdc == address(0)) {
-            require(block.chainid == 31337, "QUSDC_ADDRESS required outside a local chain");
+            // Real QUSDC exists only on mainnet (enforced above). Testnet and local runs get a
+            // mock token with no value, minted to the deployer for testing sponsor campaigns.
+            require(block.chainid == 31337 || block.chainid == 1983, "QUSDC_ADDRESS required on mainnet");
             MockERC20 mock = new MockERC20();
             mock.mint(vm.addr(deployerKey), 1_000_000e6);
             c.qusdc = address(mock);

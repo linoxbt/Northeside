@@ -7,6 +7,7 @@ import {Deploy} from "../script/Deploy.s.sol";
 import {NorthesideMatchweeks} from "../src/NorthesideMatchweeks.sol";
 import {HostRewards} from "../src/HostRewards.sol";
 import {IdentityAdapter} from "../src/IdentityAdapter.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /// @notice The deploy script's safety checks (audit L-6 / G11) and the roles it hands out. Configs are
 ///         passed explicitly: environment variables are process-wide and tests run in parallel.
@@ -87,6 +88,24 @@ contract DeployTest is Base {
         vm.chainId(1990);
         Deploy.Config memory c = _config();
         c.qusdc = makeAddr("fakeQusdc");
+        vm.expectRevert(bytes("QUSDC_ADDRESS is not mainnet QUSDC"));
+        script.deploy(c, DEPLOYER_KEY);
+    }
+
+    function test_testnetDeploysMockQusdc() public {
+        vm.chainId(1983);
+        Deploy.Config memory c = _config();
+        c.qusdc = address(0);
+        Deploy.Deployed memory d = script.deploy(c, DEPLOYER_KEY);
+        assertEq(keccak256(bytes(IERC20Metadata(d.qusdc).symbol())), keccak256("QUSDC"), "symbol");
+        assertEq(keccak256(bytes(IERC20Metadata(d.qusdc).name())), keccak256("Mock QUSDC"), "a mock, not real QUSDC");
+        assertEq(address(HostRewards(d.hostRewards).token()), d.qusdc, "rewards use the mock");
+    }
+
+    function test_mainnetRequiresQusdcAddress() public {
+        vm.chainId(1990);
+        Deploy.Config memory c = _config();
+        c.qusdc = address(0);
         vm.expectRevert(bytes("QUSDC_ADDRESS is not mainnet QUSDC"));
         script.deploy(c, DEPLOYER_KEY);
     }
