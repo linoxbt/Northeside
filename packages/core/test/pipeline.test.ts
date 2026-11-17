@@ -465,6 +465,10 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(boRecap!.bestCall).toMatchObject({ home: "Everton", away: "Liverpool", pickHome: 0, pickAway: 2, exact: true, sharePct: 33 });
       expect(boRecap!.banker).toMatchObject({ home: "Everton", away: "Liverpool", points: 12 });
       expect(recapEmoji(boRecap!.grid)).toBe("🟨🟩▫️");
+      expect(boRecap!.lines[1]!.text).toBe(
+        "Exact score: you called Liverpool to win 0–2 and Liverpool won 0–2. That is 5 points, plus 1 for beating the crowd (only 33% of players called it). It was your Banker, so it doubled to 12 points.",
+      );
+      expect(boRecap!.lines[2]!.text).toContain("postponed or void");
       expect(await recapFor(ctx, 11, u1.id)).toMatchObject({ points: 10, rank: 2, beatPct: 50, grid: [{ cell: "exact", banker: true }, { cell: "miss" }, { cell: "void" }] });
       // Invites: Bo invites Cy; Cy has sealed, so Bo has one recruit and tops the scouts board.
       const boCode = await inviteCodeFor(ctx, u2.id);

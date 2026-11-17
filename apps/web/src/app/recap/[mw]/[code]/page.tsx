@@ -107,6 +107,19 @@ export default async function RecapPage({ params }: { params: Promise<{ mw: stri
           </section>
         ) : null}
 
+        {r.lines.length ? (
+          <section className="space-y-2 rounded-2xl border border-line bg-white p-4">
+            <h2 className="text-[15px] font-medium">The matchweek in words</h2>
+            <ul className="divide-y divide-line text-[14px] leading-6">
+              {r.lines.map((l) => (
+                <li key={`${l.home}-${l.away}`} className="py-2 text-ink-2">
+                  {l.text}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
         <RecapShare recap={r} code={d.code} />
 
         <Link href="/sign-in?next=/play" prefetch={false} className="flex min-h-12 items-center justify-center rounded-full bg-accent text-[15px] font-medium text-accent-ink">

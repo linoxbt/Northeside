@@ -1,6 +1,6 @@
 import { sealedPayloadSchema } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { breakdown, crowdCounts, rank, rulesVersion } from "@northeside/scoring";
+import { breakdown, crowdCounts, explainPick, rank, rulesVersion } from "@northeside/scoring";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
@@ -316,6 +316,8 @@ export interface Recap {
   bestCall: { home: string; away: string; pickHome: number; pickAway: number; exact: boolean; sharePct: number } | null;
   streak: number;
   level: string;
+  /** Each game in one plain sentence (same numbers as the scoring). */
+  lines: { home: string; away: string; text: string }[];
 }
 
 /** One player's matchweek in a shareable shape. Null if they had no revealed slip. */
@@ -358,6 +360,27 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
       bestCall = { home: f.home, away: f.away, pickHome: me.home[x.index]!, pickAway: me.away[x.index]!, exact: x.exact, sharePct };
     }
   }
+  const lines = fixtures.map((f) => {
+    const x = b.find((y) => y.index === f.idx) ?? null;
+    const r = live.results.find((y) => y.index === f.idx);
+    const v = live.view.find((y) => y.index === f.idx);
+    const h = me.home[f.idx];
+    const a = me.away[f.idx];
+    const pick = h !== undefined && a !== undefined ? { home: h, away: a } : null;
+    const c = crowd[f.idx];
+    const o = pick ? (pick.home > pick.away ? "home" : pick.home < pick.away ? "away" : "draw") : null;
+    const text = explainPick({
+      home: f.home,
+      away: f.away,
+      pick,
+      result: r ? { status: r.status, home: r.homeGoals, away: r.awayGoals } : null,
+      live: v?.state === "live" || v?.state === "ht",
+      banker: me.banker === f.idx,
+      points: x,
+      crowd: o && c ? { called: c[o], players: c.home + c.draw + c.away } : null,
+    });
+    return { home: f.home, away: f.away, text };
+  });
   const bk = b.find((x) => x.banker);
   const bkF = bk ? fixtures.find((y) => y.idx === bk.index) : undefined;
   const [u] = await ctx.db.select().from(schema.users).where(eq(schema.users.id, userId));
@@ -379,6 +402,7 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
     bestCall,
     streak: card.streak.current,
     level: card.level.name,
+    lines,
   };
 }
 

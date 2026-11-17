@@ -10,6 +10,7 @@ import { QueryProvider } from "@/components/query-provider";
 import { SiteChrome } from "@/components/site-chrome";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { publicEnv } from "@/lib/client/env";
 import "./globals.css";
 
 const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -35,6 +36,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-ink focus:px-4 focus:py-2 focus:text-white">
             Skip to content
           </a>
+          {publicEnv.chainId === 1983 ? (
+            <div role="note" className="bg-warn px-4 py-1.5 text-center text-[13px] font-medium text-white">
+              QIE testnet: test QIE has no value and nothing here is final.{" "}
+              <a href="https://northeside.netlify.app" className="underline underline-offset-2">
+                Go to Northeside
+              </a>
+            </div>
+          ) : null}
           <SiteChrome>
             <SiteHeader />
           </SiteChrome>

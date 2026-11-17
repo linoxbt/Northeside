@@ -93,10 +93,56 @@ export interface LiveView {
   started: boolean;
   provisional: boolean;
   rules: 1 | 2;
-  fixtures: { index: number; state: LiveState; home: number | null; away: number | null }[];
+  fixtures: { index: number; state: LiveState; home: number | null; away: number | null; review?: ResultReview }[];
   players: number;
   table: { rank: number; name: string; points: number; exactScores: number; me: boolean }[];
   me: { rank: number; points: number; exactScores: number; fixtures: FixtureBreakdown[] } | null;
+}
+
+/** A result that is not settled yet because the two data providers do not (yet) agree. */
+export interface ResultReview {
+  kind: "conflict" | "waiting";
+  message: string;
+}
+
+type CheckRow = {
+  index: number;
+  state: "agree" | "conflict" | "pending" | "missing";
+  detail?: string;
+  primary?: { status?: string; homeGoals?: number | null; awayGoals?: number | null };
+  secondary?: { status?: string; homeGoals?: number | null; awayGoals?: number | null };
+};
+
+/**
+ * Review flags from the stored two-provider cross-check: a conflict (the providers report different
+ * results) or a game still unconfirmed 12 hours after kickoff. Nothing once results are proposed.
+ * The providers stay the source of truth; this only tells players why a result is not settled.
+ */
+export function resultReviews(
+  mw: { status: string; resultsCheck: unknown },
+  fixtures: { idx: number; kickoff: Date }[],
+  now: Date,
+): Map<number, ResultReview> {
+  const out = new Map<number, ResultReview>();
+  if (!["open", "locked", "challenged"].includes(mw.status)) return out;
+  const check = mw.resultsCheck as { rows?: CheckRow[]; sources?: { primary: string; secondary: string } } | null;
+  const names = { primary: check?.sources?.primary?.replace(/ v\d+$/, "") ?? "the first provider", secondary: check?.sources?.secondary ?? "the second provider" };
+  const side = (x?: CheckRow["primary"]) =>
+    !x ? "nothing" : x.status === "played" ? `${x.homeGoals ?? 0}–${x.awayGoals ?? 0}` : x.status === "void" ? "postponed" : "not final";
+  for (const r of check?.rows ?? []) {
+    if (r.state === "conflict") {
+      out.set(r.index, {
+        kind: "conflict",
+        message: `The two data providers disagree: ${names.primary} says ${side(r.primary)}, ${names.secondary} says ${side(r.secondary)}. Points stay provisional until it is resolved.`,
+      });
+    } else if (r.state === "pending" || r.state === "missing") {
+      const f = fixtures.find((x) => x.idx === r.index);
+      if (f && now.getTime() > f.kickoff.getTime() + 12 * 3600_000) {
+        out.set(r.index, { kind: "waiting", message: "Waiting for both data providers to confirm the result. Points stay provisional until they do." });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -113,6 +159,7 @@ export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: 
   }
 
   const { view, results, entries, scored } = await provisional(ctx, id, version, fixtures);
+  const reviews = resultReviews(mw, fixtures, ctx.now());
 
   // The table shows one entry per person (their first-sealed wallet), like the season table.
   const first = new Map<string, (typeof scored)[number]>();
@@ -137,7 +184,7 @@ export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: 
     started: true,
     provisional: mw.status !== "finalized",
     rules: version,
-    fixtures: view,
+    fixtures: view.map((f) => (reviews.has(f.index) ? { ...f, review: reviews.get(f.index)! } : f)),
     players: visible.length,
     table: visible.slice(0, 10).map((r) => ({
       rank: r.rank,
@@ -233,6 +280,8 @@ export interface MatchView {
   crowd: { players: number; shown: boolean; minPlayers: number; home: number; draw: number; away: number; scorelines: { home: number; away: number; count: number }[] };
   /** Chance of each result over time (model blended with the crowd), up to lock. */
   chart: ChancePoint[];
+  /** Set while the two data providers disagree about this game (or have not confirmed it). */
+  review: ResultReview | null;
   mine: { home: number | null; away: number | null; banker: boolean; sealed: boolean; points: FixtureBreakdown | null } | null;
   meetings: { date: string; home: string; away: string; homeGoals: number | null; awayGoals: number | null }[];
 }
@@ -337,6 +386,7 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
       return o ? { home: o.home, away: o.away } : null;
     })(),
     chart,
+    review: resultReviews(mw, fixtures, ctx.now()).get(index) ?? null,
     home: f.home,
     away: f.away,
     kickoff: f.kickoff.toISOString(),

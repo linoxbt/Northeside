@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "./ui";
 import { probabilityOf } from "@northeside/odds/grid";
-import { crowdBonus } from "@northeside/scoring";
+import { crowdBonus, explainPick, explainResult } from "@northeside/scoring";
 import { applySelection, marketGrid, satisfies, type Score, type Selection } from "@/lib/markets";
 import { api, track } from "@/lib/client/api";
 import { draftKey, type Picks } from "@/lib/client/local-seal";
@@ -92,6 +92,30 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
   })();
   const scores = topScores(grid, pick);
   const isLive = v.state === "live" || v.state === "ht";
+  // Plain-language explanation of the pick and the result (same numbers as the scoring).
+  const result = v.state === "void" ? { status: "void" as const, home: 0, away: 0 } : v.score && v.state !== "scheduled" ? { status: "played" as const, ...v.score } : null;
+  const myOutcome = pick ? (pick.home > pick.away ? "home" : pick.home < pick.away ? "away" : "draw") : null;
+  const pickExplanation = explainPick({
+    home: v.home,
+    away: v.away,
+    pick,
+    result,
+    live: isLive,
+    banker: !!v.mine?.banker,
+    points: v.mine?.points ?? null,
+    crowd: myOutcome && v.crowd.shown ? { called: v.crowd[myOutcome], players: v.crowd.home + v.crowd.draw + v.crowd.away } : null,
+  });
+  const resultExplanation =
+    v.state === "ft" || v.state === "void"
+      ? explainResult({
+          home: v.home,
+          away: v.away,
+          result: result ?? { status: "void", home: 0, away: 0 },
+          crowd: v.crowd.shown
+            ? { home: v.crowd.home, draw: v.crowd.draw, away: v.crowd.away, exact: v.score ? (v.crowd.scorelines.find((x) => x.home === v.score!.home && x.away === v.score!.away)?.count ?? 0) : 0 }
+            : null,
+        })
+      : null;
   const playUrl = `/play?mw=${v.matchweekId}`;
 
   return (
@@ -135,6 +159,15 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
           {!v.locked ? <span>Picks lock at the first kickoff of the matchweek</span> : null}
         </div>
       </section>
+
+      {resultExplanation ? <p className="px-1 text-[14px] leading-6 text-ink-2">{resultExplanation}</p> : null}
+
+      {v.review ? (
+        <div role="status" className="flex gap-3 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-3 text-[14px] leading-6">
+          <span className="mt-0.5 shrink-0 rounded-full bg-warn px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-white">Under review</span>
+          <p className="text-ink-2">{v.review.message}</p>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_300px]">
         {/* Market: chance over time and the three results, Polymarket-style */}
@@ -291,6 +324,7 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
                   {!v.finalized ? " · provisional" : ""}
                 </p>
               ) : null}
+              <p className="text-[14px] leading-6 text-ink-2">{pickExplanation}</p>
             </>
           ) : (
             <p className="text-[14px] text-muted">{v.locked ? "No pick for this game." : "You have not picked this game yet."}</p>

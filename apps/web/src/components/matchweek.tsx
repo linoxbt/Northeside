@@ -1,6 +1,6 @@
 "use client";
 
-import { crowdBonus, type FixtureBreakdown } from "@northeside/scoring";
+import { crowdBonus, explainPick, type FixtureBreakdown } from "@northeside/scoring";
 import { resultOdds } from "@/lib/markets";
 import { RecapLink, SealCelebration, type SealMoment } from "./fun";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,7 +77,14 @@ export interface LiveDTO {
   started: boolean;
   provisional: boolean;
   rules: number;
-  fixtures: { index: number; state: "scheduled" | "live" | "ht" | "ft" | "void"; home: number | null; away: number | null }[];
+  fixtures: {
+    index: number;
+    state: "scheduled" | "live" | "ht" | "ft" | "void";
+    home: number | null;
+    away: number | null;
+    /** Set while the two data providers disagree about this game (or have not confirmed it). */
+    review?: { kind: "conflict" | "waiting"; message: string };
+  }[];
   players: number;
   table: { rank: number; name: string; points: number; exactScores: number; me: boolean }[];
   me: { rank: number; points: number; exactScores: number; fixtures: FixtureBreakdown[] } | null;
@@ -449,6 +456,11 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                                   state === "ht" ? "HT" : "FT"
                                 )}
                                 {state !== "scheduled" && state !== "void" ? <b className="block font-medium text-ink md:hidden">{score}</b> : null}
+                                {lf?.review ? (
+                                  <span title={lf.review.message} className="mt-0.5 block text-[9px] font-semibold uppercase leading-3 tracking-[0.04em] text-warn">
+                                    Review
+                                  </span>
+                                ) : null}
                               </span>
                               <Link
                                 href={`/match/${mw.id}/${f.index}`}
@@ -543,6 +555,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
             <div className="max-lg:order-first">
               <LiveCentre live={live.data} />
             </div>
+          ) : null}
+          {live.data?.started && user && shown.home.some((h) => h !== null) ? (
+            <PicksExplained fixtures={mw.fixtures} picks={shown} live={live.data} crowd={crowd.data?.shown ? crowd.data.fixtures : []} />
           ) : null}
 
           {open ? (
@@ -696,6 +711,57 @@ function OddsButtons({
         );
       })}
     </div>
+  );
+}
+
+/** Each of the player's picks in one plain sentence, from the same numbers as the scoring. */
+function PicksExplained({
+  fixtures,
+  picks,
+  live,
+  crowd,
+}: {
+  fixtures: MatchweekDTO["fixtures"];
+  picks: { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
+  live: LiveDTO;
+  crowd: { index: number; home: number; draw: number; away: number }[];
+}) {
+  return (
+    <Card className="space-y-3">
+      <h2 className="text-[18px] tracking-[-0.02em]">Your matchweek, explained</h2>
+      <ul className="divide-y divide-line text-[14px] leading-6">
+        {fixtures.map((f) => {
+          const h = picks.home[f.index];
+          const a = picks.away[f.index];
+          const pick = h !== null && h !== undefined && a !== null && a !== undefined ? { home: h, away: a } : null;
+          const lf = live.fixtures.find((x) => x.index === f.index);
+          const b = live.me?.fixtures.find((x) => x.index === f.index) ?? null;
+          const result = !lf || lf.state === "scheduled" ? null : lf.state === "void" ? { status: "void" as const, home: 0, away: 0 } : { status: "played" as const, home: lf.home ?? 0, away: lf.away ?? 0 };
+          const o = pick ? (pick.home > pick.away ? "home" : pick.home < pick.away ? "away" : "draw") : null;
+          const c = crowd.find((x) => x.index === f.index);
+          return (
+            <li key={f.index} className="py-2.5">
+              <p className="font-medium text-ink">
+                {f.home} v {f.away}
+                {lf?.review ? <span className="ml-2 font-mono text-[10px] uppercase text-warn">under review</span> : null}
+              </p>
+              <p className="text-ink-2">
+                {explainPick({
+                  home: f.home,
+                  away: f.away,
+                  pick,
+                  result,
+                  live: lf?.state === "live" || lf?.state === "ht",
+                  banker: (picks.banker ?? null) === f.index,
+                  points: b,
+                  crowd: o && c ? { called: c[o], players: c.home + c.draw + c.away } : null,
+                })}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

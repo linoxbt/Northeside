@@ -51,6 +51,11 @@ export function LiveBoard({ mw }: { mw: MatchweekDTO }) {
                       <Link href={`/match/${mw.id}/${f.index}`} prefetch={false} className="grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 hover:bg-subtle/60">
                         <span className="font-mono text-[11px] text-muted">
                           {s?.state === "live" ? <b className="font-medium text-red-600">LIVE</b> : s?.state === "ht" ? "HT" : s?.state === "ft" ? "FT" : s?.state === "void" ? "VOID" : new Date(f.kickoff).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(mounted ? {} : WAT) })}
+                          {s?.review ? (
+                            <span title={s.review.message} className="ml-1 font-semibold uppercase text-warn">
+                              · Review
+                            </span>
+                          ) : null}
                         </span>
                         <span className="min-w-0 text-[14px] leading-[18px]">
                           <span className="block truncate">{f.home}</span>

@@ -150,8 +150,14 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
       if (check.agreed) {
         await runJob(ctx, "results-ready-alert", String(mw.id), async () => ctx.alert(`matchweek ${mw.id}: both sources agree; results will be proposed automatically once the chain allows`));
       } else {
-        const conflicts = check.rows.filter((r) => r.state === "conflict");
-        if (conflicts.length) await ctx.alert(`matchweek ${mw.id}: ${conflicts.length} result conflict(s) between providers`);
+        // Each disagreement is shown to players as "under review" (live.ts resultReviews) and sent to
+        // the operator once per game and disagreement, naming the game and both answers.
+        for (const c of check.rows.filter((r) => r.state === "conflict")) {
+          const detail = "detail" in c ? c.detail : "conflict";
+          await runJob(ctx, "results-conflict-alert", `${mw.id}:${c.index}:${detail}`, async () =>
+            ctx.alert(`matchweek ${mw.id}: ${c.fixture.home} v ${c.fixture.away}: providers disagree (${detail}). Shown to players as under review; publishing waits until they agree or a manual override with a reason.`),
+          );
+        }
         // Missing or unfinished games can stall a matchweek silently: say so every 6 hours once the
         // last game is 12 hours past (final review M-4).
         const open = check.rows.filter((r) => r.state === "pending" || r.state === "missing");
