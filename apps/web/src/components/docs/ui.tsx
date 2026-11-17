@@ -184,9 +184,9 @@ export function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
 
 export function Code({ children, label }: { children: string; label?: string }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-[#0a0f1a]">
+    <div className="overflow-hidden rounded-2xl border border-line bg-[#0a0b0d]">
       {label ? <p className="border-b border-white/10 px-4 py-2 font-mono text-[12px] text-white/50">{label}</p> : null}
-      <pre className="overflow-x-auto p-4 font-mono text-[12.5px] leading-6 text-[#e6edf7]">{children}</pre>
+      <pre className="overflow-x-auto p-4 font-mono text-[12.5px] leading-6 text-[#f4f5f6]">{children}</pre>
     </div>
   );
 }

@@ -126,23 +126,24 @@ body {
 }
 
 /*
- * Docs theme. The docs default to a dark navy palette (toggle to light); every colour utility reads
- * these variables, so overriding them on the docs subtree restyles the whole docs area.
+ * Docs theme: Northeside colours. Light (white canvas, near-black ink, pitch-green accent) by
+ * default; the toggle switches to Northeside's near-black (the header colour), never another palette.
+ * Every colour utility reads these variables, so overriding them on the docs subtree is enough.
  */
 .docs-theme[data-mode="dark"] {
   color-scheme: dark;
-  --color-bg: #0c1424;
-  --color-panel: #132037;
-  --color-panel-2: #182844;
-  --color-subtle: #172540;
-  --color-line: #233552;
-  --color-line-strong: #31476d;
-  --color-ink: #edf2f9;
-  --color-ink-2: #c8d2e0;
-  --color-muted: #8d9db5;
-  --color-accent-deep: #3fe592;
+  --color-bg: #0a0b0d;
+  --color-panel: #121316;
+  --color-panel-2: #17181c;
+  --color-subtle: #17181c;
+  --color-line: #24262b;
+  --color-line-strong: #33363d;
+  --color-ink: #f4f5f6;
+  --color-ink-2: #d2d5da;
+  --color-muted: #9a9ea6;
+  --color-accent-deep: #19e07a;
   --color-warn: #f0a24b;
-  background: linear-gradient(180deg, #0b1220 0%, #0f1b30 45%, #132540 100%);
+  background: #0a0b0d;
   color: var(--color-ink);
 }
 .docs-theme[data-mode="light"] {

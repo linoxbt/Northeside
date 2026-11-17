@@ -9,11 +9,11 @@ import type { DocPage } from "@/lib/docs";
 /** Interactive parts of the docs: theme, search (Ctrl/⌘ K), mobile menu, "On this page", copy, feedback. */
 
 type Mode = "dark" | "light";
-const ThemeCtx = createContext<{ mode: Mode; toggle(): void }>({ mode: "dark", toggle() {} });
+const ThemeCtx = createContext<{ mode: Mode; toggle(): void }>({ mode: "light", toggle() {} });
 const KEY = "ns_docs_theme";
 
 export function DocsThemeRoot({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<Mode>("dark");
+  const [mode, setMode] = useState<Mode>("light");
   useEffect(() => {
     try {
       const saved = localStorage.getItem(KEY);
