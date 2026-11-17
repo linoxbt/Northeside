@@ -39,7 +39,7 @@ const MENU = [
   {
     title: "Info",
     items: [
-      { href: "/docs", label: "How it works", icon: "M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 7h6M8 11h6" },
+      { href: "/docs/how-to-play", label: "How it works", icon: "M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 7h6M8 11h6" },
       { href: "/about", label: "About", icon: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01" },
     ],
   },

@@ -48,7 +48,7 @@ export function SportsbookShell({ tabs, activeId, base = "/", children }: { tabs
               ["/leagues", "Leagues"],
               ["/host", "Host a league"],
               ["/proof", "Proof"],
-              ["/docs", "How it works"],
+              ["/docs/how-to-play", "How it works"],
             ].map(([h, l]) => (
               <Link key={h} href={h!} prefetch={false} className="block rounded-lg px-2 py-1.5 hover:bg-subtle">
                 {l}

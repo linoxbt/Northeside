@@ -1,225 +1,258 @@
-import { RULES_V1_HASH, RULES_V2_HASH } from "@northeside/scoring";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { AnalyticsChoice } from "@/components/analytics-choice";
-import { OverviewDoc, TechnicalDoc } from "@/components/docs-content";
-import { ButtonLink, Container } from "@/components/ui";
-import { contactHref } from "@/lib/contact";
-import { LEGAL, LEGAL_VERSION } from "@/lib/legal";
+import { DocContent } from "@/components/docs/pages";
+import { CopyPage, DocsSearch, DocsThemeRoot, Helpful, MobileDocsNav, ThemeToggle, Toc } from "@/components/docs/shell";
+import { DocCard, Icon } from "@/components/docs/ui";
+import { chain } from "@/lib/client/env";
+import { PAGES, TABS, firstPageOf, groupsOf, neighbours, pageBySlug, type DocTab } from "@/lib/docs";
 
-/** Everything that is reading rather than playing lives here: how it works, hosts, sponsors, legal. */
-const GUIDES = [
-  { slug: "", title: "How it works" },
-  { slug: "overview", title: "Overview" },
-  { slug: "technical", title: "Technical" },
-  { slug: "hosts", title: "Hosts" },
-  { slug: "sponsors", title: "Sponsors" },
-] as const;
-const LEGAL_ORDER = ["terms", "privacy", "cookies", "host-terms", "sponsor-terms"] as const;
+/**
+ * Northeside docs, laid out like a modern developer-docs site: a docs bar with tabs and search,
+ * a grouped sidebar, the page with "Copy page", an "On this page" column, feedback and next/previous.
+ */
 
 export function generateStaticParams() {
-  return [{ slug: [] }, ...GUIDES.filter((g) => g.slug).map((g) => ({ slug: [g.slug] })), ...LEGAL_ORDER.map((d) => ({ slug: [d] }))];
+  return [{ slug: [] }, ...PAGES.map((p) => ({ slug: [p.slug] }))];
 }
-
-const titleOf = (slug: string) => GUIDES.find((g) => g.slug === slug)?.title ?? LEGAL[slug]?.title;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug?: string[] }> }): Promise<Metadata> {
   const slug = (await params).slug?.[0] ?? "";
-  const descriptions: Record<string, string> = {
-    overview: "Northeside: free weekly Premier League predictions sealed on QIE mainnet. Product, business model, use of QIE and roadmap.",
-    technical: "Northeside technical documentation: contracts on QIE mainnet, commit-reveal protocol, results and finality, identity and verification.",
-  };
-  const title = slug === "overview" ? "Northeside overview" : slug === "technical" ? "Northeside technical documentation" : slug ? (titleOf(slug) ?? "Docs") : "Docs";
-  return { title, description: descriptions[slug] ?? LEGAL[slug]?.summary ?? "How Northeside works: scoring, sealing, results, hosts, sponsors and legal." };
+  const page = pageBySlug(slug);
+  if (!page) return { title: "Docs", description: "Northeside documentation: how to play, the protocol on QIE, partners and legal." };
+  return { title: `${page.title} · Docs`, description: page.description, openGraph: { title: `${page.title} · Northeside docs`, description: page.description } };
 }
+
+const explorer = chain.blockExplorers?.default.url ?? "https://mainnet.qie.digital";
+const tabLabel = (t: DocTab) => TABS.find((x) => x.id === t)!.label;
+const searchIndex = PAGES.map((p) => ({ slug: p.slug, title: p.title, description: p.description, group: p.group, keywords: p.keywords, tabLabel: tabLabel(p.tab) }));
 
 export default async function DocsPage({ params }: { params: Promise<{ slug?: string[] }> }) {
   const parts = (await params).slug ?? [];
+  if (parts.length > 1) notFound();
   const slug = parts[0] ?? "";
-  if (parts.length > 1 || !titleOf(slug)) notFound();
-  const legal = LEGAL[slug];
+  if (slug === "") {
+    return (
+      <Frame activeTab={null} mobileTitle="Docs home">
+        <Home />
+      </Frame>
+    );
+  }
+  const page = pageBySlug(slug);
+  if (!page) notFound();
+  const { prev, next } = neighbours(slug);
 
   return (
-    <Container className="pb-24 pt-10 sm:pt-14">
-      <div className="grid gap-10 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-16">
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <p className="eyebrow mb-3">Docs</p>
-          <nav aria-label="Docs" className="flex flex-wrap gap-2 lg:flex-col lg:gap-1">
-            {[...GUIDES.map((g) => [g.slug, g.title] as const), ...LEGAL_ORDER.map((k) => [k, LEGAL[k]!.title] as const)].map(([k, title], i) => (
-              <Link
-                key={k}
-                href={k ? `/docs/${k}` : "/docs"}
-                aria-current={k === slug ? "page" : undefined}
-                className={`rounded-full px-3.5 py-2 text-[14px] transition-colors lg:rounded-lg ${i === GUIDES.length ? "lg:mt-4" : ""} ${
-                  k === slug ? "bg-ink text-white" : "text-muted hover:bg-subtle hover:text-ink"
-                }`}
-              >
-                {title}
-              </Link>
-            ))}
-          </nav>
+    <Frame activeTab={page.tab} mobileTitle={page.title} sidebar={<Sidebar tab={page.tab} slug={slug} />}>
+      <div className="mx-auto grid max-w-[1280px] gap-10 px-5 pb-28 pt-8 sm:px-8 lg:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[248px_minmax(0,1fr)_200px]">
+        <aside className="hidden lg:block">
+          <div className="sticky top-[129px] max-h-[calc(100vh-150px)] overflow-y-auto pb-8 pr-2">
+            <Sidebar tab={page.tab} slug={slug} />
+          </div>
         </aside>
 
-        <article className="min-w-0 max-w-2xl">
-          <h1 className="display text-[36px] sm:text-[48px]">{slug === "overview" ? "Northeside" : slug === "technical" ? "Technical documentation" : titleOf(slug)}</h1>
-          {slug === "overview" || slug === "technical" ? <p className="mt-2 font-mono text-[12px] text-muted">Updated 17 November 2026 · QIE mainnet (chain 1990)</p> : null}
-          {legal ? <p className="mt-2 font-mono text-[12px] text-muted">Version {LEGAL_VERSION}</p> : null}
-          <div className="mt-10 space-y-12">
-            {slug === "" ? <HowItWorks /> : null}
-            {slug === "overview" ? <OverviewDoc /> : null}
-            {slug === "technical" ? <TechnicalDoc /> : null}
-            {slug === "hosts" ? <Hosts /> : null}
-            {slug === "sponsors" ? <Sponsors /> : null}
-            {legal
-              ? legal.sections.map((s, i) => (
-                  <Section key={s.id} id={s.id} title={`${i + 1}. ${s.heading}`}>
-                    {s.body.map((p) => (
-                      <p key={p.slice(0, 40)}>{p}</p>
-                    ))}
-                    {slug === "cookies" && s.id === "analytics" ? <AnalyticsChoice /> : null}
-                  </Section>
-                ))
-              : null}
+        <article className="min-w-0 max-w-[720px]">
+          <p className="font-mono text-[12px] uppercase tracking-[0.08em] text-accent-deep">
+            {tabLabel(page.tab)} · {page.group}
+          </p>
+          <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-[34px] font-medium leading-tight tracking-[-0.035em] text-ink sm:text-[40px]">{page.title}</h1>
+            <CopyPage title={page.title} />
+          </div>
+          <p className="mt-3 text-[17px] leading-7 text-muted">{page.description}</p>
+          <div data-doc-body className="mt-8 space-y-6">
+            <DocContent slug={slug} />
+          </div>
+          <div className="mt-14 space-y-8">
+            <Helpful slug={slug} />
+            <nav aria-label="Previous and next" className="grid gap-3 sm:grid-cols-2">
+              {prev ? (
+                <Link href={`/docs/${prev.slug}`} className="group rounded-2xl border border-line bg-panel p-4 hover:border-accent/60">
+                  <span className="text-[12px] text-muted">Previous</span>
+                  <span className="mt-1 flex items-center gap-2 text-[15px] font-medium text-ink">
+                    <span aria-hidden>←</span> {prev.title}
+                  </span>
+                </Link>
+              ) : (
+                <span />
+              )}
+              {next ? (
+                <Link href={`/docs/${next.slug}`} className="group rounded-2xl border border-line bg-panel p-4 text-right hover:border-accent/60">
+                  <span className="text-[12px] text-muted">Next</span>
+                  <span className="mt-1 flex items-center justify-end gap-2 text-[15px] font-medium text-ink">
+                    {next.title} <span aria-hidden>→</span>
+                  </span>
+                </Link>
+              ) : null}
+            </nav>
           </div>
         </article>
+
+        <aside className="hidden xl:block">
+          <div className="sticky top-[129px]">
+            <Toc />
+          </div>
+        </aside>
       </div>
-    </Container>
+    </Frame>
   );
 }
 
-function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
+/** Docs bar (tabs, search, links, theme) above every docs page. */
+function Frame({ activeTab, mobileTitle, sidebar, children }: { activeTab: DocTab | null; mobileTitle: string; sidebar?: ReactNode; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-24">
-      <h2 className="text-[22px] tracking-[-0.03em]">{title}</h2>
-      <div className="mt-3 space-y-3 text-[16px] leading-7 text-ink-2">{children}</div>
-    </section>
-  );
-}
-
-function HowItWorks() {
-  return (
-    <>
-      <Section id="scoring" title="Scoring">
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-4">
-          {[
-            ["5", "Exact score"],
-            ["2", "Right result"],
-            ["0", "Wrong"],
-            ["0", "Void game"],
-          ].map(([pts, t]) => (
-            <div key={t} className="bg-white p-5">
-              <p className="text-[40px] leading-none tracking-[-0.05em]">{pts}</p>
-              <p className="mt-3 text-[15px]">{t}</p>
+    <DocsThemeRoot>
+      <div className="sticky top-[57px] z-30 border-b border-line bg-bg/90 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-4 px-5 sm:px-8">
+          <Link href="/docs" className="hidden items-center gap-2 text-[15px] font-medium text-ink lg:flex">
+            <span className="rounded-md bg-accent px-1.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-accent-ink">Docs</span>
+          </Link>
+          <MobileDocsNav title={mobileTitle}>{sidebar ?? <TabsList active={activeTab} vertical />}</MobileDocsNav>
+          <nav aria-label="Docs sections" className="hidden h-full items-stretch gap-1 lg:flex">
+            <TabsList active={activeTab} />
+          </nav>
+          <div className="ml-auto flex items-center gap-1.5">
+            <div className="hidden md:block">
+              <DocsSearch index={searchIndex} hotkey />
             </div>
-          ))}
+            <div className="md:hidden">
+              <DocsSearch index={searchIndex} variant="icon" />
+            </div>
+            <a href={explorer} target="_blank" rel="noreferrer" className="hidden rounded-lg px-2.5 py-1.5 text-[14px] text-muted hover:text-ink sm:block">
+              Explorer
+            </a>
+            <Link href="/" className="hidden rounded-lg px-2.5 py-1.5 text-[14px] text-muted hover:text-ink sm:block">
+              Open app
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
-        <p>Ties share a rank. No random tie-breaks.</p>
-      </Section>
-      <Section id="crowd" title="Beat the crowd">
-        <p>A right call few players made earns extra: +1 if half or fewer called it, +2 for a quarter or fewer, +3 for a tenth or fewer.</p>
-        <p>Crowd odds show how everyone is calling each game (1 · X · 2). They appear once 5 players have sealed.</p>
-      </Section>
-      <Section id="odds" title="Odds">
-        <p>Each game shows the chance of every result from a statistical model of team strength (Dixon–Coles), updated every 6 hours from real results. Once 5 players have sealed, their picks move the chances like a market, and the chart shows how they moved. Chances are for fun: nothing is staked and points do not depend on them.</p>
-      </Section>
-      <Section id="banker" title="Banker">
-        <p>Star one game as your Banker. Its points, bonus included, count double. It is sealed with your picks.</p>
-      </Section>
-      <Section id="h2h" title="Head-to-head and live">
-        <p>Challenge a friend with a link. During games, the live table updates every minute.</p>
-        <p className="break-all font-mono text-[12px] text-muted">Rules v2 hash {RULES_V2_HASH} (from matchweek 12) · v1 {RULES_V1_HASH}</p>
-      </Section>
-      <Section id="levels" title="Levels, streaks and badges">
-        <p>Points from final matchweeks take you from Rookie to Legend. Seal every matchweek to grow your streak, and collect 12 badges, from Sniper (an exact score) to Upset caller (a result the odds gave under 25%). They are for fun and bragging rights only.</p>
-        <p>Earned badges can be minted on QIE from your own wallet as non-transferable tokens: proof of how you played, with no monetary value. After every matchweek your recap card shows your picks as a 🟩🟨⬛ grid to share.</p>
-      </Section>
-      <Section id="invite" title="Invite friends">
-        <p>Your profile has a personal invite link. Friends who join with it and seal a slip join your squad, and the Scouts table ranks who brought the most.</p>
-      </Section>
-      <Section id="sealing" title="Sealing">
-        <p>Your picks are hashed with a random salt; your wallet seals only the hash on QIE. Re-seal until the first kickoff, then the contract locks.</p>
-      </Section>
-      <Section id="results" title="Results">
-        <p>Two independent data providers must agree. Results then stay open to challenge for 12 hours before they are final.</p>
-      </Section>
-      <Section id="identity" title="Identity">
-        <p>Your .qie name from QIE ID appears on the tables once your wallet has one (check it from your profile). QIE ID verification will mark verified people; up to three wallets count as one person. Verification is not live yet.</p>
-      </Section>
-      <Section id="free" title="Free">
-        <p>No purchase, no stakes, no betting at odds, no prizes. 18+.</p>
-      </Section>
-    </>
+        <nav aria-label="Docs sections" className="flex gap-1 overflow-x-auto border-t border-line px-5 sm:px-8 lg:hidden">
+          <TabsList active={activeTab} />
+        </nav>
+      </div>
+      {children}
+    </DocsThemeRoot>
   );
 }
 
-function Hosts() {
-  return (
-    <>
-      <ol className="space-y-6">
-        {[
-          ["Create a league", "Pick a name and share the link."],
-          ["Fans play weekly", "Ten scores, sealed before kickoff."],
-          ["Sponsors pay per fan", "For each verified player who returns, up to a cap. Starts when QIE Pass is live."],
-          ["Claim onchain", "Claim your QUSDC from the host page."],
-        ].map(([t, b], i) => (
-          <li key={t} className="grid grid-cols-[40px_1fr]">
-            <span className="font-mono text-[13px] leading-7 text-muted">{String(i + 1).padStart(2, "0")}</span>
-            <div>
-              <p className="text-[18px] tracking-[-0.02em]">{t}</p>
-              <p className="text-[15px] text-muted">{b}</p>
-            </div>
+function TabsList({ active, vertical = false }: { active: DocTab | null; vertical?: boolean }) {
+  if (vertical) {
+    return (
+      <ul className="space-y-1">
+        {TABS.map((t) => (
+          <li key={t.id}>
+            <Link href={`/docs/${firstPageOf(t.id).slug}`} className="block rounded-lg px-3 py-2 text-[15px] text-ink hover:bg-subtle">
+              {t.label}
+            </Link>
           </li>
         ))}
-      </ol>
-      <div className="flex flex-wrap gap-3">
-        <ButtonLink href="/host" variant="primary" arrow>
-          Host a league
-        </ButtonLink>
-        <ButtonLink href="/docs/host-terms" variant="secondary">
-          Host terms
-        </ButtonLink>
-      </div>
+      </ul>
+    );
+  }
+  return (
+    <>
+      {TABS.map((t) => (
+        <Link
+          key={t.id}
+          href={`/docs/${firstPageOf(t.id).slug}`}
+          aria-current={active === t.id ? "page" : undefined}
+          className={`flex shrink-0 items-center border-b-2 px-3 py-2.5 text-[14px] transition-colors lg:py-0 ${
+            active === t.id ? "border-accent font-medium text-ink" : "border-transparent text-muted hover:text-ink"
+          }`}
+        >
+          {t.label}
+        </Link>
+      ))}
     </>
   );
 }
 
-function Sponsors() {
-  const contact = contactHref("Northeside sponsor campaign");
+function Sidebar({ tab, slug }: { tab: DocTab; slug: string }) {
   return (
-    <>
-      <Section title="What you pay for">
-        <p>Verified, returning players in the leagues you choose. Not clicks.</p>
-      </Section>
-      <dl className="grid gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line sm:grid-cols-2">
-        {[
-          ["Rate", "Per countable player, per matchweek, with a cap per host."],
-          ["Escrow", "QUSDC held in the HostRewards contract."],
-          ["Fee", "Taken once at funding. At most 10%."],
-          ["Refunds", "Unallocated budget returns at expiry."],
-          ["Caps", "500 QUSDC per campaign, 2,000 in total at launch."],
-          ["Terms", "Their hash is stored onchain."],
-        ].map(([k, v]) => (
-          <div key={k} className="bg-white p-5">
-            <dt className="eyebrow">{k}</dt>
-            <dd className="mt-2 text-[15px] leading-6 text-ink-2">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <Section title="Who counts">
-        <p>A verified person in a host&apos;s league who sealed this matchweek and an earlier one. Payouts start when QIE Pass is live.</p>
-      </Section>
-      <div className="flex flex-wrap gap-3">
-        {contact ? (
-          <ButtonLink href={contact} variant="primary" arrow>
-            Start a campaign
-          </ButtonLink>
-        ) : null}
-        <ButtonLink href="/docs/sponsor-terms" variant="secondary">
-          Sponsor terms
-        </ButtonLink>
+    <nav aria-label={`${tabLabel(tab)} pages`} className="space-y-7">
+      {groupsOf(tab).map((g) => (
+        <div key={g.group}>
+          <p className="mb-2 px-3 text-[13px] font-medium text-ink">{g.group}</p>
+          <ul className="space-y-0.5">
+            {g.pages.map((p) => (
+              <li key={p.slug}>
+                <Link
+                  href={`/docs/${p.slug}`}
+                  aria-current={p.slug === slug ? "page" : undefined}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] transition-colors ${
+                    p.slug === slug ? "bg-accent/15 font-medium text-ink" : "text-muted hover:bg-subtle hover:text-ink"
+                  }`}
+                >
+                  <Icon name={p.icon} className={`size-4 shrink-0 ${p.slug === slug ? "text-accent-deep" : ""}`} />
+                  {p.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <div>
+        <p className="mb-2 px-3 text-[13px] font-medium text-ink">Resources</p>
+        <ul className="space-y-0.5 text-[14px]">
+          {[
+            ["/proof", "Proof pages"],
+            ["/stats", "Live stats"],
+            ["/llms.txt", "llms.txt"],
+          ].map(([href, label]) => (
+            <li key={href}>
+              <Link href={href!} className="block rounded-lg px-3 py-2 text-muted hover:bg-subtle hover:text-ink">
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
-    </>
+    </nav>
+  );
+}
+
+function Home() {
+  const section = (title: string, slugs: string[]) => (
+    <section className="space-y-4">
+      <h2 className="text-[22px] font-medium tracking-[-0.025em] text-ink">{title}</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {slugs.map((s) => {
+          const p = pageBySlug(s)!;
+          return (
+            <DocCard key={s} href={`/docs/${s}`} icon={p.icon} title={p.title}>
+              {p.description}
+            </DocCard>
+          );
+        })}
+      </div>
+    </section>
+  );
+  return (
+    <div className="pb-28">
+      <section className="border-b border-line px-5 pb-14 pt-16 text-center sm:px-8">
+        <p className="font-mono text-[12px] uppercase tracking-[0.12em] text-accent-deep">Northeside documentation</p>
+        <h1 className="mx-auto mt-4 max-w-3xl text-[40px] font-medium leading-[1.05] tracking-[-0.04em] text-ink sm:text-[56px]">Call the score. Seal it on QIE.</h1>
+        <p className="mx-auto mt-5 max-w-xl text-[17px] leading-7 text-muted">
+          Everything about Northeside: how to play, how every pick is sealed and verified on QIE mainnet, and how hosts and sponsors take part.
+        </p>
+        <div className="mt-8 px-2">
+          <DocsSearch index={searchIndex} variant="hero" />
+        </div>
+      </section>
+      <div className="mx-auto max-w-[1100px] space-y-12 px-5 pt-12 sm:px-8">
+        {section("Play", ["how-to-play", "scoring", "odds", "leagues", "progress", "app"])}
+        {section("Protocol", ["technical", "contracts", "commit-reveal", "results", "identity", "verify"])}
+        {section("Partners", ["overview", "hosts", "sponsors"])}
+        <p className="text-center text-[13px] text-muted">
+          Terms, privacy and cookies are under{" "}
+          <Link href="/docs/terms" className="text-ink underline underline-offset-4">
+            Legal
+          </Link>
+          . Free to play, 18+, no stakes and no prizes.
+        </p>
+      </div>
+    </div>
   );
 }

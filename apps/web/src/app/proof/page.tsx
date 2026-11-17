@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 
 export default async function ProofIndex() {
   const mw = await safely(() => getCurrent(), null);
-  redirect(mw ? `/proof/${mw.id}` : "/docs#results");
+  redirect(mw ? `/proof/${mw.id}` : "/docs/results");
 }

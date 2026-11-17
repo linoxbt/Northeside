@@ -124,3 +124,27 @@ body {
   background-image: radial-gradient(var(--color-line-strong) 1px, transparent 1px);
   background-size: 16px 16px;
 }
+
+/*
+ * Docs theme. The docs default to a dark navy palette (toggle to light); every colour utility reads
+ * these variables, so overriding them on the docs subtree restyles the whole docs area.
+ */
+.docs-theme[data-mode="dark"] {
+  color-scheme: dark;
+  --color-bg: #0c1424;
+  --color-panel: #132037;
+  --color-panel-2: #182844;
+  --color-subtle: #172540;
+  --color-line: #233552;
+  --color-line-strong: #31476d;
+  --color-ink: #edf2f9;
+  --color-ink-2: #c8d2e0;
+  --color-muted: #8d9db5;
+  --color-accent-deep: #3fe592;
+  --color-warn: #f0a24b;
+  background: linear-gradient(180deg, #0b1220 0%, #0f1b30 45%, #132540 100%);
+  color: var(--color-ink);
+}
+.docs-theme[data-mode="light"] {
+  background: #ffffff;
+}

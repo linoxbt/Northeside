@@ -601,7 +601,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
           {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
 
           <p className="text-center text-[13px] text-muted">
-            <a className="underline underline-offset-4" href="/docs">
+            <a className="underline underline-offset-4" href="/docs/scoring">
               How scoring works
             </a>
           </p>
