@@ -415,9 +415,15 @@ function Identity() {
         A player&apos;s name from QIE ID is read from the QIE ID registry with <Mono>userDomain(wallet)</Mono> and shown only if{" "}
         <Mono>resolver(name)</Mono> returns the same wallet as owner. Names are picked up at sign-in, from the profile and by a daily refresh.
       </P>
+      <P>
+        Players without a name can get one from their profile through QIE&apos;s &quot;Get your QIE ID&quot; widget. Checkout is hosted by QIE and
+        the name mints to the player&apos;s own wallet; Northeside handles no payment or personal data.
+      </P>
       <H2 id="verification">QIE ID verification</H2>
       <P>
-        QIE ID is the verification source recommended by the QIE team. Once QIE ID confirms a person, Northeside issues the attestation above.
+        QIE ID (which now includes QIE Pass) is the verification source recommended by the QIE team. Northeside only needs to know whether a wallet
+        belongs to a QIE-verified person and a stable anonymous reference for that person. It does not take a copy of anyone&apos;s KYC documents.
+        Once QIE ID confirms a person, Northeside issues the attestation above.
       </P>
       <Callout type="warning">
         Verification is waiting on partner access from the QIE ID team. Until then everyone can play and appears on the tables; the verified-only

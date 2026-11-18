@@ -17,6 +17,9 @@ export const publicEnv = {
   telegramBot: process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "",
   posthogKey: process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "",
   posthogHost: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com",
+  /** "Get your QIE ID" reseller widget: both issued by QIE after partner approval; off until set. */
+  qieIdWidgetId: process.env.NEXT_PUBLIC_QIE_ID_WIDGET_ID ?? "",
+  qieIdWidgetUrl: process.env.NEXT_PUBLIC_QIE_ID_WIDGET_URL ?? "",
 };
 
 /** Preview mode: the site is live before the contracts are, so play actions show "launching soon". */

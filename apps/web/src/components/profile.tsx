@@ -17,6 +17,7 @@ import { api, track } from "@/lib/client/api";
 import { chain, publicEnv, short } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
 import { useSignIn } from "@/lib/client/sign-in-hooks";
+import { QieIdWidget, qieIdWidgetEnabled } from "./qie-id-widget";
 
 function urlB64ToUint8Array(base64: string) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -131,6 +132,13 @@ export function Profile() {
               <span className="rounded-full bg-accent/15 px-3 py-1 font-medium text-accent-deep">✓ {user.qieId}</span>
               <span className="text-[13px] text-muted">Verified on QIE ID. Shown on tables instead of your display name.</span>
             </p>
+          ) : qieIdWidgetEnabled() ? (
+            <>
+              <p className="text-[14px] leading-6 text-ink-2">
+                No .qie name on your wallet yet. Get one here: it mints to your own wallet, then press Check QIE ID.
+              </p>
+              <QieIdWidget />
+            </>
           ) : (
             <p className="text-[14px] leading-6 text-ink-2">
               No .qie name on your wallet yet.{" "}
