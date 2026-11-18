@@ -16,6 +16,7 @@ function friendly(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (/invalid.*code|code.*(invalid|incorrect|expired)|otp/i.test(msg)) return "That code did not work. Check the latest email, or send a new code.";
   if (/rejected|denied|4001|cancel/i.test(msg)) return "You cancelled. Try again when you are ready.";
+  if (/already has one email account linked/i.test(msg)) return "You were still signed in with another email. We signed you out: press Continue again.";
   if (/4902|Unrecognized chain|chain/i.test(msg) && /add|unrecognized|switch/i.test(msg)) return "Add the QIE network to your wallet, then try again.";
   if (/network|fetch|timeout/i.test(msg)) return "Network problem. Check your connection and try again.";
   return msg.length > 160 ? "Something went wrong. Please try again." : msg;
@@ -159,10 +160,21 @@ function Live() {
     setError(null);
     setBusy(true);
     try {
+      // A Privy login left over from an earlier attempt (for example one whose server sign-in
+      // failed) makes Privy treat a new email as "link a second email" and refuse with "User
+      // already has one email account linked". Without a Northeside session, start clean.
+      if (bridge.authenticated && !signedIn) {
+        await bridge.logout().catch(() => {});
+        disconnect();
+      }
       await bridge.sendEmailCode(email.trim());
       setStep("code");
       setCode("");
     } catch (err) {
+      if (/already has one email account linked/i.test(err instanceof Error ? err.message : String(err))) {
+        await bridge.logout().catch(() => {});
+        disconnect();
+      }
       setError(friendly(err));
     } finally {
       setBusy(false);
