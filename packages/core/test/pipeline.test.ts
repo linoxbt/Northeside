@@ -40,6 +40,7 @@ import {
   acceptChallenge,
   playerCard,
   recapFor,
+  completePublication,
   assistantFacts,
   factsBlock,
   recapEmoji,
@@ -423,6 +424,13 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       ]);
       expect((await fetchResults(ctx, 11)).agreed).toBe(true);
       await publishResults(ctx, 11);
+      // Audit B7: a crash after the proposal (our own write lost) is completed from the stored
+      // publication, with the exact evidence text that is hashed into the on-chain URI.
+      const [pub11] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, 11));
+      await ctx.db.update(schema.matchweeks).set({ resultsTree: null, scoresTree: null }).where(eq(schema.matchweeks.id, 11));
+      expect(await completePublication(ctx, 11)).toMatchObject({ completed: true, resultsRoot: pub11!.resultsRoot });
+      const [rep11] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, 11));
+      expect([rep11!.resultsTree, rep11!.scoresTree, rep11!.evidenceUri]).toEqual([pub11!.resultsTree, pub11!.scoresTree, pub11!.evidenceUri]);
       await expect(finalizeAndScore(ctx, 11)).rejects.toThrow(/dispute window/);
       await advance(12 * 3600 + 60);
       const fin = await finalizeAndScore(ctx, 11);

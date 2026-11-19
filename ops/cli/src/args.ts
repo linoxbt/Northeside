@@ -12,7 +12,11 @@ export function parse(argv: string[]): Args {
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a.startsWith("--")) {
-      const [k, v] = a.slice(2).split("=", 2) as [string, string | undefined];
+      // Split at the first "=" only: values such as a reason or a URL may contain "=" (audit B18).
+      const body = a.slice(2);
+      const eq = body.indexOf("=");
+      const k = eq === -1 ? body : body.slice(0, eq);
+      const v = eq === -1 ? undefined : body.slice(eq + 1);
       if (v !== undefined) flags[k] = v;
       else if (rest[i + 1] && !rest[i + 1]!.startsWith("--")) flags[k] = rest[++i]!;
       else flags[k] = true;

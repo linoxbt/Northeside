@@ -24,3 +24,12 @@ describe("cli args", () => {
     expect(() => int(true, "id")).toThrow();
   });
 });
+
+describe("flag values containing '=' (audit B18)", () => {
+  it("keeps everything after the first '='", () => {
+    expect(parse(["publish-results", "11", "--reason=score was 2=1 per the referee report", "--uri=https://x.test/?a=1&b=2"]).flags).toEqual({
+      reason: "score was 2=1 per the referee report",
+      uri: "https://x.test/?a=1&b=2",
+    });
+  });
+});

@@ -7,6 +7,7 @@ import { indexChain } from "./indexer";
 import {
   ChainStatus,
   chainNow,
+  completePublication,
   createMatchweekOnChain,
   fetchResults,
   finalizeAndScore,
@@ -235,11 +236,21 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
       if (chain.status !== ChainStatus.Open || now < chain.resultsNotBefore) continue;
       ready.push(mw);
     }
-    return each(ready, async (mw) => {
+    const published = await each(ready, async (mw) => {
       const r = await runJob(ctx, "publish-results", String(mw.id), () => publishResults(ctx, mw.id));
       if (r.status === "ok") await ctx.alert(`matchweek ${mw.id}: results proposed on-chain; 12-hour challenge window open`);
       return { id: mw.id, ...r };
     });
+    // Repair: proposed on-chain (the indexer saw it) but our own write never happened (audit B7).
+    const unfinished = await ctx.db
+      .select({ id: schema.matchweeks.id })
+      .from(schema.matchweeks)
+      .where(and(eq(schema.matchweeks.status, "results_proposed"), isNull(schema.matchweeks.resultsTree)));
+    const completed = await each(unfinished, async (mw) => ({
+      id: mw.id,
+      ...(await runJob(ctx, "complete-publication", `${mw.id}:${ctx.now().toISOString().slice(0, 13)}`, () => completePublication(ctx, mw.id))),
+    }));
+    return { published, completed };
   },
 
   /** After the challenge window: confirm the proposed roots, store ranks, post host reward roots. */

@@ -1,7 +1,7 @@
 import { hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
-import { decodeEventLog, getAddress, type Abi, type Log } from "viem";
+import { createPublicClient, decodeEventLog, getAddress, http, type Abi, type Log, type PublicClient } from "viem";
 import { bigintReplacer, type CoreContext } from "./context";
 
 const INDEXER_KEY = "main";
@@ -35,7 +35,11 @@ export async function indexChain(
   ctx: CoreContext,
   opts: { chunk?: bigint; maxBlocks?: bigint } = {},
 ): Promise<IndexResult> {
-  const { deployment, publicClient, db } = ctx;
+  const { deployment, db } = ctx;
+  // One node for the whole pass: the head, the logs and the block times must come from the same
+  // node, or a lagging one can return no logs for blocks it has not seen and the cursor would move
+  // past real events (audit B8).
+  const publicClient = await pinnedClient(ctx);
   const abis = new Map<string, Abi>([
     [deployment.matchweeks.toLowerCase(), matchweeksAbi as Abi],
     [deployment.hostRewards.toLowerCase(), hostRewardsAbi as Abi],
@@ -43,7 +47,7 @@ export async function indexChain(
   ]);
 
   const [state] = await db.select().from(schema.indexerState).where(eq(schema.indexerState.key, INDEXER_KEY));
-  await checkForReorg(ctx);
+  await checkForReorg(ctx, publicClient);
   const from = state ? state.lastBlock + 1n : deployment.deployedAtBlock;
   // cacheTime 0: viem caches eth_blockNumber for ~4s by default, which would index a stale head.
   const head = await publicClient.getBlockNumber({ cacheTime: 0 });
@@ -126,7 +130,26 @@ export async function indexChain(
  * The newest stored event's block must still be on the canonical chain. If it is not, a reorg went
  * deeper than CONFIRMATIONS: stop and alert rather than build on events that no longer exist.
  */
-async function checkForReorg(ctx: CoreContext) {
+/**
+ * A client on a single RPC endpoint for one indexing pass: the endpoint with the freshest head among
+ * those that answer. With one endpoint (or none listed) it is the shared client.
+ */
+export async function pinnedClient(ctx: CoreContext): Promise<PublicClient> {
+  const urls = ctx.rpcUrls ?? [];
+  if (urls.length <= 1) return ctx.publicClient;
+  const heads = await Promise.all(
+    urls.map(async (url) => {
+      const client = createPublicClient({ chain: ctx.chain, transport: http(url, { timeout: 8_000, retryCount: 1 }) }) as PublicClient;
+      const head = await client.getBlockNumber({ cacheTime: 0 }).catch(() => null);
+      return { client, head };
+    }),
+  );
+  const best = heads.filter((h) => h.head !== null).sort((a, b) => (a.head! > b.head! ? -1 : a.head! < b.head! ? 1 : 0))[0];
+  if (!best) throw new Error("indexer: no RPC endpoint answered");
+  return best.client;
+}
+
+async function checkForReorg(ctx: CoreContext, client: PublicClient) {
   const [latest] = await ctx.db
     .select({ blockNumber: schema.chainEvents.blockNumber, blockHash: schema.chainEvents.blockHash })
     .from(schema.chainEvents)
@@ -134,7 +157,7 @@ async function checkForReorg(ctx: CoreContext) {
     .orderBy(sql`${schema.chainEvents.blockNumber} desc`)
     .limit(1);
   if (!latest?.blockHash) return;
-  const block = await ctx.publicClient.getBlock({ blockNumber: latest.blockNumber });
+  const block = await client.getBlock({ blockNumber: latest.blockNumber });
   if (block.hash?.toLowerCase() !== latest.blockHash.toLowerCase()) {
     const msg = `indexer: block ${latest.blockNumber} hash changed (reorg beyond ${confirmations()} confirmations); indexing stopped`;
     await ctx.alert(msg);
@@ -267,4 +290,19 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
     default:
       return;
   }
+}
+
+/**
+ * Recovery after a reorg deeper than the confirmations (audit B18): forget stored events from
+ * `fromBlock` on and index again from there. Projections are idempotent and the chain wins, so the
+ * replay rewrites the read model from the canonical chain.
+ */
+export async function rewindIndexer(ctx: CoreContext, fromBlock: bigint) {
+  const removed = await ctx.db.delete(schema.chainEvents).where(sql`${schema.chainEvents.blockNumber} >= ${fromBlock.toString()}`).returning({ txHash: schema.chainEvents.txHash });
+  await ctx.db
+    .insert(schema.indexerState)
+    .values({ key: INDEXER_KEY, lastBlock: fromBlock - 1n })
+    .onConflictDoUpdate({ target: schema.indexerState.key, set: { lastBlock: fromBlock - 1n, updatedAt: new Date() } });
+  await ctx.alert(`indexer rewound to block ${fromBlock}: ${removed.length} stored event(s) will be re-read from the chain`);
+  return { fromBlock, removedEvents: removed.length };
 }

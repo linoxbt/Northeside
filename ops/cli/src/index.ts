@@ -15,6 +15,7 @@ import {
   fundCampaign,
   importFixtures,
   indexChain,
+  rewindIndexer,
   postRewardRoot,
   postRewardRootsForMatchweek,
   publishResults,
@@ -30,6 +31,7 @@ import {
   bigintReplacer,
   audit,
   confirm,
+  sendWrite,
   type ResultsOverride,
 } from "@northeside/core";
 import { qieTransport, rpcUrlsFromEnv } from "@northeside/chain";
@@ -66,6 +68,7 @@ $NSD rewards (NSD_REWARDS_ADDRESS; schedule from NSD_POOL_PER_MATCHWEEK / NSD_PO
 
 Operations
   index                                run the chain indexer once
+  index-rewind --from <block>          after a deep reorg: drop stored events from <block> and re-index
   pause <matchweeks|rewards>           emergency pause (PAUSER_PRIVATE_KEY, else OPERATOR_PRIVATE_KEY)
   unpause <matchweeks|rewards>
   status <id>                          on-chain state of a matchweek
@@ -160,6 +163,11 @@ async function main() {
       return out(await resetVoidedRewardRoot(ctx, int(a.positional[0], "campaign"), int(a.positional[1], "mw")));
     case "index":
       return out(await indexChain(ctx));
+    case "index-rewind": {
+      // After a reorg deeper than the confirmations: forget events from this block and re-read them.
+      const from = BigInt(int(a.flags.from, "from"));
+      return out(await rewindIndexer(ctx, from));
+    }
     case "refund": {
       const key = (process.env.OPERATOR_PRIVATE_KEY ?? process.env.SPONSOR_PRIVATE_KEY) as `0x${string}` | undefined;
       if (!key) throw new Error("OPERATOR_PRIVATE_KEY or SPONSOR_PRIVATE_KEY is required to send the refund transaction");
@@ -185,10 +193,12 @@ async function main() {
       if (!key) throw new Error("PAUSER_PRIVATE_KEY or OPERATOR_PRIVATE_KEY is required");
       const signer = signerFor(key);
       const address = target === "matchweeks" ? ctx.deployment.matchweeks : ctx.deployment.hostRewards;
+      // sendWrite works around QIE's intrinsic-gas misestimate, so an emergency pause cannot run out
+      // of gas (audit B16).
       const hash =
         target === "matchweeks"
-          ? await signer.writeContract({ address, abi: matchweeksAbi, functionName: a.command })
-          : await signer.writeContract({ address, abi: hostRewardsAbi, functionName: a.command });
+          ? await sendWrite(ctx, signer, { address, abi: matchweeksAbi, functionName: a.command } as never)
+          : await sendWrite(ctx, signer, { address, abi: hostRewardsAbi, functionName: a.command } as never);
       await confirm(ctx, hash, `${a.command}(${target})`);
       await audit(ctx, "pauser", a.command, { target }, hash);
       return out({ target, action: a.command, txHash: hash });

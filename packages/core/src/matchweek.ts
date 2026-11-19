@@ -247,6 +247,7 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
     return { matchweekId: id, skipped: "waiting for confirmed blocks after lock" as const };
   }
 
+  const fixtureCount = (await getFixtures(ctx, id)).length;
   // Not yet revealed, or revealed invalid: an invalid reveal is checked again every pass until results
   // are proposed, so a transient failure (RPC, decryption) is never final (audit B6).
   const pending = await ctx.db
@@ -284,6 +285,9 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
           error = "payload is for another deployment";
         } else if (payload.fixturesRoot.toLowerCase() !== (mw.fixturesRoot ?? "").toLowerCase()) {
           error = "payload fixtures root does not match the matchweek";
+        } else if (payload.home.length !== fixtureCount || payload.away.length !== fixtureCount) {
+          // One malformed row must not break scoring for everyone (audit B18).
+          error = `payload has ${payload.home.length} picks; this matchweek has ${fixtureCount} games`;
         } else if (payload.v !== rulesVersion(mw.scoringRulesHash)) {
           error = `payload v${payload.v} does not match this matchweek's scoring rules v${rulesVersion(mw.scoringRulesHash)}`;
         }
@@ -450,6 +454,82 @@ export function evidenceDocument(id: number, check: unknown, results: CheckedFix
  * Propose results on-chain. Blocks unless both providers agree, or the operator gives a written
  * override reason, which is stored with the evidence. Opens the 12-hour challenge window.
  */
+/**
+ * Everything a results proposal writes, stored before its transaction is sent (audit B7): if the
+ * process dies after the transaction, the database is completed from this exact record, so the
+ * stored evidence text always matches the keccak256 in the on-chain evidence URI.
+ */
+interface Publication {
+  results: ResultsOverride["results"];
+  evidenceText: string;
+  evidenceUri: string;
+  overrideReason: string | null;
+  resultsRoot: string;
+  revealsRoot: string;
+  scoresRoot: string;
+  resultsTree: unknown;
+  revealsTree: unknown;
+  scoresTree: unknown;
+}
+const publicationKey = (id: number) => `publication:${id}`;
+
+async function savePublication(ctx: CoreContext, id: number, p: Publication) {
+  const value = JSON.parse(JSON.stringify(p, bigintReplacer));
+  await ctx.db
+    .insert(schema.appSettings)
+    .values({ key: publicationKey(id), value })
+    .onConflictDoUpdate({ target: schema.appSettings.key, set: { value, updatedAt: new Date() } });
+}
+
+async function loadPublication(ctx: CoreContext, id: number): Promise<Publication | null> {
+  const [row] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, publicationKey(id)));
+  return (row?.value as Publication | undefined) ?? null;
+}
+
+/** Write a proposed publication to the index, once the chain holds exactly its roots. */
+async function writePublication(ctx: CoreContext, id: number, p: Publication) {
+  await ctx.db.transaction(async (tx) => {
+    for (const r of p.results) {
+      await tx
+        .update(schema.fixtures)
+        .set({ status: r.status, homeGoals: r.status === "played" ? r.homeGoals : null, awayGoals: r.status === "played" ? r.awayGoals : null })
+        .where(and(eq(schema.fixtures.matchweekId, id), eq(schema.fixtures.idx, r.index)));
+    }
+    const after = await onChainMatchweek(ctx, id);
+    await tx
+      .update(schema.matchweeks)
+      .set({
+        status: "results_proposed",
+        resultsRoot: p.resultsRoot,
+        resultsTree: toJson({ tree: p.resultsTree, evidenceText: p.evidenceText }),
+        revealsRoot: p.revealsRoot,
+        revealsTree: toJson(p.revealsTree),
+        scoresRoot: p.scoresRoot,
+        scoresTree: toJson(p.scoresTree),
+        evidenceUri: p.evidenceUri,
+        overrideReason: p.overrideReason,
+        disputeEnds: new Date(Number(after.disputeEnds) * 1000),
+      })
+      .where(eq(schema.matchweeks.id, id));
+  });
+}
+
+/**
+ * Repair (audit B7): a matchweek proposed on-chain whose own database write never happened (the
+ * indexer moved it to results_proposed, but the results tree is missing). Completes it from the
+ * stored publication when the on-chain roots match it; otherwise alerts for a person.
+ */
+export async function completePublication(ctx: CoreContext, id: number) {
+  const p = await loadPublication(ctx, id);
+  const chain = await onChainMatchweek(ctx, id);
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  if (!p || !same(chain.resultsRoot, p.resultsRoot) || !same(chain.revealsRoot, p.revealsRoot) || !same(chain.scoresRoot, p.scoresRoot)) {
+    throw new Error(`matchweek ${id}: results are proposed on-chain but no stored publication matches their roots; run publish-results by hand`);
+  }
+  await writePublication(ctx, id, p);
+  return { id, completed: true, resultsRoot: p.resultsRoot };
+}
+
 export async function publishResults(ctx: CoreContext, id: number, override?: ResultsOverride) {
   const signer = need(ctx.results, "RESULTS_PRIVATE_KEY");
   const mw = await getMatchweek(ctx, id);
@@ -460,6 +540,14 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
   if (override) {
     if (override.reason.trim().length < 10) throw new Error("override needs a written reason (10+ characters)");
     if (override.results.length !== fixtures.length) throw new Error("override must cover every fixture");
+    // Every fixture exactly once, a known status and sane goals (audit B18).
+    const indexes = new Set(override.results.map((r) => r.index));
+    if (indexes.size !== fixtures.length || fixtures.some((f) => !indexes.has(f.idx))) throw new Error("override must list each fixture index exactly once");
+    for (const r of override.results) {
+      if (r.status !== "played" && r.status !== "void") throw new Error(`override fixture ${r.index}: status must be played or void`);
+      const ok = (g: unknown) => Number.isInteger(g) && (g as number) >= 0 && (g as number) <= 99;
+      if (r.status === "played" && (!ok(r.homeGoals) || !ok(r.awayGoals))) throw new Error(`override fixture ${r.index}: goals must be whole numbers from 0 to 99`);
+    }
     results = override.results;
   } else {
     if (!check?.agreed) throw new Error(`matchweek ${id}: providers do not agree yet; fetch again or override with a reason`);
@@ -486,9 +574,9 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
 
   const evidence = evidenceDocument(id, check, results, override);
   // Hash and serve this exact text (jsonb would reorder keys and break the hash).
-  const evidenceText = JSON.stringify(evidence, bigintReplacer);
-  const evidenceHash = keccak256(toBytes(evidenceText));
-  const evidenceUri = `${ctx.siteUrl}/api/v1/proof/${id}/evidence#keccak256=${evidenceHash}`;
+  let evidenceText = JSON.stringify(evidence, bigintReplacer);
+  let evidenceHash = keccak256(toBytes(evidenceText));
+  let evidenceUri = `${ctx.siteUrl}/api/v1/proof/${id}/evidence#keccak256=${evidenceHash}`;
 
   const chain = await onChainMatchweek(ctx, id);
   const nowSec = BigInt(Math.floor((await chainNow(ctx)).getTime() / 1000));
@@ -499,14 +587,36 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
   }
   let txHash: Hex | null = null;
   const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-  if (
+  const alreadyProposed =
     chain.status === ChainStatus.ResultsProposed &&
     same(chain.resultsRoot, tree.root) &&
     same(chain.revealsRoot, revealsTree.root) &&
-    same(chain.scoresRoot, scoresTree.root)
-  ) {
+    same(chain.scoresRoot, scoresTree.root);
+  // Keep the evidence that was actually proposed: a later re-run must not store a different text
+  // than the one hashed into the on-chain URI (audit B7).
+  const stored = await loadPublication(ctx, id);
+  if (alreadyProposed && stored && same(stored.resultsRoot, tree.root)) {
+    evidenceText = stored.evidenceText;
+    evidenceUri = stored.evidenceUri;
+    evidenceHash = keccak256(toBytes(evidenceText));
+  }
+  const publication: Publication = {
+    results,
+    evidenceText,
+    evidenceUri,
+    overrideReason: override?.reason ?? null,
+    resultsRoot: tree.root,
+    revealsRoot: revealsTree.root,
+    scoresRoot: scoresTree.root,
+    resultsTree: tree.dump(),
+    revealsTree: revealsTree.dump(),
+    scoresTree: scoresTree.dump(),
+  };
+  if (alreadyProposed) {
     ctx.log.info("results already proposed with these roots", { id });
   } else {
+    // Stored before sending, so a crash after the transaction can be completed (audit B7).
+    await savePublication(ctx, id, publication);
     const { request } = await ctx.publicClient.simulateContract({
       account: signer.account,
       address: ctx.deployment.matchweeks,
@@ -518,30 +628,7 @@ export async function publishResults(ctx: CoreContext, id: number, override?: Re
     await confirm(ctx, txHash, `proposeResults(${id})`);
   }
 
-  await ctx.db.transaction(async (tx) => {
-    for (const r of results) {
-      await tx
-        .update(schema.fixtures)
-        .set({ status: r.status, homeGoals: r.status === "played" ? r.homeGoals : null, awayGoals: r.status === "played" ? r.awayGoals : null })
-        .where(and(eq(schema.fixtures.matchweekId, id), eq(schema.fixtures.idx, r.index)));
-    }
-    const after = await onChainMatchweek(ctx, id);
-    await tx
-      .update(schema.matchweeks)
-      .set({
-        status: "results_proposed",
-        resultsRoot: tree.root,
-        resultsTree: toJson({ tree: tree.dump(), evidenceText }),
-        revealsRoot: revealsTree.root,
-        revealsTree: toJson(revealsTree.dump()),
-        scoresRoot: scoresTree.root,
-        scoresTree: toJson(scoresTree.dump()),
-        evidenceUri,
-        overrideReason: override?.reason ?? null,
-        disputeEnds: new Date(Number(after.disputeEnds) * 1000),
-      })
-      .where(eq(schema.matchweeks.id, id));
-  });
+  await writePublication(ctx, id, publication);
   await audit(
     ctx,
     "results",
@@ -580,6 +667,19 @@ export async function finalizeAndScore(ctx: CoreContext, id: number) {
 
   if (chain.status !== ChainStatus.ResultsProposed && chain.status !== ChainStatus.Finalized) {
     throw new Error(`matchweek ${id} has no proposed results`);
+  }
+  // The results scored here must be the ones proposed on-chain (audit B18).
+  const resultsTree = buildResultsTree(
+    results.map((r) => ({
+      matchweekId: id,
+      index: r.index,
+      homeGoals: r.status === "played" ? r.homeGoals : 0,
+      awayGoals: r.status === "played" ? r.awayGoals : 0,
+      status: r.status === "played" ? RESULT_STATUS.played : RESULT_STATUS.void,
+    })),
+  );
+  if (resultsTree.root.toLowerCase() !== chain.resultsRoot.toLowerCase()) {
+    throw new Error(`matchweek ${id}: stored results do not match the results root on-chain; the chain wins, investigate the database`);
   }
   if (
     chain.revealsRoot.toLowerCase() !== revealsTree.root.toLowerCase() ||

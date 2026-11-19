@@ -47,6 +47,8 @@ export interface CoreContext {
   chain: Chain;
   deployment: Deployment;
   publicClient: PublicClient;
+  /** The RPC endpoints behind publicClient; the indexer pins one per pass (audit B8). */
+  rpcUrls?: readonly string[];
   crypto: FieldCrypto;
   /** Secret mixed into personHash. */
   pepper?: `0x${string}`;
@@ -108,17 +110,24 @@ export function secondarySource(env: Env): ResultsSource {
 export function createContextFromEnv(env: Env = process.env, overrides: Partial<CoreContext> = {}): CoreContext {
   const deployment = deploymentFromEnv(env);
   const chain = chainById(deployment.chainId);
-  const transport = qieTransport(chain, rpcUrlsFromEnv(env));
+  const rpcUrls = rpcUrlsFromEnv(env) ?? chain.rpcUrls.default.http;
+  const transport = qieTransport(chain, rpcUrls);
   const publicClient = createPublicClient({ chain, transport }) as PublicClient;
   const log = consoleLogger;
-  const pepper = env.PERSON_PEPPER as `0x${string}` | undefined;
+  // A malformed pepper would only fail on first use; reject it at start-up and leave it unset, so
+  // anything that needs it reports "PERSON_PEPPER is not configured" (audit B18).
+  const rawPepper = env.PERSON_PEPPER ? (env.PERSON_PEPPER.startsWith("0x") ? env.PERSON_PEPPER : `0x${env.PERSON_PEPPER}`) : undefined;
+  const pepperOk = !!rawPepper && /^0x[0-9a-fA-F]{64}$/.test(rawPepper);
+  if (rawPepper && !pepperOk) log.error("PERSON_PEPPER must be 32 bytes of hex; ignoring it");
+  const pepper = pepperOk ? (rawPepper as `0x${string}`) : undefined;
   return {
     db: getDb(env.DATABASE_URL) as unknown as Database,
     chain,
     deployment,
     publicClient,
+    rpcUrls,
     crypto: FieldCrypto.fromEnv(env),
-    pepper: pepper ? (pepper.startsWith("0x") ? pepper : (`0x${pepper}` as `0x${string}`)) : undefined,
+    pepper,
     operator: signer(env.OPERATOR_PRIVATE_KEY, chain, transport),
     results: signer(env.RESULTS_PRIVATE_KEY, chain, transport),
     attester: env.ATTESTER_PRIVATE_KEY ? privateKeyToAccount(env.ATTESTER_PRIVATE_KEY as `0x${string}`) : undefined,
