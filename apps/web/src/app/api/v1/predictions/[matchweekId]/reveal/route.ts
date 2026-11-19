@@ -1,7 +1,7 @@
 import { schema } from "@northeside/db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { HttpError, json, limitWrites, requireSession, route } from "@/lib/server/api";
+import { HttpError, intParam, json, limitWrites, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { payloadWindowOpen } from "@/lib/payload-window";
 import { requireAdult } from "@/lib/server/services/accounts";
@@ -18,7 +18,7 @@ export const POST = route(async (req, { params }: { params: Promise<{ matchweekI
   const s = await requireSession();
   await limitWrites(s, "reveal", 5, 20);
   await requireAdult(s.userId);
-  const id = Number((await params).matchweekId);
+  const id = intParam((await params).matchweekId, "matchweek");
   const mw = await getMatchweekRow(id);
   if (!payloadWindowOpen(mw.lockTime) || (mw.status !== "open" && mw.status !== "locked")) {
     throw new HttpError(409, "reveals_closed", "Seal files had to reach Northeside within 10 minutes of the first kickoff");

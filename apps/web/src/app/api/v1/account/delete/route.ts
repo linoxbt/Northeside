@@ -18,8 +18,24 @@ export const POST = route(async (req) => {
     await tx
       .update(schema.users)
       // session_version + 1 ends the sessions on every other device too (audit B17).
-      .set({ deletedAt: new Date(), emailEnc: null, emailHash: null, privyDid: null, displayName: null, qieId: null, sessionVersion: sql`${schema.users.sessionVersion} + 1` })
+      .set({
+        deletedAt: new Date(),
+        emailEnc: null,
+        emailHash: null,
+        privyDid: null,
+        displayName: null,
+        qieId: null,
+        // Invite and attribution links are personal data too (audit S13).
+        inviteCode: null,
+        invitedBy: null,
+        invitedAt: null,
+        attributedLeagueId: null,
+        attributionSource: null,
+        sessionVersion: sql`${schema.users.sessionVersion} + 1`,
+      })
       .where(eq(schema.users.id, s.userId));
+    await tx.update(schema.users).set({ invitedBy: null }).where(eq(schema.users.invitedBy, s.userId));
+    await tx.delete(schema.rateLimits).where(sql`${schema.rateLimits.key} like ${`%${s.userId}%`}`);
     await tx.delete(schema.identities).where(eq(schema.identities.userId, s.userId));
     await tx.delete(schema.notificationPrefs).where(eq(schema.notificationPrefs.userId, s.userId));
     await tx.update(schema.predictions).set({ payloadEnc: null, pendingPayloadEnc: null, draft: null }).where(eq(schema.predictions.userId, s.userId));

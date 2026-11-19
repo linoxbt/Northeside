@@ -347,6 +347,22 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   },
 
   /** Daily: refresh players' verified .qie names from the QIE ID registry. */
+  /**
+   * Daily: drop data that is only needed briefly (audit S13). Rate-limit rows (they hold IPs and
+   * user ids) after 3 days; idempotency keys and used sign-in nonces after 30 days.
+   */
+  housekeeping: async () => {
+    const ctx = getCtx();
+    return runJob(ctx, "housekeeping", ctx.now().toISOString().slice(0, 10), async () => {
+      const rl = await ctx.db.delete(schema.rateLimits).where(sql`${schema.rateLimits.windowStart} < now() - interval '3 days'`).returning({ key: schema.rateLimits.key });
+      const ik = await ctx.db
+        .delete(schema.idempotencyKeys)
+        .where(sql`${schema.idempotencyKeys.createdAt} < now() - interval '30 days'`)
+        .returning({ key: schema.idempotencyKeys.key });
+      return { rateLimits: rl.length, idempotencyKeys: ik.length };
+    });
+  },
+
   "refresh-qie-names": async () => {
     const ctx = getCtx();
     if (!ctx.deployment.qieIdRegistry) return { skipped: "QIE ID registry not configured" };

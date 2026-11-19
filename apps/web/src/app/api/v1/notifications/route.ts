@@ -1,3 +1,4 @@
+import { isPushEndpoint } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { z } from "zod";
 import { json, limitWrites, requireSession, route } from "@/lib/server/api";
@@ -8,7 +9,7 @@ const body = z.object({
   remindResults: z.boolean().optional(),
   emailOptIn: z.boolean().optional(),
   webPush: z
-    .object({ endpoint: z.string().url().max(1000), keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }) })
+    .object({ endpoint: z.string().url().max(1000).refine(isPushEndpoint, "Not a browser push service"), keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }) })
     .nullable()
     .optional(),
   telegram: z.literal(false).optional(),

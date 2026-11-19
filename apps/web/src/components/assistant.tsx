@@ -8,7 +8,7 @@ import { ApiError, api, track } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 
 type Turn = { role: "user" | "assistant"; text: string };
-type Status = { enabled: boolean; perDay: number; signedIn: boolean; exhausted: boolean };
+type Status = { enabled: boolean; perDay: number; signedIn: boolean; eligible: boolean; reason: string | null; exhausted: boolean };
 
 export interface AssistantFocus {
   matchweekId: number;
@@ -120,6 +120,8 @@ export function Assistant({ focus, className = "" }: { focus?: AssistantFocus; c
           </Link>{" "}
           to ask about the odds, form and your own picks.
         </p>
+      ) : !status.data.eligible ? (
+        <p className="mt-4 text-[14px] text-ink-2">{status.data.reason ?? "Ask Northeside is not available for this account yet."}</p>
       ) : exhausted ? (
         <p className="mt-4 text-[14px] text-ink-2">That&apos;s your {status.data.perDay} questions for today. Ask again tomorrow.</p>
       ) : (

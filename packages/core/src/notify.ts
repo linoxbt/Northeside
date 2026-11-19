@@ -32,13 +32,30 @@ export async function sendEmail(env: Env, to: string, m: Message) {
   return res.ok;
 }
 
+/**
+ * Push endpoints belong to the browsers' push services. Anything else is refused, so a player cannot
+ * make the worker POST to an arbitrary or internal host (audit S8).
+ */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^([a-z0-9-]+\.)*push\.services\.mozilla\.com$/, /^([a-z0-9-]+\.)*push\.apple\.com$/, /^([a-z0-9-]+\.)*notify\.windows\.com$/];
+export function isPushEndpoint(endpoint: string): boolean {
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === "https:" && u.port === "" && !u.username && PUSH_HOSTS.some((re) => re.test(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
 export async function sendWebPush(env: Env, subscription: unknown, m: Message) {
   if (!env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return false;
+  const endpoint = (subscription as { endpoint?: unknown } | null)?.endpoint;
+  if (typeof endpoint !== "string" || !isPushEndpoint(endpoint)) return false;
   // VAPID subject: a mailto: we own, else the site URL (web-push accepts https: subjects).
   const email = env.EMAIL_FROM?.match(/<(.+)>/)?.[1] ?? env.NEXT_PUBLIC_CONTACT_EMAIL;
   const subject = email ? `mailto:${email}` : (env.NEXT_PUBLIC_SITE_URL ?? "https://northeside.netlify.app");
   setVapidDetails(subject, env.NEXT_PUBLIC_VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
-  await sendNotification(subscription as PushSubscription, JSON.stringify(m));
+  // A push service that never answers must not hold up the worker (audit S8).
+  await sendNotification(subscription as PushSubscription, JSON.stringify(m), { timeout: 10_000 });
   return true;
 }
 

@@ -3,6 +3,7 @@ import { schema } from "@northeside/db";
 import { z } from "zod";
 import { HttpError, json, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
+import { userById } from "@/lib/server/services/accounts";
 
 const update = z.object({
   message: z
@@ -23,7 +24,9 @@ export const POST = route(async (req) => {
 
   if (text.startsWith("/start")) {
     const arg = text.split(/\s+/)[1] ?? "";
-    const userId = process.env.SESSION_SECRET ? verifyTelegramLinkToken(arg, process.env.SESSION_SECRET) : null;
+    const linked = process.env.SESSION_SECRET ? verifyTelegramLinkToken(arg, process.env.SESSION_SECRET) : null;
+    // A deleted account cannot be linked again from an old link (audit S13).
+    const userId = linked && (await userById(linked)) ? linked : null;
     if (userId) {
       await getCtx()
         .db.insert(schema.notificationPrefs)

@@ -95,7 +95,7 @@ export const POST = route(async (req) => {
         .onConflictDoUpdate({
           target: [schema.predictions.wallet, schema.predictions.matchweekId],
           // The first seal time is kept (audit B1): re-sending never moves which wallet counts.
-          set: { ...values, sealedAt: sql`LEAST(COALESCE(${schema.predictions.sealedAt}, excluded.sealed_at), excluded.sealed_at)` },
+          set: { ...values, userId: s.userId, sealedAt: sql`LEAST(COALESCE(${schema.predictions.sealedAt}, excluded.sealed_at), excluded.sealed_at)` },
         });
       return { ok: true, txStatus: "confirmed", version: onChain.version, commitment: payload.commitment };
     }
@@ -105,7 +105,7 @@ export const POST = route(async (req) => {
     await ctx.db
       .insert(schema.predictions)
       .values({ ...base, ...pending, txHash, txStatus: "sent" })
-      .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: pending });
+      .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: { ...pending, userId: s.userId } });
     const txStatus = "sent";
     const version = 0;
     return { ok: true, txStatus, version, commitment: payload.commitment };

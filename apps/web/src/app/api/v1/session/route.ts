@@ -1,6 +1,6 @@
 import { creditInvite, refreshQieId } from "@northeside/core";
 import { schema } from "@northeside/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getAddress } from "viem";
 import { parseSiweMessage } from "viem/siwe";
 import { z } from "zod";
@@ -54,8 +54,17 @@ export const POST = route(async (req) => {
   const input = body.parse(await req.json());
   const ctx = getCtx();
   const parsed = parseSiweMessage(input.message);
-  const host = new URL(req.url).host;
-  if (!parsed.address || !parsed.nonce || parsed.domain !== host) {
+  // The domain comes from configuration, never from the request's Host header, so a signature phished
+  // on another domain (or a deploy-preview URL) cannot be replayed here (audit S10).
+  const host = siweHost(req);
+  const uriHost = (() => {
+    try {
+      return parsed.uri ? new URL(parsed.uri).host : null;
+    } catch {
+      return "invalid";
+    }
+  })();
+  if (!host || !parsed.address || !parsed.nonce || parsed.domain !== host || (uriHost !== null && uriHost !== host)) {
     throw new HttpError(400, "bad_message", "Sign-in message is not for this site");
   }
   if (parsed.chainId !== ctx.deployment.chainId) throw new HttpError(400, "wrong_chain", "Switch to QIE mainnet");
@@ -133,7 +142,31 @@ export const POST = route(async (req) => {
   return json({ ok: true, userId, wallet: getAddress(wallet) });
 });
 
+/**
+ * DELETE /api/v1/session: sign out. The session version is bumped, so this token (and any copy of
+ * it) stops working everywhere, not only in this browser (audit S13).
+ */
 export const DELETE = route(async () => {
+  const s = await getSession().catch(() => null);
+  if (s) {
+    await getCtx()
+      .db.update(schema.users)
+      .set({ sessionVersion: sql`${schema.users.sessionVersion} + 1` })
+      .where(eq(schema.users.id, s.userId));
+  }
   await clearSessionCookie();
   return json({ ok: true });
 });
+
+/** The one host sign-in messages may name: the configured site, or the request host in development. */
+function siweHost(req: Request): string | null {
+  const site = process.env.NEXT_PUBLIC_SITE_URL;
+  if (site) {
+    try {
+      return new URL(site).host;
+    } catch {
+      return null;
+    }
+  }
+  return process.env.NODE_ENV === "production" ? null : new URL(req.url).host;
+}

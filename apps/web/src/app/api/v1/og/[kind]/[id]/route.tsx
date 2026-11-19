@@ -1,5 +1,6 @@
 import { leaderboard, recapFor, userByInviteCode } from "@northeside/core";
 import { ImageResponse } from "next/og";
+import { limitReads } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { leagueBySlug } from "@/lib/server/services/leagues";
 
@@ -49,6 +50,12 @@ async function rendered(img: ImageResponse): Promise<Response> {
 
 /** GET /api/v1/og/league/:slug and /api/v1/og/result/:matchweek.:wallet  (?format=story for 1080x1920). */
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string; id: string }> }) {
+  // Each image renders a table: limit per network (audit P2).
+  try {
+    await limitReads("og", 30);
+  } catch {
+    return new Response("Too many requests", { status: 429 });
+  }
   const { kind, id } = await params;
   const story = new URL(req.url).searchParams.get("format") === "story";
   const size = story ? { width: 1080, height: 1920 } : { width: 1200, height: 630 };

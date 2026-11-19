@@ -1,24 +1,33 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
+/** Link tokens are valid for this many days (audit S13: they used to never expire). */
+const LINK_DAYS = 7;
+const day = (ms: number) => Math.floor(ms / 86_400_000);
+
 /**
- * Link a Telegram chat to a user without a table: /start <token> where the token is the user id
- * plus a truncated HMAC. Fits Telegram's 64-character start-parameter limit.
+ * Link a Telegram chat to a user without a table: /start <token> where the token is the user id, an
+ * expiry day and a truncated HMAC over both. About 43 characters: fits Telegram's 64 limit.
  */
-export function telegramLinkToken(userId: string, secret: string): string {
+export function telegramLinkToken(userId: string, secret: string, now: number = Date.now()): string {
   const id = Buffer.from(userId.replace(/-/g, ""), "hex").toString("base64url");
-  const mac = createHmac("sha256", secret).update(`tg-link:${userId}`).digest().subarray(0, 9).toString("base64url");
-  return `u${id}_${mac}`;
+  const exp = (day(now) + LINK_DAYS).toString(36);
+  return `u${id}_${exp}_${linkMac(userId, exp, secret)}`;
 }
 
-export function verifyTelegramLinkToken(token: string, secret: string): string | null {
-  const m = /^u([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]{12})$/.exec(token);
+function linkMac(userId: string, exp: string, secret: string) {
+  return createHmac("sha256", secret).update(`tg-link:${userId}:${exp}`).digest().subarray(0, 9).toString("base64url");
+}
+
+export function verifyTelegramLinkToken(token: string, secret: string, now: number = Date.now()): string | null {
+  const m = /^u([A-Za-z0-9_-]{22})_([0-9a-z]{1,8})_([A-Za-z0-9_-]{12})$/.exec(token);
   if (!m) return null;
   const hex = Buffer.from(m[1]!, "base64url").toString("hex");
   if (hex.length !== 32) return null;
+  const exp = m[2]!;
+  if (parseInt(exp, 36) < day(now)) return null;
   const userId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  const expected = telegramLinkToken(userId, secret).split("_").pop()!;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(m[2]!);
+  const a = Buffer.from(linkMac(userId, exp, secret));
+  const b = Buffer.from(m[3]!);
   return a.length === b.length && timingSafeEqual(a, b) ? userId : null;
 }
 

@@ -1,5 +1,5 @@
 import { leaderboard } from "@northeside/core";
-import { HttpError, json, route } from "@/lib/server/api";
+import { HttpError, json, limitReads, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { canSeeLeagueBoard } from "@/lib/server/services/leagues";
 import { getSession } from "@/lib/server/session";
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/v1/leaderboards/:matchweekId (or "season"); ?verified=1, ?league=slug. */
 export const GET = route(async (req, { params }: { params: Promise<{ matchweekId: string }> }) => {
+  await limitReads("leaderboard", 120); // audit P2
   const ctx = getCtx();
   const raw = (await params).matchweekId;
   const url = new URL(req.url);

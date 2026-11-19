@@ -18,6 +18,6 @@ export const POST = route(async (req) => {
   await getCtx()
     .db.insert(schema.predictions)
     .values({ userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id, draft })
-    .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: { draft, updatedAt: new Date() } });
+    .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: { draft, userId: s.userId, updatedAt: new Date() } }); // a re-registered wallet's row moves to its new account (audit S13)
   return json({ ok: true });
 });

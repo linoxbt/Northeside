@@ -1,4 +1,4 @@
-import { schema } from "@northeside/db";
+import { safeEqual, schema } from "@northeside/db";
 import { desc, eq, sql } from "drizzle-orm";
 import { formatEther } from "viem";
 import { automationPaused } from "@northeside/core";
@@ -7,8 +7,20 @@ import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The public part of the status, cached for 15 s per server instance so a polled page cannot make
+ * every request hit the RPC and the database (audit P2).
+ */
+let cache: { at: number; body: Record<string, unknown> } | null = null;
+
 /** Operator status: indexer lag, drip balance, recent jobs. No secrets. */
-export const GET = route(async () => {
+export const GET = route(async (req) => {
+  // Job error text can carry RPC URLs or provider details: only for the operator (audit S13).
+  const operator = (() => {
+    const expected = process.env.CRON_SECRET;
+    return !!expected && safeEqual(req.headers.get("authorization") ?? "", `Bearer ${expected}`);
+  })();
+  if (!operator && cache && Date.now() - cache.at < 15_000) return json(cache.body);
   const ctx = getCtx();
   const [state] = await ctx.db.select().from(schema.indexerState).where(eq(schema.indexerState.key, "main"));
   const head = await ctx.publicClient.getBlockNumber({ cacheTime: 0 }).catch(() => null);
@@ -25,8 +37,9 @@ export const GET = route(async () => {
   const workerSeen = lease?.updatedAt ?? null;
   const workerFresh = workerSeen !== null && Date.now() - workerSeen.getTime() < 20 * 60_000;
   const alerting = { telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_OPERATOR_CHAT_ID), sentry: Boolean(process.env.SENTRY_DSN) };
-  return json({
-    healthy: lag !== null && lag < 200n && workerFresh,
+  // Without an alert channel nobody hears about failures: not healthy (audit M3).
+  const body = {
+    healthy: lag !== null && lag < 200n && workerFresh && alerting.telegram,
     automationPaused: await automationPaused(ctx),
     worker: { lastLeaseAt: workerSeen, fresh: workerFresh },
     alerting,
@@ -37,6 +50,8 @@ export const GET = route(async () => {
     indexerUpdatedAt: state?.updatedAt ?? null,
     migrations,
     drip: ctx.drip ? { address: ctx.drip.account.address, balance: drip === null ? null : formatEther(drip) } : null,
-    jobs: jobs.map((j) => ({ job: j.job, runKey: j.runKey, status: j.status, startedAt: j.startedAt, finishedAt: j.finishedAt, error: j.error })),
-  });
+    jobs: jobs.map((j) => ({ job: j.job, runKey: j.runKey, status: j.status, startedAt: j.startedAt, finishedAt: j.finishedAt, ...(operator ? { error: j.error } : {}) })),
+  };
+  if (!operator) cache = { at: Date.now(), body: body as Record<string, unknown> };
+  return json(body);
 });

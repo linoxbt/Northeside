@@ -49,6 +49,7 @@ export const WORKER_SCHEDULE: [JobName, number][] = [
   ["compute-odds", 60 * 60_000], // runJob keys it to one fit per 6-hour block
   ["post-badge-roots", 60 * 60_000], // runJob keys it to one root per 6-hour block
   ["refresh-qie-names", 60 * 60_000], // runJob keys it to one run per day
+  ["housekeeping", 6 * 60 * 60_000], // runJob keys it to one run per day
 ];
 
 export interface WorkerOptions {

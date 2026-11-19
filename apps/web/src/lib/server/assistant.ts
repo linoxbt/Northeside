@@ -49,7 +49,8 @@ export async function askModel(facts: AssistantFacts, history: AssistantTurn[], 
         messages,
         // Short conversational answers: light reasoning keeps them quick and cheap.
         reasoning_effort: "low",
-        max_tokens: 4_000,
+        // Short answers; reasoning tokens count too, so leave room for low-effort reasoning (audit S7/P5).
+        max_tokens: 1_500,
         temperature: 0.4,
         store: false,
       }),

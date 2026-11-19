@@ -6,11 +6,27 @@ import { alertOnce, sixHourBlock } from "./ops";
 
 export class DripRefused extends Error {
   constructor(
-    readonly code: "email_unverified" | "not_your_wallet" | "has_balance" | "already_dripped" | "daily_cap" | "drip_empty" | "not_configured",
+    readonly code: "email_unverified" | "disposable_email" | "not_your_wallet" | "has_balance" | "already_dripped" | "daily_cap" | "drip_empty" | "not_configured",
     message: string,
   ) {
     super(message);
   }
+}
+
+/**
+ * Throwaway inboxes make farming the drip free (audit S9). Not exhaustive: it raises the cost of the
+ * common ones; the daily cap bounds the rest.
+ */
+const DISPOSABLE = new Set([
+  "mailinator.com", "guerrillamail.com", "guerrillamail.net", "guerrillamailblock.com", "sharklasers.com", "grr.la", "10minutemail.com",
+  "10minutemail.net", "tempmail.com", "temp-mail.org", "tempmail.net", "tempmailo.com", "tempr.email", "yopmail.com", "yopmail.net",
+  "trashmail.com", "trashmail.de", "getnada.com", "nada.email", "dispostable.com", "maildrop.cc", "throwawaymail.com", "fakeinbox.com",
+  "mintemail.com", "mohmal.com", "emailondeck.com", "1secmail.com", "1secmail.org", "1secmail.net", "spamgourmet.com", "mailnesia.com",
+  "mytemp.email", "burnermail.io", "inboxkitten.com", "tempinbox.com", "discard.email", "mail.tm", "linshiyouxiang.net", "moakt.com",
+]);
+export function isDisposableEmail(email: string): boolean {
+  const domain = email.split("@").pop()?.trim().toLowerCase() ?? "";
+  return DISPOSABLE.has(domain) || [...DISPOSABLE].some((d) => domain.endsWith(`.${d}`));
 }
 
 export interface DripConfig {
@@ -39,12 +55,13 @@ async function spentLast24h(ctx: CoreContext) {
 export async function requestDrip(
   ctx: CoreContext,
   cfg: DripConfig | null,
-  req: { userId: string; wallet: Address; deviceId: string; emailVerified: boolean; emailHash: string | null },
+  req: { userId: string; wallet: Address; deviceId: string; emailVerified: boolean; emailHash: string | null; email?: string | null },
 ) {
   if (!cfg || !ctx.drip) throw new DripRefused("not_configured", "Gas drip is not available right now");
   const drip = ctx.drip;
   const wallet = getAddress(req.wallet);
   if (!req.emailVerified || !req.emailHash) throw new DripRefused("email_unverified", "Verify your email to get free gas");
+  if (req.email && isDisposableEmail(req.email)) throw new DripRefused("disposable_email", "Free gas needs a permanent email address");
 
   const [owned] = await ctx.db
     .select()

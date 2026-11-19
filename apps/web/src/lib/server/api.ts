@@ -32,6 +32,7 @@ type Handler<C> = (req: Request, context: C) => Promise<Response>;
 export function route<C>(fn: Handler<C>): Handler<C> {
   return async (req, context) => {
     try {
+      checkOrigin(req);
       return await fn(req, context);
     } catch (e) {
       if (e instanceof HttpError) return json({ error: e.code, message: e.message }, { status: e.status });
@@ -46,6 +47,35 @@ export function route<C>(fn: Handler<C>): Handler<C> {
       return json({ error: "internal", message: "Something went wrong" }, { status: 500 });
     }
   };
+}
+
+/**
+ * Cookie-authenticated writes must come from Northeside's own pages (audit S13): a browser sends
+ * Origin on every cross-site POST/PUT/PATCH/DELETE, so a foreign Origin is refused. Server-to-server
+ * callers (cron, webhooks) send none and authenticate with their own secrets.
+ */
+function checkOrigin(req: Request) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const origin = req.headers.get("origin");
+  if (!origin) return;
+  const allowed = new Set<string>();
+  const site = process.env.NEXT_PUBLIC_SITE_URL;
+  if (site) {
+    try {
+      allowed.add(new URL(site).origin);
+    } catch {
+      /* unparseable: only the request's own origin below, in development */
+    }
+  }
+  if (!site && process.env.NODE_ENV !== "production") allowed.add(new URL(req.url).origin);
+  if (!allowed.has(origin)) throw new HttpError(403, "bad_origin", "Requests must come from Northeside");
+}
+
+/** A whole-number path parameter, or a 400 (audit B18: NaN used to reach SQL and give 500s). */
+export function intParam(value: string | undefined, name: string, max = 2_147_483_647): number {
+  const n = Number(value);
+  if (!value || !/^\d+$/.test(value) || !Number.isSafeInteger(n) || n > max) throw new HttpError(400, "bad_param", `Bad ${name}`);
+  return n;
 }
 
 export async function requireSession(): Promise<Session> {
@@ -75,6 +105,16 @@ export async function rateLimit(key: string, limit: number, windowSeconds: numbe
   if ((row?.count ?? 0) > limit) throw new HttpError(429, "rate_limited", "Too many requests, slow down");
 }
 
+/** Give back one use reserved with rateLimit in the current window (never below zero). */
+export async function refundRate(key: string, windowSeconds: number) {
+  const { db } = getCtx();
+  const windowStart = new Date(Math.floor(Date.now() / (windowSeconds * 1000)) * windowSeconds * 1000);
+  await db
+    .update(schema.rateLimits)
+    .set({ count: sql`greatest(${schema.rateLimits.count} - 1, 0)` })
+    .where(and(eq(schema.rateLimits.key, key), eq(schema.rateLimits.windowStart, windowStart)));
+}
+
 /** Counted quota: refuse when `limit` uses are already recorded in this window (does not count this call). */
 export async function quotaLeft(key: string, limit: number, windowSeconds: number) {
   const { db } = getCtx();
@@ -86,6 +126,11 @@ export async function quotaLeft(key: string, limit: number, windowSeconds: numbe
     // tests accepts it, which hid this until production: every drip request failed with a 500).
     .where(and(eq(schema.rateLimits.key, key), eq(schema.rateLimits.windowStart, windowStart)));
   if ((row?.count ?? 0) >= limit) throw new HttpError(429, "rate_limited", "Too many requests from this network today");
+}
+
+/** Per-IP read limit for public endpoints that do real work (audit P2). */
+export async function limitReads(name: string, perIpPerMinute: number) {
+  await rateLimit(`${name}:read:${await clientIp()}`, perIpPerMinute, 60);
 }
 
 /** Rate-limit per user and per IP together. */
