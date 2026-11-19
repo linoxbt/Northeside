@@ -370,9 +370,10 @@ async function main() {
   ];
   await fetch(`${footballUrl}/__set`, { method: "POST", body: JSON.stringify({ matchday: 11, fixtures }) });
   await cli(env, "import-fixtures", "11");
-  const opened = await cronJob("open-matchweeks");
+  const opened = (await cronJob("open-matchweeks")).opened ?? [];
   check(opened[0]?.id === 11 && opened[0]?.status === "ok" && /^0x/.test(opened[0]?.detail?.txHash ?? ""), "automation opened matchweek 11 on-chain");
-  check((await cronJob("open-matchweeks")).length === 0, "opening is idempotent");
+  const again = await cronJob("open-matchweeks");
+  check((again.opened ?? []).length === 0 && (again.repaired ?? []).length === 0, "opening is idempotent (nothing to open or repair)");
 
   // A host and their league (host signs in through the UI too)
   const browser = await chromium.launch();
@@ -459,6 +460,8 @@ async function main() {
   await ada.page.getByText("Locked").first().waitFor({ timeout: 30_000 }).catch(() => {});
   check(await ada.page.getByText("Locked").first().isVisible(), "UI shows the matchweek as locked after kickoff");
 
+  // Reveals read a confirmed block after lock (audit B6): let the chain move past the confirmations.
+  await rpc("anvil_mine", ["0x8"]);
   const rev = await cli(env, "reveal", "11");
   check(rev.valid === 2 && rev.invalid === 0, "both reveals verified against on-chain commitments");
 
@@ -475,11 +478,11 @@ async function main() {
   });
   const fr = await cli(env, "fetch-results", "11");
   check(fr.agreed === true, "both providers agree (including a postponed game)");
-  check((await cronJob("publish-results")).length === 0, "automation waits for the last kickoff + buffer before proposing");
+  check(((await cronJob("publish-results")).published ?? []).length === 0, "automation waits for the last kickoff + buffer before proposing");
   // On-chain, results open at the last kickoff (+26h) plus the 3h buffer.
   await rpc("evm_increaseTime", [30 * 3600]);
   await rpc("evm_mine");
-  const pub = await cronJob("publish-results");
+  const pub = (await cronJob("publish-results")).published ?? [];
   check(pub[0]?.id === 11 && pub[0]?.status === "ok", "automation proposed results, reveals and scores");
   check((await cronJob("finalize")).length === 0, "automation waits out the challenge window");
   await rpc("evm_increaseTime", [12 * 3600 + 60]);
