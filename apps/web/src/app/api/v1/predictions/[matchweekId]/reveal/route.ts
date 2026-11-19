@@ -9,7 +9,8 @@ import { checkPayload, encryptPayload, getMatchweekRow, onChainCommitment } from
 
 /**
  * POST /api/v1/predictions/:matchweekId/reveal: if the automatic upload after sealing failed, the
- * exported file can be uploaded here until 10 minutes after the first kickoff. Later uploads are
+ * sealed picks (from this device's backup or an exported file) can be sent here, before lock or
+ * until 10 minutes after the first kickoff (audit B2/M9). Later uploads are
  * refused so nobody can choose which sealed wallet to reveal once scores are known (final review
  * H-2). The reveals root is proposed with the results and cannot change afterwards (audit M-2).
  */
@@ -19,7 +20,6 @@ export const POST = route(async (req, { params }: { params: Promise<{ matchweekI
   await requireAdult(s.userId);
   const id = Number((await params).matchweekId);
   const mw = await getMatchweekRow(id);
-  if (new Date() < mw.lockTime) throw new HttpError(409, "not_locked", "Reveals open after lock");
   if (!payloadWindowOpen(mw.lockTime) || (mw.status !== "open" && mw.status !== "locked")) {
     throw new HttpError(409, "reveals_closed", "Seal files had to reach Northeside within 10 minutes of the first kickoff");
   }
@@ -33,7 +33,12 @@ export const POST = route(async (req, { params }: { params: Promise<{ matchweekI
   const values = { payloadEnc: encryptPayload(payload), commitment: payload.commitment, version: onChain.version, txStatus: "confirmed" as const, revealedAt: null, revealValid: null, revealError: null, pendingPayloadEnc: null, pendingCommitment: null, pendingTxHash: null, updatedAt: new Date() };
   await ctx.db
     .insert(schema.predictions)
-    .values({ userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: id, ...values })
-    .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: values });
+    // A row first created here gets the upload time as its seal time: never earlier than the real
+    // one, so it cannot be used to move which wallet counts (audit B1).
+    .values({ userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: id, sealedAt: new Date(), ...values })
+    .onConflictDoUpdate({
+      target: [schema.predictions.wallet, schema.predictions.matchweekId],
+      set: { ...values, sealedAt: sql`COALESCE(${schema.predictions.sealedAt}, excluded.sealed_at)` },
+    });
   return json({ ok: true });
 });

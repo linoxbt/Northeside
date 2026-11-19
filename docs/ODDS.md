@@ -16,9 +16,11 @@ Dixon–Coles Poisson model, the standard approach for football scores:
 - The score grid (0–0 to 9–9) uses the Dixon–Coles low-score correction (rho = −0.08) and is
   normalised to 1. The match page reads two markets from it, Polymarket-style: the result (each
   side and the draw as a % chance with Yes/No) and the likeliest exact scores. A chance-over-time
-  chart replays every stored fit and the crowd as it sealed (seal times rounded up to the hour,
-  crowd included only from 5 seals), frozen at lock. The board shows the same 1X2 chances.
-- **Crowd blend**: once 5 wallets have sealed, the crowd's picks are blended in, each pick counting
+  chart replays every stored fit; the crowd joins the chart only after lock (seal times rounded up
+  to the hour, from 5 picks), frozen at lock. The board shows the same 1X2 chances.
+- **Crowd blend**: once 20 people have sealed, the crowd's picks are blended in (before lock as a
+  snapshot refreshed at most every 6 hours and only after 10 more people sealed; one entry per
+  person; no exact scores), each pick counting
   as one observation against 30 pseudo-observations from the model, so the odds move like a market.
 - Chances are shown as percentages (no decimal odds, no margin).
 

@@ -7,8 +7,13 @@ import { payloadAad } from "./matchweek";
 import { chanceSeries, fitsFor, oddsFor, type ChancePoint } from "./odds";
 import { displayName } from "./queries";
 
-/** Crowd odds before lock appear only once this many wallets have sealed, so no single pick shows. */
-export const MIN_CROWD = 5;
+/** Crowd odds before lock appear only once this many people have sealed (audit S1). */
+export const MIN_CROWD = 20;
+/** Before lock the crowd is a snapshot, refreshed at most this often... */
+export const CROWD_SNAPSHOT_EVERY_MS = 6 * 3600_000;
+/** ...and only once this many new people have sealed since the last one, so the difference between
+ * two snapshots never isolates one person's picks. */
+export const CROWD_SNAPSHOT_MIN_NEW = 10;
 
 /** A small cache in app_settings: functions are stateless, and providers have rate limits. */
 async function cached<T>(ctx: CoreContext, key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
@@ -66,21 +71,70 @@ export interface CrowdView {
   fixtures: { index: number; home: number; draw: number; away: number }[];
 }
 
-/** Crowd odds: how many wallets call a home win, a draw or an away win in each game. */
+/** One entry per person (their first-sealed wallet), as on the tables. */
+function perPerson<T extends { userId: string; sealedAt: Date | null; wallet: string }>(entries: T[]): T[] {
+  const first = new Map<string, T>();
+  for (const e of entries) {
+    const cur = first.get(e.userId);
+    const t = (x: T) => x.sealedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    if (!cur || t(e) < t(cur) || (t(e) === t(cur) && e.wallet < cur.wallet)) first.set(e.userId, e);
+  }
+  return [...first.values()];
+}
+
+interface CrowdSnapshot {
+  at: number;
+  players: number;
+  fixtures: { index: number; home: number; draw: number; away: number }[];
+}
+
+/**
+ * The crowd before lock (audit S1). Sealed picks are private until kickoff, but commit times and
+ * wallets are public on-chain, so a live aggregate would let anyone diff it around one commit and
+ * read that player's picks. Instead: one entry per person, nothing until MIN_CROWD people have
+ * sealed, then a stored snapshot that is replaced at most every CROWD_SNAPSHOT_EVERY_MS and only
+ * once CROWD_SNAPSHOT_MIN_NEW more people have sealed. No exact scores and no time series.
+ */
+export async function preLockCrowd(ctx: CoreContext, id: number, fixtureCount: number): Promise<{ players: number; snapshot: CrowdSnapshot | null }> {
+  const people = perPerson(await crowdEntries(ctx, id, false));
+  const key = `crowdsnap:${id}`;
+  const [row] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, key));
+  let snap = (row?.value as CrowdSnapshot | undefined) ?? null;
+  const now = ctx.now().getTime();
+  const due = snap ? now - snap.at >= CROWD_SNAPSHOT_EVERY_MS && people.length - snap.players >= CROWD_SNAPSHOT_MIN_NEW : people.length >= MIN_CROWD;
+  if (due) {
+    snap = {
+      at: now,
+      players: people.length,
+      fixtures: crowdCounts(people.map((e) => e.payload), fixtureCount).map((c, index) => ({ index, home: c.home, draw: c.draw, away: c.away })),
+    };
+    await ctx.db
+      .insert(schema.appSettings)
+      .values({ key, value: snap })
+      .onConflictDoUpdate({ target: schema.appSettings.key, set: { value: snap, updatedAt: new Date() } });
+  }
+  return { players: people.length, snapshot: snap };
+}
+
+/** Crowd odds: how many players call a home win, a draw or an away win in each game. */
 export async function crowdView(ctx: CoreContext, id: number): Promise<CrowdView | null> {
   const mw = await matchweekRow(ctx, id);
   if (!mw) return null;
   const n = (await fixtureRows(ctx, id)).length;
   const locked = ctx.now() >= mw.lockTime;
-  return cached(ctx, `crowd:${id}:${locked ? "revealed" : "sealed"}`, locked ? 60_000 : 120_000, async () => {
-    const entries = (await crowdEntries(ctx, id, locked)).map((e) => e.payload);
-    const shown = locked ? entries.length > 0 : entries.length >= MIN_CROWD;
+  if (!locked) {
+    const { players, snapshot } = await preLockCrowd(ctx, id, n);
+    return { matchweekId: id, players, shown: !!snapshot, minPlayers: MIN_CROWD, source: "sealed", fixtures: snapshot?.fixtures ?? [] };
+  }
+  return cached(ctx, `crowd:${id}:revealed`, 60_000, async () => {
+    const entries = (await crowdEntries(ctx, id, true)).map((e) => e.payload);
+    const shown = entries.length > 0;
     return {
       matchweekId: id,
       players: entries.length,
       shown,
       minPlayers: MIN_CROWD,
-      source: locked ? ("revealed" as const) : ("sealed" as const),
+      source: "revealed" as const,
       fixtures: shown ? crowdCounts(entries, n).map((c, index) => ({ index, home: c.home, draw: c.draw, away: c.away })) : [],
     };
   });
@@ -325,39 +379,41 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
   const locked = ctx.now() >= mw.lockTime;
   const odds = await oddsFor(ctx, id).catch(() => null);
 
-  // Crowd market for this game (same rules as crowdView: hidden before lock until MIN_CROWD seals).
-  const crowd = await cached(ctx, `crowdmatch:${id}:${index}:${locked ? "r" : "s"}`, locked ? 60_000 : 120_000, async () => {
-    const entries = (await crowdEntries(ctx, id, locked)).map((e) => e.payload);
-    const shown = locked ? entries.length > 0 : entries.length >= MIN_CROWD;
-    const c = crowdCounts(entries, fixtures.length)[index] ?? { players: 0, home: 0, draw: 0, away: 0 };
-    const tally = new Map<string, number>();
-    for (const e of entries) {
-      const k = `${e.home[index]}-${e.away[index]}`;
-      tally.set(k, (tally.get(k) ?? 0) + 1);
-    }
-    const scorelines = [...tally.entries()]
-      .map(([k, count]) => ({ home: Number(k.split("-")[0]), away: Number(k.split("-")[1]), count }))
-      .sort((a, b) => b.count - a.count || a.home + a.away - (b.home + b.away));
-    return {
-      players: entries.length,
-      shown,
-      minPlayers: MIN_CROWD,
-      home: shown ? c.home : 0,
-      draw: shown ? c.draw : 0,
-      away: shown ? c.away : 0,
-      scorelines: shown ? scorelines : [],
-    };
-  });
+  // Crowd market for this game. Before lock: the 1X2 snapshot only (no exact scores, no live
+  // counts; audit S1). After lock: the revealed set, the one results are scored over.
+  const crowd = locked
+    ? await cached(ctx, `crowdmatch:${id}:${index}:r`, 60_000, async () => {
+        const entries = (await crowdEntries(ctx, id, true)).map((e) => e.payload);
+        const c = crowdCounts(entries, fixtures.length)[index] ?? { players: 0, home: 0, draw: 0, away: 0 };
+        const tally = new Map<string, number>();
+        for (const e of entries) {
+          const k = `${e.home[index]}-${e.away[index]}`;
+          tally.set(k, (tally.get(k) ?? 0) + 1);
+        }
+        const scorelines = [...tally.entries()]
+          .map(([k, count]) => ({ home: Number(k.split("-")[0]), away: Number(k.split("-")[1]), count }))
+          .sort((a, b) => b.count - a.count || a.home + a.away - (b.home + b.away));
+        const shown = entries.length > 0;
+        return { players: entries.length, shown, minPlayers: MIN_CROWD, home: c.home, draw: c.draw, away: c.away, scorelines: shown ? scorelines : [] };
+      })
+    : await (async () => {
+        const { players, snapshot } = await preLockCrowd(ctx, id, fixtures.length);
+        const c = snapshot?.fixtures.find((x) => x.index === index);
+        return { players, shown: !!c, minPlayers: MIN_CROWD, home: c?.home ?? 0, draw: c?.draw ?? 0, away: c?.away ?? 0, scorelines: [] as { home: number; away: number; count: number }[] };
+      })();
 
-  // Chance over time: every model fit, plus the crowd as it sealed (frozen at lock).
+  // Chance over time: every model fit; the crowd joins the series only after lock (frozen at lock),
+  // since a series of sealed picks would show when each pick was made (audit S1).
   const chart = await cached(ctx, `chart:${id}:${index}:${locked ? "r" : "s"}`, locked ? 3_600_000 : 300_000, async () => {
-    const seals = (await crowdEntries(ctx, id, locked)).flatMap((e) => {
-      const h = e.payload.home[index], a = e.payload.away[index];
-      if (h === null || h === undefined || a === null || a === undefined || !e.sealedAt) return [];
-      return [{ t: e.sealedAt, outcome: h > a ? ("home" as const) : h === a ? ("draw" as const) : ("away" as const) }];
-    });
+    const seals = locked
+      ? (await crowdEntries(ctx, id, true)).flatMap((e) => {
+          const h = e.payload.home[index], a = e.payload.away[index];
+          if (h === null || h === undefined || a === null || a === undefined || !e.sealedAt) return [];
+          return [{ t: e.sealedAt, outcome: h > a ? ("home" as const) : h === a ? ("draw" as const) : ("away" as const) }];
+        })
+      : [];
     const now = ctx.now();
-    return chanceSeries(await fitsFor(ctx, id, index), seals, { end: now < mw.lockTime ? now : mw.lockTime, minCrowd: MIN_CROWD });
+    return chanceSeries(await fitsFor(ctx, id, index), seals, { end: now < mw.lockTime ? now : mw.lockTime, minCrowd: 5 });
   });
 
   // Live state and provisional points (after lock).

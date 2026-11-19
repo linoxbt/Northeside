@@ -165,7 +165,7 @@ function Odds() {
         that grid. The model refits every 6 hours and freezes at lock.
       </P>
       <H2 id="crowd">The crowd</H2>
-      <P>Once 5 players have sealed, their picks move the chances like a market: each pick counts as one observation against 30 for the model.</P>
+      <P>Once 20 people have sealed, their picks move the chances like a market: each pick counts as one observation against 30 for the model. Before kickoff the crowd is a snapshot, refreshed at most every 6 hours and only after 10 more people have sealed, so no one&apos;s sealed picks can be worked out from it. Exact-score picks and the crowd&apos;s place in the chart appear after kickoff.</P>
       <H2 id="chart">Chance over time</H2>
       <P>Each match page charts how the chances moved with every model fit and every seal, up to lock.</P>
       <H2 id="accuracy">Accuracy</H2>

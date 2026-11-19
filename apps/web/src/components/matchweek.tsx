@@ -12,7 +12,7 @@ import { AdultGate, SignInPanel } from "./sign-in";
 import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { short, txUrl } from "@/lib/client/env";
-import { draftKey, readLocalSeal, type Picks } from "@/lib/client/local-seal";
+import { draftKey, readLocalSeal, syncSeal, uploadPayload, uploadWindowOpen, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
 import { useMounted } from "@/lib/client/use-mounted";
 
@@ -164,6 +164,22 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     enabled: !!user,
     queryFn: () => api<{ prediction: MyPrediction | null }>(`/api/v1/predictions/${mw.id}/me`).then((r) => r.prediction),
   });
+
+  // A seal whose picks never reached Northeside is retried here, outside the seal bar, so it keeps
+  // trying after lock too, until 10 minutes after the first kickoff (audit B2).
+  useEffect(() => {
+    if (!wallet) return;
+    const tick = async () => {
+      const local = readLocalSeal(mw.id, wallet);
+      if (!local?.txHash || local.synced || !uploadWindowOpen(mw.lockTime)) return;
+      await syncSeal(mw.id, wallet, local)
+        .then(() => qc.invalidateQueries({ queryKey: ["mine", mw.id, wallet] }))
+        .catch(() => {});
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 30_000);
+    return () => clearInterval(t);
+  }, [wallet, mw.id, mw.lockTime, qc]);
 
   const v2 = (mw.rules ?? 1) === 2;
   const crowd = useQuery({
@@ -613,7 +629,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
           {user && mine.data?.commitment && !open && live.data?.fixtures.length && live.data.fixtures.every((x) => x.state === "ft" || x.state === "void") ? (
             <RecapLink matchweekId={mw.id} final={finalized} />
           ) : null}
-          {user && mine.data ? <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} /> : null}
+          {user && mine.data ? (
+            <Receipt mwId={mw.id} p={mine.data} wallet={wallet} finalized={finalized} lockTime={mw.lockTime} onUploaded={() => void qc.invalidateQueries({ queryKey: ["mine", mw.id, wallet] })} />
+          ) : null}
 
           <p className="text-center text-[13px] text-muted">
             <a className="underline underline-offset-4" href="/docs/scoring">
@@ -803,9 +821,48 @@ export function LiveCentre({ live }: { live: LiveDTO }) {
   );
 }
 
-function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction; wallet?: string; finalized: boolean }) {
+function Receipt({
+  mwId,
+  p,
+  wallet,
+  finalized,
+  lockTime,
+  onUploaded,
+}: {
+  mwId: number;
+  p: MyPrediction;
+  wallet?: string;
+  finalized: boolean;
+  lockTime: string;
+  onUploaded(): void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   if (!p.commitment || p.txStatus === "none") return null;
   const local = readLocalSeal(mwId, wallet);
+  const localMatches = !!local?.payload && local.payload.commitment.toLowerCase() === p.commitment.toLowerCase();
+  // Sealed on-chain but Northeside does not hold the picks: the slip cannot be revealed (audit M9).
+  const missing = p.txStatus === "confirmed" && !p.hasPayload;
+  const canSend = uploadWindowOpen(lockTime);
+  async function send(payload: unknown) {
+    setSendError(null);
+    setSending(true);
+    try {
+      await uploadPayload(mwId, payload);
+      onUploaded();
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : "Could not send your picks. Try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+  async function sendFile(file: File) {
+    try {
+      await send(JSON.parse(await file.text()));
+    } catch {
+      setSendError("That file is not a Northeside sealed-picks file.");
+    }
+  }
   function download() {
     // Only a backup that matches the on-chain commitment; otherwise the server's copy (audit B6).
     const data = local?.payload && local.payload.commitment.toLowerCase() === p.commitment!.toLowerCase() ? local.payload : null;
@@ -822,10 +879,46 @@ function Receipt({ mwId, p, wallet, finalized }: { mwId: number; p: MyPrediction
     <Card className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-[20px] tracking-[-0.02em]">Sealed receipt</h2>
-        <Pill tone={p.txStatus === "confirmed" ? "good" : p.txStatus === "failed" ? "bad" : "warn"}>
-          {p.txStatus === "confirmed" ? `Sealed · v${p.version}` : p.txStatus === "failed" ? "Failed, seal again" : "Confirming…"}
+        <Pill tone={missing ? "warn" : p.txStatus === "confirmed" ? "good" : p.txStatus === "failed" ? "bad" : "warn"}>
+          {missing ? "Picks not received" : p.txStatus === "confirmed" ? `Sealed · v${p.version}` : p.txStatus === "failed" ? "Failed, seal again" : "Confirming…"}
         </Pill>
       </div>
+      {missing ? (
+        <div role="alert" className="space-y-2 rounded-xl border border-warn/50 bg-warn/10 p-3 text-[14px] leading-6 text-ink-2">
+          {canSend ? (
+            <>
+              <p>
+                Your seal is on QIE, but Northeside has not received your picks. Without them your slip cannot be revealed and scores 0. Send them
+                before kickoff (or within 10 minutes of it).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {localMatches ? (
+                  <Button variant="accent" disabled={sending} onClick={() => void send(local!.payload)}>
+                    {sending ? "Sending…" : "Send my picks again"}
+                  </Button>
+                ) : null}
+                <label className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line bg-white px-5 text-[15px] font-medium">
+                  Upload my backup file
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    className="sr-only"
+                    disabled={sending}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void sendFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            </>
+          ) : (
+            <p>Your seal is on QIE, but your picks never reached Northeside before kickoff, so this slip cannot be revealed or scored.</p>
+          )}
+          {sendError ? <p className="text-bad">{sendError}</p> : null}
+        </div>
+      ) : null}
       <dl className="grid gap-2 text-sm">
         <div>
           <dt className="eyebrow">Commitment</dt>

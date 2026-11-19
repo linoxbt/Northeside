@@ -161,8 +161,14 @@ function SealBar(props: {
 
       // 4. Hand the encrypted payload to the backend for the reveal (retried later if this fails).
       setStep("Saving your receipt…");
-      await syncSeal(props.mwId, wallet, { payload, txHash: hash, synced: false }).catch(() => {});
+      // The seal is on-chain either way. If Northeside did not get the picks, say so: without them
+      // the slip cannot be revealed (audit B2). The matchweek page keeps retrying until lock + 10 min.
+      const synced = await syncSeal(props.mwId, wallet, { payload, txHash: hash, synced: false }).then(
+        () => true,
+        () => false,
+      );
       setStep(null);
+      if (!synced) setError("Sealed on QIE, but your picks have not reached Northeside yet. We keep retrying; keep this page open or come back before kickoff.");
       props.onSealed(true);
     } catch (e) {
       setStep(null);

@@ -63,8 +63,8 @@ or QIE Wallet directly.
 
 ## Engagement (no prizes)
 
-- **Odds and chances**: a Dixon-Coles model of team strength, blended with sealed picks once 5
-  players have sealed; each match page charts the chances over time ([ODDS.md](ODDS.md)).
+- **Odds and chances**: a Dixon-Coles model of team strength, blended with sealed picks once 20
+  people have sealed (a delayed snapshot before kickoff, so no sealed pick can be inferred); each match page charts the chances over time ([ODDS.md](ODDS.md)).
 - **Levels, streaks and 12 badges** from final matchweeks (exact scores, Banker hits, upset calls,
   head-to-head wins, sealing streaks).
 - **Invites**: every player has a personal link; friends who join with it and seal a slip count

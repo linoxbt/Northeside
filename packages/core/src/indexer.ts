@@ -159,7 +159,9 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
           version,
           txHash,
           txStatus: "confirmed",
-          sealedAt: at,
+          // The first seal time is kept: "first-sealed wallet" decides which slip counts, so a re-seal
+          // must never move it (audit B1). ISO string: postgres-js rejects a Date in a raw fragment.
+          sealedAt: sql`LEAST(COALESCE(${schema.predictions.sealedAt}, ${at.toISOString()}::timestamptz), ${at.toISOString()}::timestamptz)`,
           // A re-seal that was stored as pending is now on-chain: promote it to the confirmed payload.
           payloadEnc: sql`CASE WHEN lower(${schema.predictions.pendingCommitment}) = ${lower(a.commitment)} THEN ${schema.predictions.pendingPayloadEnc} ELSE ${schema.predictions.payloadEnc} END`,
           pendingPayloadEnc: sql`CASE WHEN lower(${schema.predictions.pendingCommitment}) = ${lower(a.commitment)} THEN NULL ELSE ${schema.predictions.pendingPayloadEnc} END`,

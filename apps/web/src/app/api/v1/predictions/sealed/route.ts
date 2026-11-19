@@ -1,5 +1,5 @@
 import { schema } from "@northeside/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Hex } from "viem";
 import { z } from "zod";
 import { sealedPayloadSchema } from "@northeside/commitments";
@@ -57,6 +57,18 @@ export const POST = route(async (req) => {
     if (!confirmed && receipt) throw new HttpError(409, "superseded", "A newer seal exists on-chain; this payload is not the latest");
     if (!confirmed && new Date() >= mw.lockTime) throw new HttpError(409, "locked", "This matchweek is locked");
 
+    // After lock the only reason to upload is a payload the server never received. If it already
+    // holds this exact commitment, there is nothing to change (and nothing may change: audit B1).
+    if (new Date() >= mw.lockTime) {
+      const [existing] = await ctx.db
+        .select({ commitment: schema.predictions.commitment, payloadEnc: schema.predictions.payloadEnc, version: schema.predictions.version })
+        .from(schema.predictions)
+        .where(and(eq(schema.predictions.wallet, s.wallet.toLowerCase()), eq(schema.predictions.matchweekId, mw.id)));
+      if (existing?.payloadEnc && existing.commitment?.toLowerCase() === payload.commitment.toLowerCase()) {
+        return { ok: true, txStatus: "confirmed", version: existing.version, commitment: payload.commitment };
+      }
+    }
+
     const enc = encryptPayload(payload);
     const base = { userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id };
     const draft = { home: payload.home, away: payload.away, ...(payload.banker !== undefined && payload.banker !== 255 ? { banker: payload.banker } : {}) };
@@ -80,7 +92,11 @@ export const POST = route(async (req) => {
       await ctx.db
         .insert(schema.predictions)
         .values({ ...base, ...values })
-        .onConflictDoUpdate({ target: [schema.predictions.wallet, schema.predictions.matchweekId], set: values });
+        .onConflictDoUpdate({
+          target: [schema.predictions.wallet, schema.predictions.matchweekId],
+          // The first seal time is kept (audit B1): re-sending never moves which wallet counts.
+          set: { ...values, sealedAt: sql`LEAST(COALESCE(${schema.predictions.sealedAt}, excluded.sealed_at), excluded.sealed_at)` },
+        });
       return { ok: true, txStatus: "confirmed", version: onChain.version, commitment: payload.commitment };
     }
 

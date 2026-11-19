@@ -25,6 +25,14 @@ export function readLocalSeal(mw: number, wallet?: string, key = sealedKey): Loc
 }
 
 
+/** Send sealed picks (a local backup or an exported file) for a seal the server never received. */
+export async function uploadPayload(mwId: number, payload: unknown) {
+  await api(`/api/v1/predictions/${mwId}/reveal`, { method: "POST", json: { payload } });
+}
+
+/** Whether a seal's picks can still reach Northeside: until 10 minutes after the first kickoff. */
+export const uploadWindowOpen = (lockTime: string | Date, now = Date.now()) => now < new Date(lockTime).getTime() + 10 * 60_000;
+
 export async function syncSeal(mwId: number, wallet: string, local: LocalSeal) {
   try {
     await api("/api/v1/predictions/sealed", {
