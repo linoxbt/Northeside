@@ -15,7 +15,16 @@ export function backendConfigured(env: Record<string, string | undefined> = proc
   );
 }
 
-/** Run a data loader; in preview mode or on failure, return the fallback instead of throwing. */
+/**
+ * A page's primary data: the fallback in preview mode, but a real failure is thrown so the error page
+ * (with a retry) shows, instead of the page pretending there is nothing there (audit B13).
+ */
+export async function loadOrFail<T>(fn: () => Promise<T>, previewFallback: T): Promise<T> {
+  if (!backendConfigured()) return previewFallback;
+  return fn();
+}
+
+/** Secondary data: in preview mode or on failure, return the fallback instead of throwing. */
 export async function safely<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   if (!backendConfigured()) return fallback;
   try {

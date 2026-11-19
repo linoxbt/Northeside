@@ -4,13 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AdultGate, PanelSkeleton, SignInPanel } from "./sign-in";
-import { Button, ButtonLink, Card } from "./ui";
+import { Button, ButtonLink, Card, LoadError } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 import { useMounted } from "@/lib/client/use-mounted";
 
 /** Stores the invite for attribution (FR-19), then joins once signed in. */
-export function JoinLeague({ slug, name }: { slug: string; name: string }) {
+export function JoinLeague({ slug, name, inviteKey = null, isPrivate = false }: { slug: string; name: string; inviteKey?: string | null; isPrivate?: boolean }) {
   const session = useSession();
   const user = session.data?.user;
   const qc = useQueryClient();
@@ -21,7 +21,7 @@ export function JoinLeague({ slug, name }: { slug: string; name: string }) {
   const membership = useQuery({
     queryKey: ["league", slug, user?.id],
     enabled: !!user,
-    queryFn: () => api<{ member: boolean }>(`/api/v1/leagues/${slug}`).then((r) => r.member),
+    queryFn: () => api<{ member: boolean }>(`/api/v1/leagues/${slug}${inviteKey ? `?k=${encodeURIComponent(inviteKey)}` : ""}`).then((r) => r.member),
   });
   const joined = membership.data === true;
 
@@ -29,7 +29,7 @@ export function JoinLeague({ slug, name }: { slug: string; name: string }) {
     setErr(null);
     setBusy(true);
     try {
-      await api(`/api/v1/leagues/${slug}/join`, method === "POST" ? { method, json: { source: localStorage.getItem("ns_src") ?? "direct" } } : { method });
+      await api(`/api/v1/leagues/${slug}/join`, method === "POST" ? { method, json: { source: localStorage.getItem("ns_src") ?? "direct", key: inviteKey } } : { method });
       if (method === "POST") track("league_joined", { league_slug: slug });
       await qc.invalidateQueries({ queryKey: ["league", slug] });
       await qc.invalidateQueries({ queryKey: ["session"] });
@@ -48,7 +48,9 @@ export function JoinLeague({ slug, name }: { slug: string; name: string }) {
     track("share_link_opened", { league_slug: slug });
   }, [slug]);
 
-  const share = mounted ? `${location.origin}/l/${slug}` : `/l/${slug}`;
+  // A private league's link carries its invite key (audit M7).
+  const path = `/l/${slug}${isPrivate && inviteKey ? `?k=${encodeURIComponent(inviteKey)}` : ""}`;
+  const share = mounted ? `${location.origin}${path}` : path;
   const text = `Predict the Premier League with me in ${name} on Northeside. Free, sealed on-chain before kickoff.`;
 
   if (session.isLoading) return <PanelSkeleton />;
@@ -60,6 +62,9 @@ export function JoinLeague({ slug, name }: { slug: string; name: string }) {
     <Card className="space-y-5 p-6 sm:p-7">
       {membership.isLoading ? (
         <div className="h-24 animate-pulse rounded-2xl bg-subtle" />
+      ) : membership.isError ? (
+        // Unknown membership: never offer "Join" to someone who may already be in (audit B13).
+        <LoadError what="your membership" onRetry={() => void membership.refetch()} />
       ) : joined ? (
         <div className="space-y-4">
           <p className="text-[22px] tracking-[-0.03em]">You are in.</p>

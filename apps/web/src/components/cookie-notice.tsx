@@ -43,7 +43,7 @@ export function CookieNotice() {
       className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-[560px] rounded-2xl border border-white/10 bg-[#141518] p-5 text-white shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] sm:bottom-5 sm:p-6 [padding-bottom:max(1.25rem,env(safe-area-inset-bottom))]"
     >
       <p className="text-[15px] leading-7 text-white/70">
-        Only necessary cookies. No ads, no tracking.{" "}
+        {askAnalytics ? "Necessary cookies only, unless you allow analytics below. No ads." : "Only necessary cookies. No ads, no tracking."}{" "}
         <Link href="/docs/cookies" className="text-white/90 underline decoration-white/40 underline-offset-4 hover:decoration-white">
           Cookie policy
         </Link>

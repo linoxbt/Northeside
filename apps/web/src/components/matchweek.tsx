@@ -12,7 +12,7 @@ import { AdultGate, SignInPanel } from "./sign-in";
 import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { short, txUrl } from "@/lib/client/env";
-import { draftKey, readLocalSeal, syncSeal, uploadPayload, uploadWindowOpen, type Picks } from "@/lib/client/local-seal";
+import { readDraft, readLocalSeal, syncSeal, uploadPayload, uploadWindowOpen, writeDraft, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
 import { useMounted } from "@/lib/client/use-mounted";
 
@@ -121,9 +121,10 @@ const fmtTime = (iso: string, local: boolean) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(local ? {} : WAT) });
 
 function Stepper({ value, onChange, disabled, label, compact }: { value: number | null; onChange(v: number): void; disabled: boolean; label: string; compact?: boolean }) {
-  const btn = compact ? "size-6 text-[14px] leading-none sm:size-7 sm:text-[15px]" : "size-11 text-lg";
+  // Compact steppers are the main touch control on phones: at least 28 px with room between them (audit B18).
+  const btn = compact ? "size-7 text-[15px] leading-none" : "size-11 text-lg";
   return (
-    <div className={`flex items-center ${compact ? "gap-0.5" : "gap-1"}`} role="group" aria-label={label}>
+    <div className={`flex items-center ${compact ? "gap-1" : "gap-1"}`} role="group" aria-label={label}>
       <button
         type="button"
         aria-label={`${label}: one less`}
@@ -201,26 +202,20 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     // Wait for the session (and, when signed in, the server draft) so a draft saved on another
     // device is not skipped (audit B18).
     if (loaded.current || session.isLoading || (user && !mine.isFetched)) return;
-    const local = (() => {
-      try {
-        return JSON.parse(localStorage.getItem(draftKey(mw.id)) ?? "null") as Picks | null;
-      } catch {
-        return null;
-      }
-    })();
+    const local = readDraft(mw.id, wallet);
     const fromServer = mine.data?.draft;
     const src = fromServer ?? local;
     if (src && src.home.length === n) {
       setPicks({ home: src.home, away: src.away, banker: src.banker ?? null });
       loaded.current = true;
     } else if (!user || mine.isFetched) loaded.current = true;
-  }, [mine.data, mine.isFetched, mw.id, n, user, session.isLoading]);
+  }, [mine.data, mine.isFetched, mw.id, n, user, session.isLoading, wallet]);
 
   // Autosave: locally at once, to the server after a pause (FR-10).
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persist = useCallback(
     (next: Picks) => {
-      localStorage.setItem(draftKey(mw.id), JSON.stringify(next));
+      writeDraft(mw.id, wallet, next);
       if (user) {
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
@@ -230,7 +225,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
         }, 1200);
       }
     },
-    [mw.id, user],
+    [mw.id, user, wallet],
   );
   const update = useCallback(
     (side: "home" | "away", i: number, v: number) => {
@@ -277,7 +272,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     return null;
   }, [mine.data, mw.id, wallet]);
   // After lock the sealed picks are the only picks that count: show them, read-only.
-  const shown = !open && sealedPicks ? sealedPicks : picks;
+  // After lock only sealed picks are shown: an unsealed draft must never look like a slip (audit B15).
+  const emptyPicks = useMemo<Picks>(() => ({ home: Array(n).fill(null), away: Array(n).fill(null), banker: null }), [n]);
+  const shown = !open ? (sealedPicks ?? emptyPicks) : picks;
   const unsealed =
     open &&
     !!sealedPicks &&
@@ -286,6 +283,12 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   const complete = picks.home.every((x) => x !== null) && picks.away.every((x) => x !== null);
   const picked = picks.home.filter((x, i) => x !== null && picks.away[i] !== null).length;
   const sealed = mine.data?.commitment && mine.data.txStatus !== "none" && mine.data.txStatus !== "failed";
+  const lockedNotice =
+    !open && user && mine.isFetched && !sealedPicks
+      ? sealed
+        ? "Your sealed picks appear here once they are revealed, shortly after kickoff."
+        : "You did not seal picks for this matchweek."
+      : null;
 
   const days = useMemo(() => {
     const groups: { day: string; items: MatchweekDTO["fixtures"] }[] = [];
@@ -557,7 +560,12 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
               <p>
                 <b className="font-medium">Unsealed changes.</b> Re-seal before kickoff to keep them.
               </p>
-              <button type="button" className="underline underline-offset-4" onClick={() => setPicks({ home: [...sealedPicks!.home], away: [...sealedPicks!.away], banker: sealedPicks!.banker ?? null })}>
+              <button type="button" className="underline underline-offset-4" onClick={() => {
+                  // Saved too, so the unsealed draft does not come back on reload (audit B18).
+                  const back: Picks = { home: [...sealedPicks!.home], away: [...sealedPicks!.away], banker: sealedPicks!.banker ?? null };
+                  setPicks(back);
+                  persist(back);
+                }}>
                 Undo my changes
               </button>
             </div>
@@ -567,6 +575,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
         {/* Slip and side panels. On phones the panels flow under the board and the Seal bar stays pinned. */}
         <aside className="contents lg:sticky lg:top-20 lg:block lg:space-y-4">
+          {lockedNotice ? <p className="rounded-2xl border border-line bg-subtle px-4 py-3 text-[14px] text-ink-2">{lockedNotice}</p> : null}
           {live.data?.started ? (
             <div className="max-lg:order-first">
               <LiveCentre live={live.data} />

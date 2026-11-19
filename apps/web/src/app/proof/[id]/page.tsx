@@ -1,3 +1,4 @@
+import { rulesVersion } from "@northeside/scoring";
 import { proofData } from "@northeside/core";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -6,7 +7,7 @@ import { formatUnits } from "viem";
 import type { ReactNode } from "react";
 import { Container, ExtLink, PageHeader, Pill } from "@/components/ui";
 import { VerifyWidget } from "@/components/verify-widget";
-import { safely } from "@/lib/server/configured";
+import { loadOrFail, safely } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 import { schema } from "@northeside/db";
 import { desc, ne } from "drizzle-orm";
@@ -59,7 +60,7 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
   const id = Number((await params).id);
   const pageNo = Math.max(1, Number((await searchParams).page ?? 1) || 1);
   if (!Number.isInteger(id)) notFound();
-  const data = await safely(() => proofData(getCtx(), id), null);
+  const data = await loadOrFail(() => proofData(getCtx(), id), null);
   if (!data) notFound();
   const ctx = getCtx();
   const m = data.matchweek;
@@ -121,7 +122,7 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
           <Row k="Fixtures root">
             <Hash v={m.fixturesRoot} /> <span className="ml-2 text-[13px]">created {tx(m.createTx)}</span>
           </Row>
-          <Row k="Scoring rules (v1)">
+          <Row k={`Scoring rules (${m.scoringRulesHash ? (() => { try { return `v${rulesVersion(m.scoringRulesHash)}`; } catch { return "unknown version"; } })() : "not set"})`}>
             <Hash v={m.scoringRulesHash} />
           </Row>
           <Row k="Results root">

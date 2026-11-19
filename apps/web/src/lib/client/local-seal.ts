@@ -7,7 +7,39 @@ export type Picks = { home: (number | null)[]; away: (number | null)[]; banker?:
 export const sealedKey = (mw: number, wallet: string) => `ns_sealed_${mw}_${wallet.toLowerCase()}`;
 /** A seal whose transaction has not succeeded yet. Promoted to sealedKey only after its receipt (audit B6). */
 export const pendingKey = (mw: number, wallet: string) => `ns_pending_${mw}_${wallet.toLowerCase()}`;
-export const draftKey = (mw: number) => `ns_draft_${mw}`;
+/** Drafts on this device belong to one wallet (audit B14); a signed-out guest has its own slot. */
+export const draftKey = (mw: number, wallet?: string | null) => (wallet ? `ns_draft_${mw}_${wallet.toLowerCase()}` : `ns_draft_${mw}`);
+
+/**
+ * This wallet's draft on this device. A guest draft (picks made before signing in) is adopted once by
+ * the account that signs in, then removed, so it can never reach a second account.
+ */
+export function readDraft(mw: number, wallet?: string | null): Picks | null {
+  const parse = (k: string) => {
+    try {
+      return JSON.parse(localStorage.getItem(k) ?? "null") as Picks | null;
+    } catch {
+      return null;
+    }
+  };
+  const own = parse(draftKey(mw, wallet));
+  if (own || !wallet) return own;
+  const guest = parse(draftKey(mw));
+  if (guest) {
+    localStorage.setItem(draftKey(mw, wallet), JSON.stringify(guest));
+    localStorage.removeItem(draftKey(mw));
+  }
+  return guest;
+}
+
+export function writeDraft(mw: number, wallet: string | null | undefined, picks: Picks) {
+  localStorage.setItem(draftKey(mw, wallet), JSON.stringify(picks));
+}
+
+/** On sign-out: no draft stays on a shared device for the next person (audit B14). */
+export function clearDrafts() {
+  for (const k of Object.keys(localStorage)) if (k.startsWith("ns_draft_")) localStorage.removeItem(k);
+}
 
 export interface LocalSeal {
   payload: SealedPayload;

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { LiveCentre, type LiveDTO, type MatchweekDTO } from "./matchweek";
-import { Card } from "./ui";
+import { Card, LoadError } from "./ui";
 import { api } from "@/lib/client/api";
 import { useMounted } from "@/lib/client/use-mounted";
 
@@ -35,7 +35,8 @@ export function LiveBoard({ mw }: { mw: MatchweekDTO }) {
             {started ? "Scores update every 30 seconds" : first ? `Kicks off ${new Date(first).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", ...(mounted ? {} : WAT) })}` : "No games yet"}
           </p>
         </header>
-        {groups.map(([title, items]) =>
+        {live.isError ? <LoadError what="live scores" onRetry={() => void live.refetch()} /> : null}
+        {(live.isError ? [] : groups).map(([title, items]) =>
           items.length ? (
             <Card key={title} className="overflow-hidden p-0 sm:p-0">
               <h2 className="flex items-center gap-2 border-b border-line bg-subtle px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">

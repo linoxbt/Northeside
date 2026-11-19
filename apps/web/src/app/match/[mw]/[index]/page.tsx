@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MatchDetail } from "@/components/match-detail";
 import { Container } from "@/components/ui";
-import { safely } from "@/lib/server/configured";
+import { loadOrFail } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 import { getSession } from "@/lib/server/session";
 
@@ -14,7 +14,7 @@ async function load(mw: string, index: string) {
   const i = Number(index);
   if (!Number.isInteger(id) || id < 0 || !Number.isInteger(i) || i < 0 || i > 31) return null;
   const session = await getSession().catch(() => null);
-  return safely(() => matchView(getCtx(), id, i, session ? { userId: session.userId } : null), null);
+  return loadOrFail(() => matchView(getCtx(), id, i, session ? { userId: session.userId } : null), null);
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ mw: string; index: string }> }): Promise<Metadata> {

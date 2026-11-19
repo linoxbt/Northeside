@@ -79,30 +79,6 @@ export function applySelection(current: Score | null, sel: Selection): Score {
   return best!;
 }
 
-/** Crowd odds: 1 ÷ the share of players on a selection, two decimals; null if nobody is on it. */
-export function crowdOdds(count: number, total: number): string | null {
-  if (total <= 0 || count <= 0) return null;
-  return (Math.floor((total / count) * 100) / 100).toFixed(2);
-}
-
-/** How many crowd picks satisfy each selection, from the exact-score distribution. */
-export function crowdCount(scores: { home: number; away: number; count: number }[], sel: Selection): number {
-  return scores.filter((s) => satisfies(s, sel)).reduce((a, s) => a + s.count, 0);
-}
-
-/** Correct-score grid, SportyBet-style: home-win scores, draws, away-win scores. */
-export const CORRECT_SCORES: Record<Outcome, Score[]> = {
-  home: [
-    [1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2], [4, 3],
-  ].map(([home, away]) => ({ home: home!, away: away! })),
-  draw: [
-    [0, 0], [1, 1], [2, 2], [3, 3], [4, 4],
-  ].map(([home, away]) => ({ home: home!, away: away! })),
-  away: [
-    [0, 1], [0, 2], [1, 2], [0, 3], [1, 3], [2, 3], [0, 4], [1, 4], [2, 4], [3, 4],
-  ].map(([home, away]) => ({ home: home!, away: away! })),
-};
-
 // ------------------------------------------------------------------ odds engine (client side)
 
 
@@ -117,13 +93,6 @@ export function marketGrid(xg: { home: number; away: number } | null | undefined
   const g = Array.from({ length: GRID_MAX + 1 }, () => Array<number>(GRID_MAX + 1).fill(0));
   for (const c of crowd) g[Math.min(c.home, GRID_MAX)]![Math.min(c.away, GRID_MAX)]! += c.count / n;
   return g;
-}
-
-/** Probability and fair decimal odds of a selection on a grid. */
-export function selectionOdds(grid: number[][] | null, sel: Selection): { p: number; odds: string } | null {
-  if (!grid) return null;
-  const p = probabilityOf(grid, (home, away) => satisfies({ home, away }, sel));
-  return p > 0 ? { p, odds: fairOdds(p) } : null;
 }
 
 /** 1X2 for the board: model probability blended with the crowd's result counts (k = 30 pseudo-picks). */

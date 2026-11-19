@@ -398,7 +398,7 @@ function Live() {
 
 function ErrorLine({ text }: { text: string }) {
   return (
-    <p role="alert" className="mt-5 text-center text-[14px] text-[#ff8a80]">
+    <p role="alert" className="mt-5 text-center text-[14px] text-bad">
       {text}
     </p>
   );

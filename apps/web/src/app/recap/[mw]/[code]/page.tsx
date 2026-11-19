@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RecapShare, RememberInvite } from "@/components/recap-share";
 import { Container } from "@/components/ui";
-import { safely } from "@/lib/server/configured";
+import { loadOrFail } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ async function load(mwRaw: string, codeRaw: string): Promise<{ recap: Recap; cod
   const mw = Number(mwRaw);
   const code = codeRaw.toLowerCase();
   if (!Number.isInteger(mw)) return null;
-  return safely(async () => {
+  return loadOrFail(async () => {
     const ctx = getCtx();
     const u = await userByInviteCode(ctx, code);
     const recap = u ? await recapFor(ctx, mw, u.id) : null;

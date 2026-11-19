@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { H2HBoard } from "@/components/h2h";
 import { Container } from "@/components/ui";
-import { safely } from "@/lib/server/configured";
+import { loadOrFail } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 import { getSession } from "@/lib/server/session";
 
@@ -14,7 +14,7 @@ export default async function H2HPage({ params }: { params: Promise<{ code: stri
   const code = (await params).code;
   if (!/^[a-z2-9]{10}$/.test(code)) notFound();
   const session = await getSession().catch(() => null);
-  const view = await safely(() => challengeView(getCtx(), code, session?.userId), null);
+  const view = await loadOrFail(() => challengeView(getCtx(), code, session?.userId), null);
   if (!view) notFound();
   return (
     <Container className="pb-24">

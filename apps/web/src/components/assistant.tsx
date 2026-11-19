@@ -109,10 +109,10 @@ export function Assistant({ focus, className = "" }: { focus?: AssistantFocus; c
               </p>
             </li>
           ) : null}
-          <div ref={endRef} />
         </ol>
       ) : null}
 
+      <div ref={endRef} aria-hidden />
       {!signedIn ? (
         <p className="mt-4 text-[14px] text-ink-2">
           <Link href={`/sign-in?next=${encodeURIComponent(path)}`} prefetch={false} className="font-medium text-accent-deep underline underline-offset-4">

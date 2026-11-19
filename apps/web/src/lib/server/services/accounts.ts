@@ -2,6 +2,7 @@ import "server-only";
 import { schema } from "@northeside/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getCtx } from "../ctx";
+import { validInviteKey } from "./leagues";
 import { HttpError } from "../api";
 
 export async function walletsOf(userId: string) {
@@ -21,11 +22,15 @@ export async function requireAdult(userId: string) {
   if (!u?.at) throw new HttpError(403, "adult_required", "Confirm you are 18 or older first");
 }
 
-export async function joinLeague(userId: string, slug: string, source: string | null) {
+export async function joinLeague(userId: string, slug: string, source: string | null, inviteKey?: string | null) {
   const { db } = getCtx();
   await requireAdult(userId);
   const [league] = await db.select().from(schema.leagues).where(sql`lower(${schema.leagues.slug}) = ${slug.toLowerCase()}`);
   if (!league) throw new HttpError(404, "league_not_found", "League not found");
+  // A private league needs its invite key; the host is always let in (audit M7).
+  if (league.privacy === "private" && league.hostUserId !== userId && !validInviteKey(league.id, inviteKey)) {
+    throw new HttpError(404, "league_not_found", "League not found");
+  }
   await db.insert(schema.leagueMembers).values({ leagueId: league.id, userId, source }).onConflictDoNothing();
   await db
     .update(schema.users)

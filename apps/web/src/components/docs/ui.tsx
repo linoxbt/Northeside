@@ -51,14 +51,6 @@ export function H2({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
-export function H3({ id, children }: { id: string; children: ReactNode }) {
-  return (
-    <h3 id={id} className="scroll-mt-28 pt-2 text-[18px] font-medium tracking-[-0.015em] text-ink">
-      {children}
-    </h3>
-  );
-}
-
 export function P({ children }: { children: ReactNode }) {
   return <p className="text-[16px] leading-7 text-ink-2">{children}</p>;
 }

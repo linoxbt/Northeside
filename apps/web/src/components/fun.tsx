@@ -223,9 +223,9 @@ export function PlayerCard({ name, badgeSlot, badgeError }: { name: string; badg
             ["Badges", `${earnedCount}/${card.badges.length}`],
             ["Squad", squad.sealed],
           ].map(([k, v]) => (
-            <div key={k} className="px-2 py-3">
-              <dd className="font-mono text-[18px] tabular-nums">{v}</dd>
+            <div key={k} className="flex flex-col-reverse px-2 py-3">
               <dt className="text-[11px] text-white/50">{k}</dt>
+              <dd className="font-mono text-[18px] tabular-nums">{v}</dd>
             </div>
           ))}
         </dl>
@@ -352,9 +352,9 @@ export function SealCelebration({ moment, onClose }: { moment: SealMoment; onClo
             ["Upset calls", moment.bold],
             ["Streak", streak ? `🔥 ${streak}` : "1"],
           ].map(([k, v]) => (
-            <div key={k} className="rounded-xl bg-subtle px-2 py-2.5">
-              <dd className="font-mono text-[18px] tabular-nums">{v}</dd>
+            <div key={k} className="flex flex-col-reverse rounded-xl bg-subtle px-2 py-2.5">
               <dt className="text-[11px] text-muted">{k}</dt>
+              <dd className="font-mono text-[18px] tabular-nums">{v}</dd>
             </div>
           ))}
         </dl>

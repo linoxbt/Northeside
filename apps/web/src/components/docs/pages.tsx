@@ -35,7 +35,6 @@ function ContractsTable() {
         [<b key="i" className="font-medium text-ink">IdentityAdapter</b>, <Addr key="ia" a={publicEnv.identity} />, "Links a wallet to one person (EIP-712 attestation); up to 3 wallets per person"],
         [<b key="q" className="font-medium text-ink">QUSDC</b>, <Addr key="qa" a={publicEnv.qusdc} />, "QIE stablecoin for sponsor payments (6 decimals)"],
         [<b key="b" className="font-medium text-ink">NorthesideBadges</b>, <Addr key="ba" a={publicEnv.badges} />, "Soulbound ERC-1155 achievement badges, minted by players with Merkle proofs"],
-        [<b key="n" className="font-medium text-ink">NSDRewards</b>, <Addr key="na" a={publicEnv.nsdRewards} />, "Season rewards for verified top players (not live)"],
         [<b key="r" className="font-medium text-ink">QIE ID registry (QIE)</b>, <Addr key="ra" a={qieIdRegistry} />, "Read only: a wallet's .qie name and a name's owner"],
       ]}
     />
@@ -403,7 +402,7 @@ function Results() {
 function Identity() {
   return (
     <>
-      <P>Leaderboards, host payouts and future rewards count each person once, however many wallets they use.</P>
+      <P>Leaderboards and host payouts count each person once, however many wallets they use.</P>
       <H2 id="attestation">Attestation</H2>
       <P>
         IdentityAdapter stores <Mono>wallet → personHash</Mono> from an EIP-712 attestation signed by the Northeside attester and submitted from the
@@ -545,7 +544,6 @@ function Overview() {
           ["QIE ID .qie names", "Live"],
           ["QIE ID verification (one person, one player)", "Awaiting partner access from the QIE ID team"],
           ["On-chain, non-transferable achievement badges", "Built and tested; deployment pending"],
-          ["$NSD season rewards for top verified players", "Designed; launches only after verification and legal review"],
         ]}
       />
       <H2 id="principles">Principles</H2>

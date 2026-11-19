@@ -111,7 +111,9 @@ export function Profile() {
   return (
     <div className="space-y-4">
       <PlayerCard name={user.qieId ?? user.displayName ?? short(session.data!.wallet!)} badgeSlot={badgeMint.slot} badgeError={badgeMint.error} />
-      <NsdRewards />
+      {/* $NSD player rewards are not live (CLAUDE.md decision 1): the claim UI is left out of the bundle
+          unless the launch flag is set at build time (audit S11). */}
+      {process.env.NEXT_PUBLIC_NSD_REWARDS_LIVE === "1" ? <NsdRewards /> : null}
       <Card className="space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="display text-[36px] sm:text-[44px]">Your profile</h1>
@@ -238,7 +240,10 @@ export function Profile() {
       <Card className="space-y-2">
         <h2 className="text-[20px] tracking-[-0.02em]">Your data</h2>
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={() => void signOut()}>Sign out</Button>
+          {/* Sign-out ends the session on every device (audit S13); failures are shown, not swallowed. */}
+          <Button variant="ghost" onClick={() => void signOut().catch((e) => setErr(e instanceof Error ? e.message : "Could not sign out. Try again."))}>
+            Sign out on all devices
+          </Button>
           {confirmDelete ? null : (
             <Button variant="danger" onClick={() => setConfirmDelete(true)}>
               Delete account

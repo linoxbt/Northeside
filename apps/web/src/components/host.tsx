@@ -8,7 +8,7 @@ import { safeGas } from "@/lib/client/gas";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { txError } from "@/lib/client/tx-errors";
 import { AdultGate, PanelSkeleton, SignInPanel } from "./sign-in";
-import { Button, Card, ExtLink, Pill } from "./ui";
+import { Button, Card, ExtLink, LoadError, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { chain, publicEnv, txUrl } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
@@ -38,6 +38,8 @@ export function HostDashboard() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
+  const [privacy, setPrivacy] = useState<"public" | "private">("public");
+  const [creating, setCreating] = useState(false);
   const { address, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const [err, setErr] = useState<string | null>(null);
@@ -70,15 +72,19 @@ export function HostDashboard() {
 
   async function create() {
     setErr(null);
+    setCreating(true);
     try {
-      await api("/api/v1/leagues", { method: "POST", json: { name, slug } });
+      await api("/api/v1/leagues", { method: "POST", json: { name, slug, privacy } });
       track("host_league_created", { league_slug: slug });
       setName("");
       setSlug("");
       setSlugEdited(false);
+      setPrivacy("public");
       await qc.invalidateQueries({ queryKey: ["host"] });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -128,12 +134,33 @@ export function HostDashboard() {
           <input value={slug} maxLength={32} aria-invalid={slug.length > 0 && !SLUG_OK.test(slug)} onChange={(e) => { setSlugEdited(true); setSlug(toSlug(e.target.value)); }} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
           {slug.length > 0 && !SLUG_OK.test(slug) ? <span className="mt-1 block text-[13px] text-bad">3-32 letters or numbers, with dashes between words.</span> : null}
         </label>
-        <Button className="w-full" disabled={name.trim().length < 3 || !SLUG_OK.test(slug)} onClick={() => void create()}>Create league</Button>
+        {/* FR-18: private leagues are unlisted; only people with the invite link can join (audit M7). */}
+        <fieldset className="space-y-2">
+          <legend className="text-[14px] text-muted">Who can join</legend>
+          {(
+            [
+              ["public", "Public", "Listed in the league directory; anyone can join."],
+              ["private", "Private", "Unlisted; only people with your invite link can find or join it."],
+            ] as const
+          ).map(([v, label, hint]) => (
+            <label key={v} className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2.5 ${privacy === v ? "border-ink" : "border-line"}`}>
+              <input type="radio" name="privacy" value={v} checked={privacy === v} onChange={() => setPrivacy(v)} className="mt-1" />
+              <span>
+                <span className="block text-[15px] font-medium">{label}</span>
+                <span className="block text-[13px] text-muted">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <Button className="w-full" disabled={creating || name.trim().length < 3 || !SLUG_OK.test(slug)} onClick={() => void create()}>
+          {creating ? "Creating…" : "Create league"}
+        </Button>
         <p className="text-xs text-muted">Payouts go to this wallet. Creating a league accepts the <a className="underline" href="/docs/host-terms">host terms</a>.</p>
         {err ? <p role="alert" className="text-sm text-bad">{err}</p> : null}
       </Card>
 
       <div className="space-y-6">
+      {data.isError ? <LoadError what="your leagues and earnings" onRetry={() => void data.refetch()} /> : null}
       {d && d.leagues.length === 0 ? (
         <div className="rounded-[var(--radius-card)] border border-dashed border-line-strong px-6 py-14 text-center text-muted">Your leagues and their numbers appear here.</div>
       ) : null}

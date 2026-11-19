@@ -64,7 +64,9 @@ export function qieTransport(chain: Chain, urls?: readonly string[]): Transport 
   if (list.length === 1) return http(list[0], { timeout: 8_000, retryCount: 2 });
   return fallback(
     list.map((url) => http(url, { timeout: 8_000, retryCount: 2 })),
-    { rank: chain.id !== localChain.id },
+    // Ranking pings every endpoint every few seconds: worth it on the server, but in the browser it
+    // costs players' mobile data on every wallet page (audit P4). Browsers fall back in list order.
+    { rank: chain.id !== localChain.id && typeof window === "undefined" },
   );
 }
 

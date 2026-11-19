@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ButtonLink, Card, Pill } from "./ui";
 import { api } from "@/lib/client/api";
+import { publicEnv } from "@/lib/client/env";
 
 /** Head-to-head: both players side by side; picks after lock; live, then final, points. */
 export function H2HBoard({ view, signedIn }: { view: H2HView; signedIn: boolean }) {
@@ -125,7 +126,7 @@ function Points({ f }: { f: { points: number } }) {
 
 function ShareLink({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
-  const url = typeof window === "undefined" ? `/h2h/${code}` : `${window.location.origin}/h2h/${code}`;
+  const url = `${publicEnv.siteUrl}/h2h/${code}`; // same on server and client (audit B18: hydration)
   async function share() {
     if (navigator.share) await navigator.share({ title: "Northeside head-to-head", url }).catch(() => {});
     else {

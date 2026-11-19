@@ -3,6 +3,7 @@
 import type { Recap } from "@northeside/core";
 import { useEffect, useState } from "react";
 import { track } from "@/lib/client/api";
+import { publicEnv } from "@/lib/client/env";
 
 /** The recap URL doubles as an invite: a visitor who signs up from it is credited to the player. */
 export function RememberInvite({ code }: { code: string }) {
@@ -25,7 +26,8 @@ export function recapText(r: Recap) {
 
 export function RecapShare({ recap, code }: { recap: Recap; code: string }) {
   const [copied, setCopied] = useState(false);
-  const url = (src?: string) => `${typeof window !== "undefined" ? window.location.origin : ""}/recap/${recap.matchweekId}/${code}${src ? `?src=${src}` : ""}`;
+  // The configured site URL, identical on the server and in the browser (audit B18: hydration).
+  const url = (src?: string) => `${publicEnv.siteUrl}/recap/${recap.matchweekId}/${code}${src ? `?src=${src}` : ""}`;
   const text = recapText(recap);
   const links = [
     ["WhatsApp", `https://wa.me/?text=${encodeURIComponent(`${text}\n${url("whatsapp")}`)}`],

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useCard } from "./fun";
 import { SignInPanel } from "./sign-in";
-import { Card, Pill } from "./ui";
+import { Card, LoadError, Pill } from "./ui";
 import { api } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 
@@ -41,7 +41,8 @@ export function MySlips() {
         </p>
       </header>
       {q.isLoading ? <Card className="h-24 animate-pulse">{null}</Card> : null}
-      {!q.isLoading && slips.length === 0 ? (
+      {q.isError ? <LoadError what="your slips" onRetry={() => void q.refetch()} /> : null}
+      {!q.isLoading && !q.isError && slips.length === 0 ? (
         <Card className="space-y-3 py-8 text-center">
           <p className="text-[17px]">No slips yet.</p>
           <Link href="/" className="inline-flex min-h-10 items-center rounded-full bg-accent px-4 text-[14px] font-medium text-accent-ink">

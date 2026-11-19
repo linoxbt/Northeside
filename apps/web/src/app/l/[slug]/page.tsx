@@ -5,15 +5,18 @@ import { Board } from "@/components/board";
 import { JoinLeague } from "@/components/join-league";
 import { Container, Eyebrow } from "@/components/ui";
 import { getCtx } from "@/lib/server/ctx";
-import { safely } from "@/lib/server/configured";
+import { loadOrFail, safely } from "@/lib/server/configured";
 import { leagueBySlug, canSeeLeagueBoard } from "@/lib/server/services/leagues";
 import { getSession } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ k?: string }> };
+
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const league = await safely(() => leagueBySlug(slug), null);
+  const { k } = await searchParams;
+  const league = await loadOrFail(() => leagueBySlug(slug, { key: k ?? null }), null);
   if (!league) return { title: "League not found" };
   const image = `/api/v1/og/league/${league.slug}`;
   return {
@@ -24,11 +27,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function LeaguePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function LeaguePage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const league = await safely(() => leagueBySlug(slug), null);
-  if (!league) notFound();
+  const { k } = await searchParams;
   const viewer = await safely(async () => (await getSession())?.userId ?? null, null);
+  // A private league is invisible without membership or its invite key (audit M7).
+  const league = await loadOrFail(() => leagueBySlug(slug, { userId: viewer, key: k ?? null }), null);
+  if (!league) notFound();
   const visible = await safely(() => canSeeLeagueBoard(slug, viewer), false);
   const rows = visible ? await safely(() => leaderboard(getCtx(), { season: getCtx().season }, { leagueSlug: slug, limit: 100 }), []) : [];
   return (
@@ -44,7 +49,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
             {[
               ["Players", String(league.members)],
               ["Entry", "Free"],
-              ["Picks", "10 a week"],
+              ["Picks", "Every game"],
             ].map(([k, v]) => (
               <div key={k}>
                 <dt className="eyebrow">{k}</dt>
@@ -54,7 +59,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
           </dl>
         </div>
         <div className="lg:pt-6">
-          <JoinLeague slug={league.slug} name={league.name} />
+          <JoinLeague slug={league.slug} name={league.name} inviteKey={league.inviteKey ?? k ?? null} isPrivate={league.privacy === "private"} />
         </div>
       </div>
       <section className="mt-20">

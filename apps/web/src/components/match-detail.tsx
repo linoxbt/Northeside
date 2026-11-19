@@ -10,7 +10,7 @@ import { probabilityOf } from "@northeside/odds/grid";
 import { crowdBonus, explainPick, explainResult } from "@northeside/scoring";
 import { applySelection, marketGrid, satisfies, type Score, type Selection } from "@/lib/markets";
 import { api, track } from "@/lib/client/api";
-import { draftKey, type Picks } from "@/lib/client/local-seal";
+import { readDraft, writeDraft, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
 import { useMounted } from "@/lib/client/use-mounted";
 
@@ -54,15 +54,10 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
     try {
       const n = v.fixtureCount;
       const server = await api<{ prediction: { draft: Picks | null } | null }>(`/api/v1/predictions/${v.matchweekId}/me`).catch(() => null);
-      let local: Picks | null = null;
-      try {
-        local = JSON.parse(localStorage.getItem(draftKey(v.matchweekId)) ?? "null") as Picks | null;
-      } catch {
-        local = null;
-      }
+      const local: Picks | null = readDraft(v.matchweekId, session.data?.wallet);
       const base: Picks = server?.prediction?.draft ?? local ?? { home: Array(n).fill(null), away: Array(n).fill(null), banker: null };
       const draft: Picks = { ...base, home: base.home.map((x, i) => (i === v.index ? next.home : x)), away: base.away.map((x, i) => (i === v.index ? next.away : x)) };
-      localStorage.setItem(draftKey(v.matchweekId), JSON.stringify(draft));
+      writeDraft(v.matchweekId, session.data?.wallet, draft);
       await api("/api/v1/predictions/draft", { method: "POST", json: { matchweekId: v.matchweekId, ...draft } });
       track("market_tapped", { matchweek_id: v.matchweekId, market: sel.market });
       setNote(v.mine?.sealed ? "Draft updated. Re-seal on the board to keep it." : "Added to your slip. Seal it on the board.");

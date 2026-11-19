@@ -136,3 +136,17 @@ export function Logo() {
     </span>
   );
 }
+
+/** A query that failed: say so and offer a retry, never an empty state (audit B13). */
+export function LoadError({ what, onRetry, className = "" }: { what: string; onRetry?: () => void; className?: string }) {
+  return (
+    <div role="alert" className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-3 text-[14px] text-ink-2 ${className}`}>
+      <span>Could not load {what}. Check your connection.</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="inline-flex min-h-9 items-center rounded-full border border-line bg-white px-4 text-[13px] font-medium">
+          Try again
+        </button>
+      ) : null}
+    </div>
+  );
+}

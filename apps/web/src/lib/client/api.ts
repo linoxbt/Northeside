@@ -17,8 +17,17 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, data?.error ?? "error", data?.message ?? `Request failed (${res.status})`);
+  // A gateway error page (HTML) or an empty body must not surface as "Unexpected token <" (audit B13).
+  let data: { error?: string; message?: string } | null = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    if (res.ok) throw new ApiError(res.status, "bad_response", "Unexpected response from Northeside. Try again.");
+  }
+  if (!res.ok) {
+    const fallback = res.status >= 500 ? "Northeside is having trouble right now. Try again in a moment." : `Request failed (${res.status})`;
+    throw new ApiError(res.status, data?.error ?? "error", data?.message ?? fallback);
+  }
   return data as T;
 }
 

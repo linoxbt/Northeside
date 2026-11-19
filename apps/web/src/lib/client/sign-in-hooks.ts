@@ -1,5 +1,6 @@
 "use client";
 
+import { clearDrafts } from "./local-seal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { createSiweMessage } from "viem/siwe";
@@ -67,6 +68,7 @@ export function useSignIn() {
 
   const signOut = useCallback(async () => {
     await api("/api/v1/session", { method: "DELETE" });
+    clearDrafts();
     await bridge.logout().catch(() => {});
     await disconnectAsync().catch(() => {});
     await qc.invalidateQueries();

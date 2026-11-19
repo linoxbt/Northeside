@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { track } from "@/lib/client/api";
@@ -353,10 +352,3 @@ export function Helpful({ slug }: { slug: string }) {
   );
 }
 
-export function ActiveLink({ href, active, children, className }: { href: string; active: boolean; children: ReactNode; className: string }) {
-  return (
-    <Link href={href} aria-current={active ? "page" : undefined} className={className}>
-      {children}
-    </Link>
-  );
-}
