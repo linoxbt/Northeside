@@ -47,6 +47,7 @@ export const CURRENT_RULES_HASH: Hex = RULES_V2_HASH;
 export function rulesVersion(scoringRulesHash: string | null | undefined): 1 | 2 {
   const h = (scoringRulesHash ?? "").toLowerCase();
   if (h === RULES_V2_HASH.toLowerCase()) return 2;
-  if (h === RULES_V1_HASH.toLowerCase() || h === "") return 1;
-  throw new Error(`Unknown scoring rules hash ${scoringRulesHash}`);
+  if (h === RULES_V1_HASH.toLowerCase()) return 1;
+  // A missing hash means the matchweek row is incomplete; guessing v1 would reject every v2 seal (audit B3).
+  throw new Error(scoringRulesHash ? `Unknown scoring rules hash ${scoringRulesHash}` : "Matchweek has no scoring rules hash yet");
 }

@@ -412,6 +412,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
 
       await expect(revealMatchweek(ctx, 11)).rejects.toThrow(/not locked/);
       await advance(3 * 24 * 3600 + 30 * 3600);
+      await mine(); // reveals read a confirmed block after lock (audit B6)
       const rev = await revealMatchweek(ctx, 11);
       expect(rev).toMatchObject({ revealed: 3, valid: 3, invalid: 0 });
 
@@ -605,6 +606,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       // p3 re-seals; the server only saw it as pending (no receipt yet). The chain holds the re-seal.
       await sealPending(KEYS.p3, 12, [2, 2, 2], [2, 2, 2]);
       await advance(3 * 24 * 3600 + 30 * 3600);
+      await mine(); // reveals read a confirmed block after lock (audit B6)
       providers.results.set(
         12,
         fixturesFor(12, start12).map((f) => ({ externalId: f.externalId, home: f.home, away: f.away, kickoff: f.kickoff, status: "played" as const, homeGoals: 1, awayGoals: 0 })),

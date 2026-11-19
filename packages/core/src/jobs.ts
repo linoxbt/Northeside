@@ -1,6 +1,6 @@
 import { schema } from "@northeside/db";
 import { applyMigrations } from "@northeside/db/migrations";
-import { and, asc, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { dripConfigFromEnv, dripHealth } from "./drip";
 import { indexChain } from "./indexer";
@@ -80,7 +80,8 @@ function withAlerts<J extends Record<string, (params?: URLSearchParams) => Promi
       } catch (e) {
         const ctx = getCtx();
         const message = e instanceof Error ? e.message : String(e);
-        await ctx.alert(`job ${name} failed: ${message.slice(0, 300)}`);
+        // runJob already alerted for failures inside it; do not page twice (audit B5).
+        if (!(e as { alerted?: boolean } | null)?.alerted) await ctx.alert(`job ${name} failed: ${message.slice(0, 300)}`);
         await reportError(e, { job: name });
         throw e;
       }
@@ -202,6 +203,16 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
       });
       if (r.status === "ok") await ctx.alert(`matchweek ${mw.id} opened on-chain; locks ${mw.lockTime.toISOString()}`);
       return { id: mw.id, ...r };
+    }).then(async (opened) => {
+      // Repair: a matchweek opened on-chain whose own database write never happened (crash after
+      // the transaction) has no fixtures tree. Creating again is idempotent: it checks the on-chain
+      // root against the stored fixtures and writes the missing fields (audit B3).
+      const broken = await ctx.db
+        .select({ id: schema.matchweeks.id })
+        .from(schema.matchweeks)
+        .where(and(eq(schema.matchweeks.status, "open"), or(isNull(schema.matchweeks.fixturesTree), isNull(schema.matchweeks.scoringRulesHash))));
+      const repaired = await each(broken, async (mw) => ({ id: mw.id, ...(await runJob(ctx, "repair-matchweek", `${mw.id}:${ctx.now().toISOString().slice(0, 13)}`, () => createMatchweekOnChain(ctx, mw.id))) }));
+      return { opened, repaired };
     });
   },
 

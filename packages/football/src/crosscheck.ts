@@ -117,11 +117,8 @@ export function crossCheck(fixtures: Fixture[], primary: MatchResult[], secondar
       rows.push({ index: f.index, fixture: f, state: "missing", detail: "not in primary source" });
       continue;
     }
-    if (!s) {
-      rows.push({ index: f.index, fixture: f, state: "missing", detail: "not in secondary source", primary: p });
-      continue;
-    }
-    // FR-09 and lock integrity, decided from the primary source's current schedule.
+    // FR-09 and lock integrity, decided from the primary source's current schedule, before checking
+    // the secondary: a postponed game it no longer lists must not block results (audit B9).
     const voidReason =
       window.lockTime !== undefined && p.kickoff < window.lockTime - 60
         ? "kicked off before the on-chain lock"
@@ -132,6 +129,10 @@ export function crossCheck(fixtures: Fixture[], primary: MatchResult[], secondar
       const result: CheckedFixture = { index: f.index, externalId: f.externalId, home: f.home, away: f.away, status: "void", homeGoals: 0, awayGoals: 0, reason: voidReason };
       rows.push({ index: f.index, fixture: f, state: "agree", result });
       results.push(result);
+      continue;
+    }
+    if (!s) {
+      rows.push({ index: f.index, fixture: f, state: "missing", detail: "not in secondary source", primary: p });
       continue;
     }
     if (p.status === "pending" || s.status === "pending") {

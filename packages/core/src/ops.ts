@@ -100,9 +100,25 @@ export async function runJob(
       .where(and(eq(schema.jobRuns.job, job), eq(schema.jobRuns.runKey, runKey)));
     ctx.log.error(`job ${job} failed`, { runKey, error: message });
     await ctx.alert(`job ${job} (${runKey}) failed: ${message.slice(0, 300)}`);
+    // The job wrapper would alert again for the same failure (audit B5): mark it as reported.
+    if (e && typeof e === "object") (e as { alerted?: boolean }).alerted = true;
     throw e;
   }
 }
+
+/**
+ * Alert at most once per key (e.g. "drip-low:2026-11-19T06" for once per 6-hour block), so a
+ * standing condition does not page the operator every worker run (audit B5).
+ */
+export async function alertOnce(ctx: CoreContext, key: string, message: string) {
+  await runJob(ctx, "alert-once", key, async () => {
+    await ctx.alert(message);
+    return { message };
+  }).catch(() => {});
+}
+
+/** The current 6-hour block, as a key suffix for alertOnce. */
+export const sixHourBlock = (d: Date) => `${d.toISOString().slice(0, 11)}${String(Math.floor(d.getUTCHours() / 6) * 6).padStart(2, "0")}`;
 
 /**
  * Report a server error to Sentry when SENTRY_DSN is set, using the envelope HTTP API directly

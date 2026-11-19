@@ -65,15 +65,30 @@ export interface WorkerOptions {
  * production one pass per start (durationMs 0) keeps function compute within the plan; a longer
  * durationMs loops at the job cadences. A lease keeps two runs from overlapping.
  */
+/** A Netlify background function runs for at most 15 minutes; the lease must outlast any run. */
+const MAX_RUN_MS = 15 * 60_000;
+const LAST_RUN_KEY = "worker:last-run";
+
 export async function runWorker(getCtx: () => CoreContext, jobs: Jobs, opts: WorkerOptions) {
   const ctx = getCtx();
-  const release = await acquireLease(ctx, "ops-worker", opts.durationMs + 5 * 60_000);
+  // The lease covers the longest possible run, so a slow run never overlaps the next start (audit B5).
+  const release = await acquireLease(ctx, "ops-worker", Math.max(opts.durationMs, MAX_RUN_MS) + 60_000);
   if (!release) return { skipped: "another worker run holds the lease" };
   const tick = opts.tickMs ?? 15_000;
   const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const schedule = opts.schedule ?? WORKER_SCHEDULE;
   const started = Date.now();
-  const last = new Map<JobName, number>();
+  // Each job's last run is stored, so cadences hold across the separate one-pass runs that production
+  // starts every 5 minutes (audit B5).
+  const [saved] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, LAST_RUN_KEY));
+  const last = new Map<JobName, number>(Object.entries((saved?.value as Record<string, number> | undefined) ?? {}) as [JobName, number][]);
+  const persist = async () => {
+    const value = Object.fromEntries(last);
+    await ctx.db
+      .insert(schema.appSettings)
+      .values({ key: LAST_RUN_KEY, value })
+      .onConflictDoUpdate({ target: schema.appSettings.key, set: { value, updatedAt: new Date() } });
+  };
   const runs: { job: JobName; ok: boolean; error?: string }[] = [];
   try {
     // At least one pass; with durationMs 0 the run is exactly one pass of every due job.
@@ -83,6 +98,7 @@ export async function runWorker(getCtx: () => CoreContext, jobs: Jobs, opts: Wor
         const prev = last.get(name);
         if (prev !== undefined && Date.now() - prev < every) continue;
         last.set(name, Date.now());
+        await persist().catch(() => {});
         try {
           await (jobs[name] as (p?: URLSearchParams) => Promise<unknown>)(new URLSearchParams({ loops: "1" }));
           runs.push({ job: name, ok: true });

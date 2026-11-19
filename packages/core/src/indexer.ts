@@ -1,6 +1,6 @@
 import { hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { decodeEventLog, getAddress, type Abi, type Log } from "viem";
 import { bigintReplacer, type CoreContext } from "./context";
 
@@ -179,10 +179,19 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
       return;
     }
     case "MatchweekCreated":
+      // Every field the chain fixed, so a crash between the create transaction and the operator's own
+      // database write still leaves a usable matchweek (audit B3). The fixtures tree is rebuilt by the
+      // open-matchweeks job, which checks it against this root.
       await db
         .update(schema.matchweeks)
-        .set({ status: "open", createTx: txHash, fixturesRoot: String(a.fixturesRoot) })
-        .where(and(eq(schema.matchweeks.id, num(a.id)), eq(schema.matchweeks.status, "draft")));
+        .set({
+          status: "open",
+          createTx: txHash,
+          fixturesRoot: String(a.fixturesRoot),
+          lockTime: new Date(num(a.lockTime) * 1000),
+          scoringRulesHash: String(a.scoringRulesHash),
+        })
+        .where(and(eq(schema.matchweeks.id, num(a.id)), inArray(schema.matchweeks.status, ["draft", "open"])));
       return;
     case "ResultsProposed":
       await db

@@ -14,7 +14,7 @@ import { CURRENT_RULES_HASH, rank, rulesVersion, scoreEntries, type FixtureResul
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext } from "./context";
-import { audit, confirm, sendWrite } from "./ops";
+import { audit, confirm, runJob, sendWrite } from "./ops";
 
 /** On-chain Status enum in NorthesideMatchweeks. */
 export const ChainStatus = { None: 0, Open: 1, ResultsProposed: 2, Challenged: 3, Finalized: 4 } as const;
@@ -63,18 +63,23 @@ function fixtureLeaves(id: number, rows: Awaited<ReturnType<typeof getFixtures>>
   }));
 }
 
-/** A matchweek's games are those within this many seconds of the first kickoff. */
-export const MATCHWEEK_WINDOW_SECONDS = 7 * 24 * 3600;
+/** A matchweek's games are those within this many seconds of the middle of its kickoffs. */
+export const MATCHWEEK_WINDOW_SECONDS = 5 * 24 * 3600;
 
 /**
- * The matchweek window from kickoffs (unix s): first kickoff, and the last kickoff inside the window.
- * Games already rescheduled weeks out are outside it: they are voided rather than holding up
- * results for everyone (FR-09).
+ * The matchweek window from kickoffs (unix s), anchored on the median kickoff so that one game moved
+ * weeks earlier or later cannot drag the lock or the window with it (audit B4). first is the lock
+ * (the first kickoff inside the window); games outside it are voided at results rather than
+ * holding up everyone (FR-09).
  */
 export function matchWindow(kickoffs: number[]) {
-  const first = Math.min(...kickoffs);
-  const last = Math.max(...kickoffs.filter((k) => k <= first + MATCHWEEK_WINDOW_SECONDS));
-  return { first, last, end: last + 2 * 24 * 3600 };
+  if (kickoffs.length === 0) throw new Error("matchWindow: no kickoffs");
+  const sorted = [...kickoffs].sort((a, b) => a - b);
+  const anchor = sorted[Math.floor((sorted.length - 1) / 2)]!;
+  const inside = sorted.filter((k) => Math.abs(k - anchor) <= MATCHWEEK_WINDOW_SECONDS);
+  const first = inside[0]!;
+  const last = inside[inside.length - 1]!;
+  return { first, last, end: last + 2 * 24 * 3600, outside: sorted.length - inside.length };
 }
 
 // ---------------------------------------------------------------- import and create
@@ -84,7 +89,7 @@ export async function importFixtures(ctx: CoreContext, matchday: number) {
   const football = need(ctx.football, "football data providers");
   const fresh = await football.primary.fixtures(matchday, ctx.season);
   if (fresh.length === 0) throw new Error(`no fixtures returned for matchday ${matchday}`);
-  const lockTime = new Date(Math.min(...fresh.map((f) => f.kickoff)) * 1000);
+  const lockTime = new Date(matchWindow(fresh.map((f) => f.kickoff)).first * 1000);
 
   const [existing] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, matchday));
   if (existing && existing.status !== "draft") {
@@ -150,7 +155,17 @@ export async function refreshFixtures(ctx: CoreContext, firstMatchday: number) {
   const drafts = rows.filter((r) => r.status === "draft");
   for (const d of drafts) await attempt(d.id);
   for (const o of rows.filter((r) => r.status === "open" && r.lockTime > ctx.now())) await attempt(o.id);
-  if (drafts.length === 0) {
+  // A draft whose lock has passed can never open. Say so once, and do not let it hold up the next
+  // matchday (audit B4).
+  const fresh = await ctx.db.select({ id: schema.matchweeks.id, status: schema.matchweeks.status, lockTime: schema.matchweeks.lockTime }).from(schema.matchweeks);
+  const waiting = fresh.filter((r) => r.status === "draft" && r.lockTime > ctx.now());
+  for (const stale of fresh.filter((r) => r.status === "draft" && r.lockTime <= ctx.now())) {
+    await runJob(ctx, "stale-draft-alert", String(stale.id), async () => {
+      await ctx.alert(`matchweek ${stale.id} was never opened and its lock (${stale.lockTime.toISOString()}) has passed. It is skipped; the next matchday will be imported.`);
+      return { alerted: true };
+    });
+  }
+  if (waiting.length === 0) {
     const next = rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : firstMatchday;
     if (next <= 38) await attempt(next);
   }
@@ -165,7 +180,7 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
   const rows = await getFixtures(ctx, id);
   if (rows.length === 0) throw new Error(`matchweek ${id} has no fixtures`);
   const tree = buildFixturesTree(fixtureLeaves(id, rows));
-  const lockTime = BigInt(Math.min(...rows.map((r) => r.kickoff.getTime())) / 1000);
+  const lockTime = BigInt(matchWindow(rows.map((r) => Math.floor(r.kickoff.getTime() / 1000))).first);
   // No results can be proposed on-chain before the last kickoff plus a buffer (audit L-1).
   const buffer = BigInt(process.env.RESULTS_BUFFER_SECONDS ?? 3 * 3600);
   const resultsNotBefore = BigInt(matchWindow(rows.map((r) => Math.floor(r.kickoff.getTime() / 1000))).last) + buffer;
@@ -222,6 +237,18 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
     return { matchweekId: id, skipped: "results already proposed on-chain; reveals are frozen" as const };
   }
 
+  // Read commitments at a confirmed block after lock: commits cannot change after lock, so this is
+  // final, and a lagging node or a reorg near the lock cannot decide a reveal (audit B6).
+  const confirmations = BigInt(process.env.INDEXER_CONFIRMATIONS ?? 6);
+  const head = await ctx.publicClient.getBlockNumber({ cacheTime: 0 });
+  const at = head > confirmations ? head - confirmations : head;
+  const atBlock = await ctx.publicClient.getBlock({ blockNumber: at });
+  if (Number(atBlock.timestamp) * 1000 < mw.lockTime.getTime()) {
+    return { matchweekId: id, skipped: "waiting for confirmed blocks after lock" as const };
+  }
+
+  // Not yet revealed, or revealed invalid: an invalid reveal is checked again every pass until results
+  // are proposed, so a transient failure (RPC, decryption) is never final (audit B6).
   const pending = await ctx.db
     .select()
     .from(schema.predictions)
@@ -229,18 +256,20 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
       and(
         eq(schema.predictions.matchweekId, id),
         or(isNotNull(schema.predictions.payloadEnc), isNotNull(schema.predictions.pendingPayloadEnc)),
-        isNull(schema.predictions.revealedAt),
+        or(isNull(schema.predictions.revealedAt), eq(schema.predictions.revealValid, false)),
       ),
     );
 
   let valid = 0;
   let invalid = 0;
+  let newlyInvalid = 0;
   for (const p of pending) {
     const [onChain] = await ctx.publicClient.readContract({
       address: ctx.deployment.matchweeks,
       abi: matchweeksAbi,
       functionName: "commitmentOf",
       args: [id, getAddress(p.wallet)],
+      blockNumber: at,
     });
     const check = (enc: string | null) => {
       if (!enc) return { payload: null, error: "no payload stored" };
@@ -290,6 +319,7 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
     if (error === null) valid++;
     else {
       invalid++;
+      if (p.revealValid !== false) newlyInvalid++;
       ctx.log.warn("reveal mismatch", { matchweek: id, wallet: p.wallet, error });
     }
   }
@@ -299,7 +329,7 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
     .update(schema.matchweeks)
     .set({ revealsRoot: tree.root, revealsTree: toJson(tree.dump()), status: mw.status === "open" ? "locked" : mw.status })
     .where(eq(schema.matchweeks.id, id));
-  if (invalid > 0) await ctx.alert(`matchweek ${id}: ${invalid} reveal(s) did not match their commitment`);
+  if (newlyInvalid > 0) await ctx.alert(`matchweek ${id}: ${newlyInvalid} reveal(s) did not match their commitment (re-checked every run until results are proposed)`);
   return { matchweekId: id, revealed: pending.length, valid, invalid, revealsRoot: tree.root };
 }
 
