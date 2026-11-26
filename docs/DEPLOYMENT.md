@@ -40,7 +40,7 @@ variables are set on Netlify and the site runs in live mode.
 
 Deployed with `script/DeployNSD.s.sol` from commit `3cd6715` by `0x0Efc90cA25692ADed121EF2B761CE4bBf32D3c34`
 (no role afterwards; leftover QIE returned to the admin) at block 12187420. Runtime bytecode checked
-against the compiled source. Record: `contracts/deployments/1990-nsd.json`.
+against the compiled source; source verified on the QIE explorer. Record: `contracts/deployments/1990-nsd.json`.
 
 | Contract | Address |
 | --- | --- |
