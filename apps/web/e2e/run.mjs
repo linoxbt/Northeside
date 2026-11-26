@@ -111,7 +111,9 @@ function cli(env, ...args) {
 async function walletContext(browser, keyIndex) {
   const account = privateKeyToAccount(KEYS[keyIndex]);
   const client = createWalletClient({ account, transport: http(RPC), chain: { id: 31337, name: "anvil", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [RPC] } } } });
-  const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: Number(process.env.SHOT_SCALE ?? 1) });
+  // Screenshot runs (SHOT_CLEAN=1): consent already given, so the cookie notice stays out of the shots.
+  if (process.env.SHOT_CLEAN) await ctx.addInitScript(() => localStorage.setItem("ns_cookie_notice", "1"));
   ctx.on("page", (p) => {
     openPages.push(p);
     p.on("console", (m) => m.type() === "error" && log("browser console error:", m.text().slice(0, 300)));
