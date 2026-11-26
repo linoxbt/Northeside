@@ -2,8 +2,11 @@
 
 Things only the owner can do: they need the admin wallet (`0x747DF176962e1495355562Fe30b65F276f0B8404`)
 or an account login. Each item says why, exactly what to send, and how to check it worked.
-Transactions go to QIE mainnet (chain 1990) with value 0; paste the address and data into your
-wallet's "send / custom data" screen, or use `cast send` with the admin key on a hardware wallet.
+Easiest: open **northeside.netlify.app/owner** and connect the admin wallet. It shows the pool and
+the roles, and sections 1 and 2 below are buttons there (lower the cap, fund the pool, move the
+pause power), each a transaction your wallet asks you to confirm. Otherwise, transactions go to QIE
+mainnet (chain 1990) with value 0; paste the address and data into your wallet's "send / custom
+data" screen, or use `cast send` with the admin key on a hardware wallet.
 
 ## 1. Move the pause power off the server (security, do first)
 

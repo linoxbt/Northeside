@@ -9,6 +9,10 @@ export const publicEnv = {
   identity: process.env.NEXT_PUBLIC_IDENTITY_ADDRESS as Address,
   /** $NSD rewards pool; empty until deployed. */
   nsdRewards: (process.env.NEXT_PUBLIC_NSD_REWARDS_ADDRESS || undefined) as Address | undefined,
+  nsdToken: (process.env.NEXT_PUBLIC_NSD_TOKEN_ADDRESS || undefined) as Address | undefined,
+  /** Owner console only: the separate pauser key and the operator key (public addresses). */
+  pauser: (process.env.NEXT_PUBLIC_PAUSER_ADDRESS || undefined) as Address | undefined,
+  operator: (process.env.NEXT_PUBLIC_OPERATOR_ADDRESS || undefined) as Address | undefined,
   badges: (process.env.NEXT_PUBLIC_BADGES_ADDRESS || undefined) as Address | undefined,
   qusdc: process.env.NEXT_PUBLIC_QUSDC_ADDRESS as Address,
   privyAppId: process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "",
@@ -26,7 +30,9 @@ export const publicEnv = {
 export const isPreview = !publicEnv.matchweeks;
 
 export const chain = chainById(publicEnv.chainId);
-export const transport = () => qieTransport(chain);
+/** NEXT_PUBLIC_QIE_RPC_URLS (comma-separated) overrides the chain's public RPCs, as documented in .env.example. */
+const rpcOverride = (process.env.NEXT_PUBLIC_QIE_RPC_URLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+export const transport = () => qieTransport(chain, rpcOverride);
 
 export function txUrl(hash: string) {
   const base = chain.blockExplorers?.default.url;
