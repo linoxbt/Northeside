@@ -36,6 +36,26 @@ Audited first (`docs/AUDIT.md`). Deployed from `0x6e2E…6Bf4` (no role afterwar
 Launch caps: 500 QUSDC per campaign, 2,000 QUSDC total. The four `NEXT_PUBLIC_*` contract
 variables are set on Netlify and the site runs in live mode.
 
+### $NSD (deployed 2026-11-26, rewards not live)
+
+Deployed with `script/DeployNSD.s.sol` from commit `3cd6715` by `0x0Efc90cA25692ADed121EF2B761CE4bBf32D3c34`
+(no role afterwards; leftover QIE returned to the admin) at block 12187420. Runtime bytecode checked
+against the compiled source. Record: `contracts/deployments/1990-nsd.json`.
+
+| Contract | Address |
+| --- | --- |
+| `NorthesideToken` ($NSD, 1,000,000 fixed supply, all minted to the admin wallet) | `0xac23edcF998dDff02F3Bc08d9Dad2A9dE05f34DF` |
+| `NSDRewards` (max 100,000 NSD per matchweek, unfunded) | `0x31aFa5801f3FB5444dF458569429d4e82483395f` |
+
+| Role on `NSDRewards` | Address |
+| --- | --- |
+| Admin (void roots, unpause, withdraw) | `0x747DF176962e1495355562Fe30b65F276f0B8404` (owner's wallet) |
+| Operator (posts reward roots) | `0x0dD4C52951E447b04C1f6C8Fe61E112D36859798` |
+| Pauser (pause only; kept off servers) | `0x2AEa2d7b882775c8a03D1cdeEeCd7D2144A85353` |
+
+`NEXT_PUBLIC_NSD_TOKEN_ADDRESS` and `NEXT_PUBLIC_NSD_REWARDS_ADDRESS` are set on Netlify. Rewards stay
+off until `NSD_REWARDS_ENABLED=1` and `NEXT_PUBLIC_NSD_REWARDS_LIVE=1`; see docs/NSD.md.
+
 ## Already configured on Netlify (site `northeside`)
 
 | Variable | Kind |

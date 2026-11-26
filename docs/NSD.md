@@ -54,9 +54,11 @@ The worker job `post-nsd-roots` does the same weekly once `NSD_REWARDS_ENABLED=1
       can claim, by design.
 - [ ] **Tokenomics**: total supply, how much goes to the rewards pool, the weekly pool, the split by
       position, and what happens to the rest of the supply.
-- [ ] **Keys**: admin on a hardware wallet; pauser separate from the operator.
-- [ ] Deploy: `forge script script/DeployNSD.s.sol --rpc-url qie --broadcast` with the env listed
-      in the script (on mainnet also `NSD_CONFIRM_MAINNET="deploy NSD on mainnet"`); then transfer the reward allocation from the treasury to `NSDRewards`.
-- [ ] Set `NEXT_PUBLIC_NSD_TOKEN_ADDRESS`, `NEXT_PUBLIC_NSD_REWARDS_ADDRESS`, the pool settings and
-      `NSD_REWARDS_ENABLED=1` on Netlify; rebuild.
+- [x] **Keys**: pauser separate from the operator (`0x2AEa…5353`). Admin on a hardware wallet: owner to confirm.
+- [x] Deploy (2026-11-26): `NorthesideToken` `0xac23edcF998dDff02F3Bc08d9Dad2A9dE05f34DF`,
+      `NSDRewards` `0x31aFa5801f3FB5444dF458569429d4e82483395f` (docs/DEPLOYMENT.md).
+- [ ] Transfer the reward allocation (Season 1: 300,000 NSD) from the admin wallet to `NSDRewards`.
+- [x] `NEXT_PUBLIC_NSD_TOKEN_ADDRESS` and `NEXT_PUBLIC_NSD_REWARDS_ADDRESS` set on Netlify.
+- [ ] Set the pool settings and `NSD_REWARDS_ENABLED=1` (worker) and `NEXT_PUBLIC_NSD_REWARDS_LIVE=1`
+      (claim screen) on Netlify; rebuild.
 - [ ] Only then mention $NSD in the app and marketing (CLAUDE.md).
