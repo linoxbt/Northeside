@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { nsdRewardsLive } from "@/lib/nsd-live";
 
 export const alt = "Northeside: call the score, seal it on QIE";
 export const size = { width: 1200, height: 630 };
@@ -17,7 +18,7 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 96, letterSpacing: -4, lineHeight: 1 }}>Call the score.</div>
           <div style={{ fontSize: 96, letterSpacing: -4, lineHeight: 1 }}>Seal it on QIE.</div>
         </div>
-        <div style={{ fontSize: 30, color: "rgba(255,255,255,0.65)" }}>Free Premier League predictions, sealed before kickoff. No stakes, no prizes.</div>
+        <div style={{ fontSize: 30, color: "rgba(255,255,255,0.65)" }}>Free Premier League predictions, sealed before kickoff. {nsdRewardsLive ? "No stakes. Free to play." : "No stakes, no prizes."}</div>
       </div>
     ),
     size,

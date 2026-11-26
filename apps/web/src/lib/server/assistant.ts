@@ -1,5 +1,5 @@
 import "server-only";
-import { ASSISTANT_SYSTEM, factsBlock, type AssistantFacts, type AssistantTurn } from "@northeside/core";
+import { assistantSystem, factsBlock, type AssistantFacts, type AssistantTurn } from "@northeside/core";
 
 /**
  * The model call behind the assistant: Qwen (qwen/qwen3.8-27b) served by the Fortytwo network
@@ -35,7 +35,7 @@ interface ChatCompletion {
 
 export async function askModel(facts: AssistantFacts, history: AssistantTurn[], question: string): Promise<{ text: string; model: string }> {
   const messages = [
-    { role: "system", content: ASSISTANT_SYSTEM },
+    { role: "system", content: assistantSystem({ nsdLive: process.env.NEXT_PUBLIC_NSD_REWARDS_LIVE === "1" }) },
     ...history.map((t) => ({ role: t.role, content: t.text })),
     { role: "user", content: `${factsBlock(facts)}\n\n${question}` },
   ];

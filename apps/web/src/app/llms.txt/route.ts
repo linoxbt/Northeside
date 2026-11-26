@@ -1,4 +1,5 @@
 import { PAGES, TABS } from "@/lib/docs";
+import { nsdRewardsLive } from "@/lib/nsd-live";
 
 export const dynamic = "force-static";
 
@@ -8,7 +9,7 @@ export function GET() {
   const lines = [
     "# Northeside",
     "",
-    "> Free weekly Premier League predictions on QIE mainnet (chain 1990). Players seal their picks on-chain from their own wallet before kickoff; results come from two independent providers and are finalized on-chain after a 12-hour challenge window. No stakes, no prizes, 18+.",
+    `> Free weekly Premier League predictions on QIE mainnet (chain 1990). Players seal their picks on-chain from their own wallet before kickoff; results come from two independent providers and are finalized on-chain after a 12-hour challenge window. ${nsdRewardsLive ? "No stakes and no cash prizes; verified top players can earn $NSD tokens by a published formula" : "No stakes, no prizes"}, 18+.`,
     "",
   ];
   for (const t of TABS) {

@@ -1,6 +1,9 @@
 import { contactText } from "./contact";
+import { nsdRewardsLive } from "./nsd-live";
 
-export const LEGAL_VERSION = "1.2 · 17 November 2026 · pending review by Nigerian counsel before launch";
+export const LEGAL_VERSION = nsdRewardsLive
+  ? "1.3 · 26 November 2026 · adds $NSD rewards · pending review by Nigerian counsel"
+  : "1.2 · 17 November 2026 · pending review by Nigerian counsel before launch";
 
 export interface LegalSection {
   /** Anchor id, so other pages can link to a section (e.g. /docs/privacy#cookies). */
@@ -43,7 +46,14 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "free-to-play",
         heading: "Free to play",
         body: [
-          "No purchase is necessary and nothing can be bought. There are no stakes, no random draws and no prizes for players. Odds shown in the app are statistical estimates for information only; nothing can be wagered on them.",
+          nsdRewardsLive
+            ? "No purchase is necessary and nothing can be bought. There are no stakes, no random draws and no cash prizes. Odds shown in the app are statistical estimates for information only; nothing can be wagered on them."
+            : "No purchase is necessary and nothing can be bought. There are no stakes, no random draws and no prizes for players. Odds shown in the app are statistical estimates for information only; nothing can be wagered on them.",
+          ...(nsdRewardsLive
+            ? [
+                "$NSD rewards: verified players (one person, one reward per matchweek) who finish near the top of a matchweek or of the season may earn $NSD tokens, shared by the published formula in the docs. Rewards depend only on points scored, never on payment. You claim them yourself from your own wallet within 90 days of a reward list being posted; unclaimed tokens return to the pool. $NSD is not money, Northeside does not buy it back or exchange it, and its value, if any, is not guaranteed. Rewards can be paused, and the formula can change for future matchweeks only; a posted reward list is final unless it is corrected before anyone claims.",
+              ]
+            : []),
           "Leaderboards show skill only. Sponsors pay league hosts for real, returning, verified players; how well anyone scores never changes what a host is paid.",
         ],
       },

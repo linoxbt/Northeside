@@ -6,6 +6,7 @@ import { DocContent } from "@/components/docs/pages";
 import { CopyPage, DocsSearch, DocsThemeRoot, Helpful, MobileDocsNav, ThemeToggle, Toc } from "@/components/docs/shell";
 import { DocCard, Icon } from "@/components/docs/ui";
 import { chain } from "@/lib/client/env";
+import { nsdRewardsLive } from "@/lib/nsd-live";
 import { PAGES, TABS, firstPageOf, groupsOf, neighbours, pageBySlug, type DocTab } from "@/lib/docs";
 
 /**
@@ -250,7 +251,7 @@ function Home() {
           <Link href="/docs/terms" className="text-ink underline underline-offset-4">
             Legal
           </Link>
-          . Free to play, 18+, no stakes and no prizes.
+          . Free to play, 18+, no stakes{nsdRewardsLive ? "; verified top players can earn $NSD." : " and no prizes."}
         </p>
       </div>
     </div>

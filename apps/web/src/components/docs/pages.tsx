@@ -1,4 +1,5 @@
 import { RULES_V1_HASH, RULES_V2_HASH, RULES_V3_HASH } from "@northeside/scoring";
+import { NSD_REWARDS_LINE, nsdRewardsLive } from "@/lib/nsd-live";
 import type { ReactNode } from "react";
 import { AnalyticsChoice } from "@/components/analytics-choice";
 import { contactHref } from "@/lib/contact";
@@ -76,7 +77,13 @@ function HowToPlay() {
         <A href="/docs/commit-reveal">Commit–reveal</A> for the details.
       </P>
       <H2 id="free">Free to play</H2>
-      <List items={["No purchase, stakes or deposits. Nothing can be bought.", "No prizes for players. Odds are estimates shown for fun.", "18+ only. One person, one account (up to three wallets)."]} />
+      <List
+        items={[
+          "No purchase, stakes or deposits. Nothing can be bought.",
+          nsdRewardsLive ? NSD_REWARDS_LINE : "No prizes for players. Odds are estimates shown for fun.",
+          "18+ only. One person, one account (up to three wallets).",
+        ]}
+      />
     </>
   );
 }
@@ -142,6 +149,22 @@ function Scoring() {
           ["A tenth or fewer", "+3"],
         ]}
       />
+      {nsdRewardsLive ? (
+        <>
+          <H2 id="nsd">$NSD rewards</H2>
+          <P>
+            Each matchweek of the season shares a pool of $NSD among verified players who scored, one reward per person. The top 10% of
+            them are paid (at most 100 places, and only once at least 10 people scored); place p is weighted 1/p, so 2nd earns half of
+            1st, 3rd a third, and no place earns more than 20% of the pool. Ties split the places they share. The season finale shares its
+            own pool the same way over the season table, plus anything a week did not pay out.
+          </P>
+          <P>
+            Every reward list is published at <code>/api/v1/nsd/report/&lt;matchweek&gt;</code> and its Merkle root is posted on-chain.
+            Claims open 24 hours after a list is posted and stay open 90 days; claim from your profile with your own wallet. $NSD is not
+            money and has no guaranteed value.
+          </P>
+        </>
+      ) : null}
       <H2 id="ranking">Ranking</H2>
       <P>Tables rank by points, then exact scores. Players equal on both share a rank; there are no random tie-breaks. Each person counts once.</P>
       <H2 id="versions">Rule versions</H2>
