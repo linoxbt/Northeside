@@ -13,7 +13,7 @@ $NSD or freeze a balance.
 | Rule | How it is enforced |
 | --- | --- |
 | Rewards only for finalized matchweeks | `postRoot` checks `NorthesideMatchweeks.isFinalized` |
-| One root per matchweek, capped | `maxPerMatchweek` (admin-set) bounds a compromised operator |
+| One root per matchweek, capped | `maxPerMatchweek` (admin-set) bounds each root; it does not bound the total, because the operator and results keys together can create and finalize new matchweeks. The pool balance is the real exposure: fund it in installments, and the indexer alerts on any matchweek or result proposal Northeside did not make |
 | Every listed claim is payable | a root can only allocate the balance beyond what is already owed (`outstanding`) |
 | Review before payout | claims open 24 h after a root is posted (`CLAIM_DELAY`) |
 | Verified people only | `claim` requires the wallet to be linked to a person in the IdentityAdapter |

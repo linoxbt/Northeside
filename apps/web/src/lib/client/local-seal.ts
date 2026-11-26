@@ -5,8 +5,77 @@ import { api } from "./api";
 export type Picks = { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
 
 export const sealedKey = (mw: number, wallet: string) => `ns_sealed_${mw}_${wallet.toLowerCase()}`;
-/** A seal whose transaction has not succeeded yet. Promoted to sealedKey only after its receipt (audit B6). */
+/**
+ * Seals sent (or being sent) whose result is not known yet, oldest first. Each attempt keeps its
+ * own payload and salt until the chain shows which one counts (final review): a failed receipt
+ * check or a second attempt must never delete the only copy of a salt that may still be mined.
+ */
 export const pendingKey = (mw: number, wallet: string) => `ns_pending_${mw}_${wallet.toLowerCase()}`;
+
+export interface PendingSeal {
+  payload: SealedPayload;
+  txHash?: string;
+  /** ms since epoch, when the attempt started. */
+  createdAt: number;
+}
+
+/** A candidate that is not on-chain this long after it was sent can no longer be the seal. */
+const PENDING_TTL_MS = 24 * 3600_000;
+
+export function readPending(mw: number, wallet?: string | null): PendingSeal[] {
+  if (!wallet) return [];
+  try {
+    const v = JSON.parse(localStorage.getItem(pendingKey(mw, wallet)) ?? "null") as PendingSeal[] | (LocalSeal & { createdAt?: number }) | null;
+    if (!v) return [];
+    // Before this change the slot held one object.
+    return (Array.isArray(v) ? v : [{ payload: v.payload, txHash: v.txHash, createdAt: v.createdAt ?? Date.now() }]).filter((x) => x?.payload?.commitment);
+  } catch {
+    return [];
+  }
+}
+
+function writePending(mw: number, wallet: string, list: PendingSeal[]) {
+  if (list.length) localStorage.setItem(pendingKey(mw, wallet), JSON.stringify(list));
+  else localStorage.removeItem(pendingKey(mw, wallet));
+}
+
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** Record an attempt before anything is sent. */
+export function addPending(mw: number, wallet: string, payload: SealedPayload) {
+  const list = readPending(mw, wallet).filter((x) => !same(x.payload.commitment, payload.commitment));
+  writePending(mw, wallet, [...list, { payload, createdAt: Date.now() }]);
+}
+
+export function setPendingHash(mw: number, wallet: string, commitment: string, txHash: string) {
+  writePending(mw, wallet, readPending(mw, wallet).map((x) => (same(x.payload.commitment, commitment) ? { ...x, txHash } : x)));
+}
+
+/** Only for an attempt that provably never reached the chain (cancelled in the wallet, or reverted). */
+export function dropPending(mw: number, wallet: string, commitment: string) {
+  writePending(mw, wallet, readPending(mw, wallet).filter((x) => !same(x.payload.commitment, commitment)));
+}
+
+/**
+ * Settle pending attempts against what the chain holds for this wallet. The attempt whose
+ * commitment is on-chain becomes the local backup (and is uploaded by the normal retry); attempts
+ * older than a day that are not on-chain are dropped. Returns true when a backup was promoted.
+ */
+export function reconcilePending(mw: number, wallet: string, onChain: string | null | undefined, now = Date.now()): boolean {
+  const list = readPending(mw, wallet);
+  if (!list.length) return false;
+  let promoted = false;
+  const hit = onChain ? list.find((x) => same(x.payload.commitment, onChain)) : undefined;
+  if (hit) {
+    const cur = readLocalSeal(mw, wallet);
+    if (!cur || !same(cur.payload.commitment, hit.payload.commitment)) {
+      localStorage.setItem(sealedKey(mw, wallet), JSON.stringify({ payload: hit.payload, txHash: hit.txHash, synced: false } satisfies LocalSeal));
+      promoted = true;
+    }
+  }
+  writePending(mw, wallet, list.filter((x) => x !== hit && now - x.createdAt < PENDING_TTL_MS));
+  return promoted;
+}
 /** Drafts on this device belong to one wallet (audit B14); a signed-out guest has its own slot. */
 export const draftKey = (mw: number, wallet?: string | null) => (wallet ? `ns_draft_${mw}_${wallet.toLowerCase()}` : `ns_draft_${mw}`);
 

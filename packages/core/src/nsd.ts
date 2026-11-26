@@ -2,7 +2,7 @@ import { nsdRewardsAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
 import { buildNsdRewardsTree } from "@northeside/merkle";
 import { STANDARD_NSD_CURVE, nsdPayouts, rank, validateSchedule, type NsdCurve, type NsdSchedule } from "@northeside/scoring";
-import { and, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { getAddress, parseUnits, type Address, type Hex } from "viem";
 import { need, toJson, type CoreContext } from "./context";
 import { audit, confirm, sendWrite } from "./ops";
@@ -89,13 +89,22 @@ export interface NsdWinner {
 
 type Row = { wallet: string; points: number | null; exactScores: number | null; sealedAt: Date | null; matchweekId: number };
 
-/** One entry per person: their first-sealed verified wallet in a matchweek. */
-function perPerson(rows: Row[], personOf: Map<string, string>) {
+type Link = { personHash: string; verifiedAt: Date | null };
+
+/**
+ * One entry per person: their first-sealed wallet among those verified BEFORE the matchweek
+ * locked (final review). Checking verification at payout time instead would let a person seal
+ * different slips from unlinked wallets and link only the best one once the results are known.
+ */
+function perPerson(rows: Row[], linkOf: Map<string, Link>, lockOf: Map<number, Date>) {
   const best = new Map<string, Row & { personHash: string }>();
   const t = (x: { sealedAt: Date | null }) => x.sealedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
   for (const r of rows) {
-    const personHash = personOf.get(r.wallet.toLowerCase());
-    if (!personHash) continue; // unverified: never paid
+    const link = linkOf.get(r.wallet.toLowerCase());
+    const lock = lockOf.get(r.matchweekId);
+    // Unverified, or verified only after this matchweek locked (or at an unknown time): not counted.
+    if (!link || !link.verifiedAt || !lock || link.verifiedAt.getTime() >= lock.getTime()) continue;
+    const personHash = link.personHash;
     const cur = best.get(personHash);
     if (!cur || t(r) < t(cur) || (t(r) === t(cur) && r.wallet < cur.wallet)) best.set(personHash, { ...r, personHash });
   }
@@ -116,6 +125,29 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
   const [mw] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, matchweekId));
   if (!mw || mw.status !== "finalized") throw new Error(`matchweek ${matchweekId} is not finalized`);
   const isLast = matchweekId === season.lastMatchweek;
+
+  // Finalized on-chain is not enough: the points must be stored too (final review). Otherwise an
+  // unscored week would be posted as "no winners" and never retried. Throwing makes the job retry.
+  const unscoredIn = async (ids: number[]) =>
+    (
+      await ctx.db
+        .select({ matchweekId: schema.predictions.matchweekId })
+        .from(schema.predictions)
+        .where(and(inArray(schema.predictions.matchweekId, ids), eq(schema.predictions.revealValid, true), isNull(schema.predictions.points)))
+        .limit(1)
+    ).length > 0;
+  if (await unscoredIn([matchweekId])) throw new Error(`matchweek ${matchweekId} is finalized but its points are not stored yet`);
+  if (isLast) {
+    // The finale reads the whole season: every earlier week must be final and scored first, so the
+    // season table and the rollover are computed once, from complete data.
+    const earlier = Array.from({ length: season.lastMatchweek - season.firstMatchweek }, (_, i) => season.firstMatchweek + i);
+    if (earlier.length) {
+      const rows = await ctx.db.select({ id: schema.matchweeks.id, status: schema.matchweeks.status }).from(schema.matchweeks).where(inArray(schema.matchweeks.id, earlier));
+      const notFinal = earlier.filter((id) => rows.find((r) => r.id === id)?.status !== "finalized" && rows.some((r) => r.id === id));
+      if (notFinal.length) throw new Error(`NSD finale waits for season matchweek(s) ${notFinal.join(", ")} to be finalized`);
+      if (await unscoredIn(earlier)) throw new Error("NSD finale waits for every season matchweek's points to be stored");
+    }
+  }
 
   const cols = {
     wallet: schema.predictions.wallet,
@@ -141,12 +173,28 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
     : weekRows;
   const wallets = [...new Set(seasonRows.map((r) => r.wallet.toLowerCase()))];
   if (wallets.length === 0) return [];
-  const persons = await ctx.db.select().from(schema.walletPersons).where(inArray(schema.walletPersons.wallet, wallets));
-  const personOf = new Map(persons.map((p) => [p.wallet.toLowerCase(), p.personHash.toLowerCase()]));
+  // Each wallet's current link and the block time of the Verified event that made it.
+  const persons = await ctx.db
+    .select({ wallet: schema.walletPersons.wallet, personHash: schema.walletPersons.personHash, verifiedAt: schema.chainEvents.blockTime, args: schema.chainEvents.args })
+    .from(schema.walletPersons)
+    .leftJoin(schema.chainEvents, and(eq(schema.chainEvents.txHash, schema.walletPersons.txHash), eq(schema.chainEvents.eventName, "Verified")))
+    .where(inArray(schema.walletPersons.wallet, wallets));
+  const linkOf = new Map<string, Link>();
+  for (const p of persons) {
+    const w = p.wallet.toLowerCase();
+    const forThisWallet = !p.args || String((p.args as { wallet?: string }).wallet ?? "").toLowerCase() === w;
+    if (!forThisWallet) continue; // one transaction can verify several wallets
+    linkOf.set(w, { personHash: p.personHash.toLowerCase(), verifiedAt: p.verifiedAt ?? null });
+  }
+  const lockRows = await ctx.db
+    .select({ id: schema.matchweeks.id, lockTime: schema.matchweeks.lockTime })
+    .from(schema.matchweeks)
+    .where(inArray(schema.matchweeks.id, [...new Set(seasonRows.map((r) => r.matchweekId))]));
+  const lockOf = new Map(lockRows.map((r) => [r.id, r.lockTime]));
 
   // Weekly payouts.
   // You must score to earn: 0-point entries are not ranked for rewards.
-  const week = perPerson(weekRows, personOf);
+  const week = perPerson(weekRows, linkOf, lockOf);
   const weekRanked = rank([...week.values()].filter((r) => (r.points ?? 0) > 0).map((r) => ({ id: r.personHash, points: r.points ?? 0, exactScores: r.exactScores ?? 0, r })));
   const weekly = nsdPayouts(weekRanked.map((x) => ({ rank: x.rank, entry: x.entry })), schedule);
   const out = new Map<string, NsdWinner>();
@@ -170,7 +218,7 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
     const byWeek = new Map<number, Row[]>();
     for (const r of seasonRows) byWeek.set(r.matchweekId, [...(byWeek.get(r.matchweekId) ?? []), r]);
     for (const [mwId, rows] of byWeek) {
-      for (const e of perPerson(rows, personOf).values()) {
+      for (const e of perPerson(rows, linkOf, lockOf).values()) {
         const t = totals.get(e.personHash) ?? { points: 0, exactScores: 0, wallet: e.wallet, lastMw: -1 };
         t.points += e.points ?? 0;
         t.exactScores += e.exactScores ?? 0;
@@ -236,6 +284,16 @@ function rewardsAddress(ctx: CoreContext): Address {
 export async function postNsdRoot(ctx: CoreContext, matchweekId: number, cfg: NsdConfig) {
   const operator = need(ctx.operator, "OPERATOR_PRIVATE_KEY");
   const address = rewardsAddress(ctx);
+  // Once the finale is posted it has already paid out every unposted week as rollover: a late
+  // weekly root for the season would pay that pool twice (final review).
+  if (matchweekId < cfg.season.lastMatchweek && matchweekId >= cfg.season.firstMatchweek) {
+    const [finale] = await ctx.db.select().from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, cfg.season.lastMatchweek));
+    const [own] = await ctx.db.select().from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, matchweekId));
+    if (finale && finale.status !== "voided" && !own) {
+      await ctx.alert(`NSD matchweek ${matchweekId}: not posted because the season finale (matchweek ${cfg.season.lastMatchweek}) already paid its pool as rollover`);
+      return { skipped: "season finale already paid this week as rollover" };
+    }
+  }
   const onChain = await ctx.publicClient.readContract({ address, abi: nsdRewardsAbi, functionName: "rootOf", args: [matchweekId] });
   const ZERO = `0x${"0".repeat(64)}`;
   const where = eq(schema.nsdRoots.matchweekId, matchweekId);

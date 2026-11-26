@@ -497,7 +497,7 @@ async function savePublication(ctx: CoreContext, id: number, p: Publication) {
     .onConflictDoUpdate({ target: schema.appSettings.key, set: { value, updatedAt: new Date() } });
 }
 
-async function loadPublication(ctx: CoreContext, id: number): Promise<Publication | null> {
+export async function loadPublication(ctx: CoreContext, id: number): Promise<Publication | null> {
   const [row] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, publicationKey(id)));
   return (row?.value as Publication | undefined) ?? null;
 }

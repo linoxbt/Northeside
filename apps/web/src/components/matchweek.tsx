@@ -12,7 +12,7 @@ import { AdultGate, SignInPanel } from "./sign-in";
 import { Button, Card, ExtLink, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { short, txUrl } from "@/lib/client/env";
-import { readDraft, readLocalSeal, syncSeal, uploadPayload, uploadWindowOpen, writeDraft, type Picks } from "@/lib/client/local-seal";
+import { readDraft, readLocalSeal, readPending, reconcilePending, syncSeal, uploadPayload, uploadWindowOpen, writeDraft, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
 import { useMounted } from "@/lib/client/use-mounted";
 
@@ -173,6 +173,14 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   useEffect(() => {
     if (!wallet) return;
     const tick = async () => {
+      // Seals sent from this device whose result the seal bar never saw (a lost receipt, a closed
+      // tab, a return after kickoff): the one the chain holds becomes the backup and is sent below.
+      if (readPending(mw.id, wallet).length) {
+        const onChain = await api<{ onChainCommitment: string | null }>(`/api/v1/predictions/${mw.id}/me`)
+          .then((r) => r.onChainCommitment)
+          .catch(() => null);
+        if (onChain !== null) reconcilePending(mw.id, wallet, onChain === "none" ? null : onChain);
+      }
       const local = readLocalSeal(mw.id, wallet);
       if (!local?.txHash || local.synced || !uploadWindowOpen(mw.lockTime)) return;
       await syncSeal(mw.id, wallet, local)

@@ -23,15 +23,33 @@ Check: `cast call <contract> "hasRole(bytes32,address)(bool)" $(cast keccak PAUS
 is `true` for the pauser and `false` for the operator on both. Afterwards emergency pauses use
 `PAUSER_PRIVATE_KEY` = the pauser key with `pnpm cli pause matchweeks|rewards` from your own machine.
 
-## 2. Fund the $NSD reward pool (rewards cannot pay until this is done)
+## 2. Fund the $NSD reward pool, in installments (rewards cannot pay until this is done)
 
-Season 1 is 300,000 NSD (docs/TOKENOMICS.md). Send them from the admin wallet to `NSDRewards`:
+Season 1 is 300,000 NSD (docs/TOKENOMICS.md), but **do not send it all at once**. The final review
+found that the server keys together (operator + results + attester, all on Netlify) could create
+and finalize made-up matchweeks and claim up to the per-matchweek cap from each, so whatever sits
+in the pool is what a leak could take. Keep the pool small and the cap close to a real week:
+
+1. Set up alerts first (section 5). The indexer now sends an URGENT alert for any matchweek or
+   result proposal Northeside did not make; you then have the 12-hour dispute window plus the
+   24-hour claim delay to challenge, pause (pauser key) or `voidRoot` (admin).
+2. Lower the cap from 100,000 to 60,000 NSD (the largest real root: the last matchweek's weekly
+   24,000 plus the 36,000 finale):
 
 | To | Data | Does |
 | --- | --- | --- |
-| `0xac23edcF998dDff02F3Bc08d9Dad2A9dE05f34DF` ($NSD token) | `0xa9059cbb00000000000000000000000031afa5801f3fb5444df458569429d4e82483395f000000000000000000000000000000000000000000003f870857a3e0e3800000` | `transfer(NSDRewards, 300,000 NSD)` |
+| `0x31aFa5801f3FB5444dF458569429d4e82483395f` (NSDRewards) | `0x848d35c7000000000000000000000000000000000000000000000cb49b44ba602d800000` | `setMaxPerMatchweek(60,000 NSD)` |
 
-Check: `cast call 0x31aFa5801f3FB5444dF458569429d4e82483395f "available()(uint256)" --rpc-url https://rpc1mainnet.qie.digital/` shows `300000000000000000000000`.
+3. Fund two weeks at a time (48,000 NSD), topping up as roots are claimed; before matchweek 21,
+   add the finale (36,000 plus any rollover):
+
+| To | Data | Does |
+| --- | --- | --- |
+| `0xac23edcF998dDff02F3Bc08d9Dad2A9dE05f34DF` ($NSD token) | `0xa9059cbb00000000000000000000000031afa5801f3fb5444df458569429d4e82483395f000000000000000000000000000000000000000000000a2a15d09519be000000` | `transfer(NSDRewards, 48,000 NSD)` |
+
+A week whose root is larger than the pool simply waits (the post fails with `InsufficientPool`, you
+get an alert, and it is retried after you top up, as long as that is within 14 days of the week being finalized). Check the pool:
+`cast call 0x31aFa5801f3FB5444dF458569429d4e82483395f "available()(uint256)" --rpc-url https://rpc1mainnet.qie.digital/`.
 Tokens that are not owed to anyone can be taken back any time with `withdrawAvailable` (admin).
 
 ## 3. Turn on verification (nobody can claim $NSD without it)
@@ -50,7 +68,7 @@ These values passed through a chat and should be replaced. Do one at a time and 
 | Privy app secret | Privy dashboard → App settings → API keys → rotate secret | Netlify `PRIVY_APP_SECRET` on `northeside` and `northeside-testnet` |
 | Fortytwo API key | Fortytwo dashboard → API keys → revoke and create | Netlify `FORTYTWO_API_KEY` on `northeside-testnet`, and on `northeside` to turn the assistant on there |
 
-## 5. Alerts (status page shows "unhealthy" until one is set)
+## 5. Alerts (status page shows "unhealthy" until one is set; needed before funding the pool)
 
 Either a Telegram bot (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_OPERATOR_CHAT_ID`; docs/DEPLOYMENT.md) or a
 Sentry DSN (`SENTRY_DSN`) on Netlify, then redeploy. Without one, failed jobs and challenges are

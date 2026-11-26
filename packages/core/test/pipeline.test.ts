@@ -139,6 +139,8 @@ class FakeProviders {
 
 let anvil: ChildProcess | undefined;
 let ctx: CoreContext;
+/** Every alert the pipeline raised, so tests can assert on urgent ones. */
+const alerts: string[] = [];
 let pub: PublicClient;
 let clock: Date;
 const providers = new FakeProviders();
@@ -244,7 +246,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       season: 2026,
       siteUrl: "http://localhost:3000",
       log: { info: () => {}, warn: () => {}, error: () => {} },
-      alert: async () => {},
+      alert: async (m: string) => void alerts.push(m),
       now: () => clock,
     };
   }, 60_000);
@@ -786,6 +788,22 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     expect(row).toMatchObject({ status: "open", scoringRulesHash: RULES_V2_HASH, fixturesRoot: tree.root });
     expect(rulesVersion(row!.scoringRulesHash)).toBe(2);
     expect(row!.lockTime.getTime()).toBe(start * 1000);
+
+    // The whole normal flow above (two matchweeks proposed, finalized and paid) raised no urgent
+    // alert; a matchweek created on-chain that Northeside never imported does (final review).
+    await mine();
+    await indexChain(ctx);
+    expect(alerts.filter((m) => m.startsWith("URGENT"))).toEqual([]);
+    const rogue = await wallet(KEYS.operator).writeContract({
+      address: ctx.deployment.matchweeks,
+      abi: matchweeksAbi,
+      functionName: "createMatchweek",
+      args: [901, tree.root, BigInt(start), BigInt(start + 4 * 24 * 3600), 3, RULES_V2_HASH],
+    });
+    await pub.waitForTransactionReceipt({ hash: rogue });
+    for (let i = 0; i < 8; i++) await mine();
+    await indexChain(ctx);
+    expect(alerts.filter((m) => m.startsWith("URGENT"))).toEqual([expect.stringMatching(/matchweek 901 was created on-chain .* never imported/)]);
   }, 60_000);
 
   it("QIE ID: verified .qie names only (reverse lookup confirmed by the owner lookup)", async () => {

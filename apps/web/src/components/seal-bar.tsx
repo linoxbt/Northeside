@@ -11,7 +11,7 @@ import { WalletProviders } from "./providers";
 import { Button, Card } from "./ui";
 import { api, deviceId, track } from "@/lib/client/api";
 import { chain, publicEnv, short } from "@/lib/client/env";
-import { pendingKey, readLocalSeal, sealedKey, syncSeal, type LocalSeal, type Picks } from "@/lib/client/local-seal";
+import { addPending, dropPending, readLocalSeal, readPending, reconcilePending, sealedKey, setPendingHash, syncSeal, type LocalSeal, type Picks } from "@/lib/client/local-seal";
 import { useSession } from "@/lib/client/session";
 import { txError } from "@/lib/client/tx-errors";
 
@@ -64,14 +64,13 @@ function SealBar(props: {
   useEffect(() => {
     if (!wallet || !publicClient) return;
     void (async () => {
-      // A seal sent but not yet confirmed when the page closed: keep it only if it succeeded.
-      const pending = readLocalSeal(props.mwId, wallet, pendingKey);
-      if (pending?.txHash) {
-        const receipt = await publicClient.getTransactionReceipt({ hash: pending.txHash as Hex }).catch(() => null);
-        if (receipt?.status === "success") {
-          localStorage.setItem(sealedKey(props.mwId, wallet), JSON.stringify(pending));
-          localStorage.removeItem(pendingKey(props.mwId, wallet));
-        } else if (receipt?.status === "reverted") localStorage.removeItem(pendingKey(props.mwId, wallet));
+      // Seals sent but not settled when the page closed: the one the chain holds becomes the backup.
+      if (readPending(props.mwId, wallet).length) {
+        const onChain = await publicClient
+          .readContract({ address: publicEnv.matchweeks, abi: matchweeksAbi, functionName: "commitmentOf", args: [props.mwId, wallet as Hex] })
+          .then(([c]) => c as string)
+          .catch(() => null);
+        if (onChain !== null) reconcilePending(props.mwId, wallet, onChain);
       }
       const local = readLocalSeal(props.mwId, wallet);
       if (local && local.txHash && !local.synced) {
@@ -102,6 +101,9 @@ function SealBar(props: {
   async function seal() {
     setError(null);
     if (!wallet || !publicClient) return;
+    // The attempt's commitment once its payload is stored, and its hash once the wallet sent it.
+    let attempt: string | null = null;
+    let sentHash: string | null = null;
     setStep("Connecting your wallet…");
     const address = await ensureAccount();
     setStep(null);
@@ -142,8 +144,10 @@ function SealBar(props: {
         undefined,
         props.version >= 2 ? { version: props.version, banker: props.picks.banker ?? 255 } : {},
       );
-      // Kept in the pending slot: the previous, valid backup stays untouched until this one succeeds.
-      localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, synced: false } satisfies LocalSeal));
+      // Kept as a pending attempt: the previous, valid backup stays untouched until this one succeeds,
+      // and this salt is kept until the chain shows whether it counts (final review).
+      addPending(props.mwId, wallet, payload);
+      attempt = payload.commitment;
 
       // 3. commit() from the player's own wallet.
       setStep(bridge.isEmbedded(address) ? "Sealing…" : "Confirm in your wallet…");
@@ -155,15 +159,16 @@ function SealBar(props: {
         chainId: chain.id,
         gas: COMMIT_GAS,
       });
-      localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, txHash: hash, synced: false } satisfies LocalSeal));
+      sentHash = hash;
+      setPendingHash(props.mwId, wallet, payload.commitment, hash);
       setStep("Sealing on QIE…");
       const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000 });
       if (receipt.status !== "success") {
-        localStorage.removeItem(pendingKey(props.mwId, wallet));
+        dropPending(props.mwId, wallet, payload.commitment);
         throw new Error("The transaction failed on-chain. Your previous seal, if any, still stands.");
       }
       localStorage.setItem(sealedKey(props.mwId, wallet), JSON.stringify({ payload, txHash: hash, synced: false } satisfies LocalSeal));
-      localStorage.removeItem(pendingKey(props.mwId, wallet));
+      dropPending(props.mwId, wallet, payload.commitment);
       track(props.resealing ? "prediction_resealed" : "prediction_sealed", { matchweek_id: props.mwId });
 
       // 4. Hand the encrypted payload to the backend for the reveal (retried later if this fails).
@@ -179,9 +184,11 @@ function SealBar(props: {
       props.onSealed(true);
     } catch (e) {
       setStep(null);
-      // A cancelled or failed send leaves nothing pending; a timeout keeps it for the check on reload.
+      // Only an attempt the wallet refused before sending is forgotten. Anything that may have
+      // reached the chain (a hash exists, or the wallet app lost track) stays until the matchweek
+      // page sees which commitment the chain holds (final review: never delete a live salt).
       const msg = e instanceof Error ? e.message : String(e);
-      if (!/timed out|timeout/i.test(msg)) localStorage.removeItem(pendingKey(props.mwId, wallet));
+      if (!sentHash && attempt && /rejected|denied|4001|cancel/i.test(msg)) dropPending(props.mwId, wallet, attempt);
       setError(txError(e));
     }
   }

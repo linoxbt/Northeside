@@ -46,7 +46,9 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
     INorthesideMatchweeks public immutable matchweeks;
     IPersonRegistry public immutable identity;
 
-    /// @notice Most a single matchweek's root may allocate (bounds a compromised operator).
+    /// @notice Most a single matchweek's root may allocate. It bounds one root, not the total: with the
+    ///         operator and results keys, new matchweeks can be created and finalized, so the pool
+    ///         balance is the real exposure. Fund in installments and keep alerts on (docs/OWNER-ACTIONS.md).
     uint128 public maxPerMatchweek;
     /// @notice Allocated to live roots and not yet claimed or released.
     uint128 public outstanding;

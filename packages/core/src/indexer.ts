@@ -3,6 +3,7 @@ import { schema } from "@northeside/db";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { createPublicClient, decodeEventLog, getAddress, http, type Abi, type Log, type PublicClient } from "viem";
 import { bigintReplacer, type CoreContext } from "./context";
+import { loadPublication } from "./matchweek";
 
 const INDEXER_KEY = "main";
 /** Blocks to wait before indexing; override with INDEXER_CONFIRMATIONS. */
@@ -201,7 +202,16 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
         );
       return;
     }
-    case "MatchweekCreated":
+    case "MatchweekCreated": {
+      // A matchweek Northeside never imported was created with the operator key: either someone ran
+      // it by hand or the key is leaked (final review: fresh matchweeks are the path to draining the
+      // $NSD pool). Loud alert; the admin can pause, challenge or void before anything is claimable.
+      const [known] = await db.select({ id: schema.matchweeks.id, createTx: schema.matchweeks.createTx }).from(schema.matchweeks).where(eq(schema.matchweeks.id, num(a.id)));
+      if (!known) {
+        await ctx.alert(
+          `URGENT: matchweek ${num(a.id)} was created on-chain (tx ${txHash}) but Northeside never imported it. If nobody on the team did this, the operator key may be leaked: pause NSDRewards and HostRewards with the pauser key, challenge its results, and rotate the server keys (docs/OWNER-ACTIONS.md).`,
+        );
+      }
       // Every field the chain fixed, so a crash between the create transaction and the operator's own
       // database write still leaves a usable matchweek (audit B3). The fixtures tree is rebuilt by the
       // open-matchweeks job, which checks it against this root.
@@ -216,7 +226,17 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
         })
         .where(and(eq(schema.matchweeks.id, num(a.id)), inArray(schema.matchweeks.status, ["draft", "open"])));
       return;
-    case "ResultsProposed":
+    }
+    case "ResultsProposed": {
+      // Northeside stores what it is about to propose before sending it (audit B7); anything else on
+      // chain came from someone else holding the results key. The admin has the dispute window to
+      // challenge it.
+      const ours = await loadPublication(ctx, num(a.id));
+      if (!ours || ours.resultsRoot.toLowerCase() !== String(a.resultsRoot).toLowerCase() || ours.scoresRoot.toLowerCase() !== String(a.scoresRoot).toLowerCase()) {
+        await ctx.alert(
+          `URGENT: results for matchweek ${num(a.id)} were proposed on-chain (tx ${txHash}) that Northeside did not publish. Challenge them from a challenger wallet before ${new Date(num(a.disputeEnds) * 1000).toISOString()} and check the results key (docs/OWNER-ACTIONS.md).`,
+        );
+      }
       await db
         .update(schema.matchweeks)
         .set({
@@ -229,6 +249,7 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
         })
         .where(eq(schema.matchweeks.id, num(a.id)));
       return;
+    }
     case "ResultsChallenged":
       await db.update(schema.matchweeks).set({ status: "challenged" }).where(eq(schema.matchweeks.id, num(a.id)));
       await ctx.alert(`matchweek ${num(a.id)} results CHALLENGED by ${String(a.challenger)}: ${String(a.reasonURI)}`);
