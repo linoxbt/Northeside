@@ -207,7 +207,7 @@ function SealBar(props: {
             ? `${props.total - props.picked} game${props.total - props.picked === 1 ? "" : "s"} skipped: they score 0`
             : null
     : !props.complete
-      ? `Pick all ${props.total} games to seal (${props.total - props.picked} left)`
+      ? `This week needs all ${props.total} games (${props.total - props.picked} left). From next matchweek, seal any number.`
       : null;
 
   // Above the bottom nav, whose height includes the iPhone home-indicator inset (audit B18).
