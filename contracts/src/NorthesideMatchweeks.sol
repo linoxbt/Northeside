@@ -214,6 +214,8 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
 
     /// @inheritdoc INorthesideMatchweeks
     function isFinalized(uint32 id) external view returns (bool) {
+        // An enum comparison, not a balance or timestamp: exact equality is the intent.
+        // slither-disable-next-line incorrect-equality
         return _matchweeks[id].status == Status.Finalized;
     }
 

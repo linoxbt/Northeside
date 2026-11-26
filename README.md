@@ -7,7 +7,7 @@ verified, returning players. Track: **Consumer Apps & Social**, QIE Hackathon 3.
 > **Live:** https://northeside.netlify.app · contracts on QIE mainnet (chain 1990), source-verified on
 > [the explorer](https://mainnet.qie.digital/address/0xb9B7FF15Ab687621bF0B6D93064857f24F070d0B).
 > Addresses and roles: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#mainnet-deployment-2026-11-12) ·
-> audit and status: [docs/AUDIT.md](docs/AUDIT.md).
+> audit and status: [docs/AUDIT.md](docs/AUDIT.md) · owner to-dos: [docs/OWNER-ACTIONS.md](docs/OWNER-ACTIONS.md).
 
 ## The problem
 
@@ -26,7 +26,7 @@ to get paid for the real fans they bring.
 5. **Hosts** (KOLs, communities) create leagues and earn QUSDC from sponsors for every
    **QIE Pass-verified person who keeps coming back**, paid by Merkle proof on-chain.
 
-No stakes and no prizes for players; odds are statistical estimates for fun ([docs/ODDS.md](docs/ODDS.md)). $NSD rewards are built but not live ([docs/NSD.md](docs/NSD.md)).
+No stakes and no cash prizes; odds are statistical estimates for fun ([docs/ODDS.md](docs/ODDS.md)). $NSD is deployed on mainnet and rewards are switched on, but pay nobody until the pool is funded and verification is live ([docs/NSD.md](docs/NSD.md), [docs/OWNER-ACTIONS.md](docs/OWNER-ACTIONS.md)).
 
 ## How it uses QIE
 
@@ -45,7 +45,7 @@ No stakes and no prizes for players; odds are statistical estimates for fun ([do
    │  picks + salt stay local; commit(hash) from the player's wallet ──────────────┐
    ▼                                                                               ▼
  Next.js API (Netlify) ── Postgres (Supabase, an index of the chain) ──────────── QIE mainnet
-   │  ops-worker (Netlify background function, every 10 min):                    NorthesideMatchweeks
+   │  ops-worker (Netlify background function, started every 5 min):             NorthesideMatchweeks
    │  index · reveal after lock · two-source results · score · finalize · roots  HostRewards (QUSDC)
    └─ operator CLI (overrides, campaigns, refunds, pause, migrate) ──────────►  IdentityAdapter
 ```
@@ -121,7 +121,7 @@ Requires Node 22, pnpm 10 and Foundry 1.7 (`forge`, `anvil`).
 
 - **Prize vault**: designed, not deployed; waits for a permit (Nigeria's NLRC treats predict-and-win as lottery-related).
 - **QIE Pass**: Mode B (Northeside attests after checking Pass). QIE has not published the dApp interface yet; until it does, verification is off on mainnet, the UI says "coming soon", and host payouts count nobody.
-- **Contracts v1.1**: the audit's contract fixes (replaceRoot/voidRoot near expiry, admin-only unpause) are in the source and tested; mainnet runs v1 until v1.1 is deployed (see docs/AUDIT.md).
+- **Contracts v1.1**: the audit's contract fixes (claims enforce rate and cap, pause holds results, results 2 h after lock, pausable identity, admin-only unpause, replaceRoot/voidRoot near expiry) are in the source and tested; mainnet runs v1 (source `7c92418`) until v1.1 is deployed (see docs/OWNER-ACTIONS.md).
 - **Results oracle**: operator-run, from two providers that must agree, with a 12-hour on-chain challenge window. Overrides need a written reason that is published with the evidence.
 - **Legal texts**: drafts pending review by Nigerian counsel.
 - All player, wallet and revenue numbers are targets until they appear on `/stats`.

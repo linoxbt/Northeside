@@ -25,7 +25,8 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with: { version: v1.7.1 }
       - run: forge fmt --check
-      - run: forge build --sizes
+      # Size limits apply to deployed contracts only: scripts and tests are never deployed.
+      - run: forge build --sizes --skip test --skip script
       # QIE mainnet rejects Cancun opcodes (TSTORE, MCOPY): fail if any compiled contract uses one.
       - run: node script/check-opcodes.mjs
       - run: forge test -vv

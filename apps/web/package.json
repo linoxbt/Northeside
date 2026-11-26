@@ -9,7 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "e2e": "playwright test --trace off",
+    "e2e": "node e2e/run.mjs",
     "bundle:worker": "node scripts/bundle-worker.mjs"
   },
   "dependencies": {
@@ -45,6 +45,7 @@
     "@types/react-dom": "19.3.0",
     "@types/web-push": "3.6.4",
     "esbuild": "0.28.2",
+    "playwright": "1.63.0",
     "postgres": "3.4.9",
     "tailwindcss": "4.3.5"
   }

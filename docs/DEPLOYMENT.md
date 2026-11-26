@@ -17,7 +17,8 @@ holds. Nothing in this repo sends a mainnet transaction on its own.
 ## Mainnet deployment (2026-11-12)
 
 Audited first (`docs/AUDIT.md`). Deployed from `0x6e2E…6Bf4` (no role afterwards) at block
-11852159, source verified on the QIE explorer. Record: `contracts/deployments/1990.json`.
+11852159, source verified on the QIE explorer. Source commit `7c92418` (runtime bytecode re-checked
+against it on 26 Nov 2026). Record: `contracts/deployments/1990.json`.
 
 | Contract | Address |
 | --- | --- |
@@ -29,7 +30,7 @@ Audited first (`docs/AUDIT.md`). Deployed from `0x6e2E…6Bf4` (no role afterwar
 | Role | Address |
 | --- | --- |
 | Admin (`DEFAULT_ADMIN_ROLE` on all three), treasury, challenger | `0x747DF176962e1495355562Fe30b65F276f0B8404` (owner's wallet) |
-| Operator + pauser (`OPERATOR_PRIVATE_KEY` on Netlify) | `0x0dD4C52951E447b04C1f6C8Fe61E112D36859798` |
+| Operator + pauser (`OPERATOR_PRIVATE_KEY` on Netlify); the pauser role moves to `0x2AEa…5353`, see docs/OWNER-ACTIONS.md | `0x0dD4C52951E447b04C1f6C8Fe61E112D36859798` |
 | Results (`RESULTS_PRIVATE_KEY` on Netlify) | `0xADAabFbbfA07068F66EA96616469e6B6805C1c8b` |
 | Attester | `0x7705339BF84F843240e9F25d403bFF4ad5746ba4` |
 
@@ -66,7 +67,7 @@ off until `NSD_REWARDS_ENABLED=1` and `NEXT_PUBLIC_NSD_REWARDS_LIVE=1`; see docs
 | `DRIP_PRIVATE_KEY` — address `0x6d4b7841Bce434Ac6abBC9194b4e39ea6c8D86bd` | secret |
 | `NEXT_PUBLIC_PRIVY_APP_ID` / `PRIVY_APP_SECRET` (email sign-in; Privy app "Northeside", allowed domain northeside.netlify.app) | public / secret |
 | `VAPID_PRIVATE_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (web push) | secret / public |
-| `DRIP_AMOUNT_WEI` = 0.0006 QIEV3, `DRIP_DAILY_CAP_WEI` = 0.18 QIEV3 | plain (re-measure gas, adjust) |
+| `DRIP_AMOUNT_WEI` = 0.00025 QIEV3 (250000000000000), `DRIP_DAILY_CAP_WEI` = 0.18 QIEV3 | plain (re-measure gas, adjust) |
 | `NEXT_PUBLIC_CHAIN_ID` / `CHAIN_ID` = 1990, `NEXT_PUBLIC_QUSDC_ADDRESS`, `NEXT_PUBLIC_SITE_URL`, `SEASON` | plain |
 
 Use the attester address as `ATTESTER_ADDRESS` when deploying the contracts. Fund the drip address

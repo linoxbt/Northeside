@@ -138,6 +138,8 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
 
     /// @notice Total pause time so far, including a pause still in progress.
     function pausedSoFar() public view returns (uint64) {
+        // pausedSince is 0 exactly when no pause is in progress (a sentinel, not a timestamp check).
+        // slither-disable-next-line incorrect-equality
         return pausedTotal + (pausedSince == 0 ? 0 : uint64(block.timestamp) - pausedSince);
     }
 
