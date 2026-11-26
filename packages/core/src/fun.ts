@@ -1,10 +1,11 @@
 import { pickedCount, sealedPayloadSchema } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { breakdown, crowdCounts, explainPick, pickAt, rank, rulesVersion } from "@northeside/scoring";
+import { breakdown, crowdCounts, explainPick, pickAt, rulesVersion } from "@northeside/scoring";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
-import { fixtureRows, provisional, sideFor } from "./live";
+import { fixtureRows, scoredWeek, sideFor } from "./live";
+import { rankPeople } from "./people";
 import { payloadAad } from "./matchweek";
 import { oddsFor, resultChances } from "./odds";
 import { displayName } from "./queries";
@@ -167,10 +168,10 @@ export async function playerCard(ctx: CoreContext, userId: string): Promise<Play
     let final: WeekFacts["final"] = null;
     if (sealed && mw.status === "finalized") {
       const version = rulesVersion(mw.scoringRulesHash);
-      const live = await provisional(ctx, mw.id, version, fixtures);
+      const live = await scoredWeek(ctx, mw, fixtures);
       const me = sideFor(live.scored, userId);
       if (me) {
-        const ranked = rank(live.scored.map((e) => ({ ...e, id: e.wallet })));
+        const people = rankPeople(live.scored);
         const b = breakdown(version, me, live.entries, live.results);
         const odds = await oddsFor(ctx, mw.id).catch(() => null);
         const upsets = b.filter((x) => {
@@ -191,8 +192,8 @@ export async function playerCard(ctx: CoreContext, userId: string): Promise<Play
         final = {
           points: me.points,
           exact: me.exactScores,
-          rank: ranked.find((x) => x.entry.wallet === me.wallet)?.rank ?? ranked.length,
-          players: new Set(live.scored.map((e) => e.userId)).size,
+          rank: people.rankOf.get(userId) ?? people.players,
+          players: people.players,
           bankerHit: b.some((x) => x.banker && x.points > 0),
           bestBonus: b.reduce((m, x) => Math.max(m, x.bonus), 0),
           upsets,
@@ -327,14 +328,13 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
   if (!mw || ctx.now() < mw.lockTime) return null;
   const fixtures = await fixtureRows(ctx, mw.id);
   const version = rulesVersion(mw.scoringRulesHash);
-  const live = await provisional(ctx, mw.id, version, fixtures);
+  const live = await scoredWeek(ctx, mw, fixtures);
   const me = sideFor(live.scored, userId);
   if (!me) return null;
   const ready = live.view.every((f) => f.state === "ft" || f.state === "void");
 
   // One entry per person (first-sealed wallet), ranked like the leaderboard.
-  const people = [...new Set(live.scored.map((e) => e.userId))].map((u) => sideFor(live.scored, u)!);
-  const ranked = rank(people.map((e) => ({ ...e, id: e.userId })));
+  const { ranked } = rankPeople(live.scored);
   const mine = ranked.find((r) => r.entry.userId === userId)!;
   const below = ranked.filter((r) => r.rank > mine.rank).length;
   const players = ranked.length;

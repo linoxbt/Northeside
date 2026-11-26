@@ -1,9 +1,10 @@
 import { sealedPayloadSchema, type SealedPayload } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { NO_PICK, breakdown, crowdCounts, pickAt, rank, rulesVersion, scoreEntries, slipOf, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
+import { NO_PICK, breakdown, crowdCounts, pickAt, rulesVersion, scoreEntries, slipOf, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
+import { firstPerPerson, personEntry, rankPeople } from "./people";
 import { chanceSeries, fitsFor, oddsFor, type ChancePoint } from "./odds";
 import { displayName } from "./queries";
 
@@ -77,15 +78,7 @@ export interface CrowdView {
 }
 
 /** One entry per person (their first-sealed wallet), as on the tables. */
-function perPerson<T extends { userId: string; sealedAt: Date | null; wallet: string }>(entries: T[]): T[] {
-  const first = new Map<string, T>();
-  for (const e of entries) {
-    const cur = first.get(e.userId);
-    const t = (x: T) => x.sealedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    if (!cur || t(e) < t(cur) || (t(e) === t(cur) && e.wallet < cur.wallet)) first.set(e.userId, e);
-  }
-  return [...first.values()];
-}
+const perPerson = firstPerPerson;
 
 interface CrowdSnapshot {
   at: number;
@@ -224,13 +217,7 @@ export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: 
   const reviews = resultReviews(mw, fixtures, ctx.now());
 
   // The table shows one entry per person (their first-sealed wallet), like the season table.
-  const first = new Map<string, (typeof scored)[number]>();
-  for (const s of scored) {
-    const cur = first.get(s.userId);
-    const t = (x: typeof s) => x.sealedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    if (!cur || t(s) < t(cur)) first.set(s.userId, s);
-  }
-  const ranked = rank([...first.values()].map((s) => ({ ...s, id: s.userId })));
+  const { ranked } = rankPeople(scored);
   const users = ranked.length
     ? await ctx.db
         .select({ id: schema.users.id, displayName: schema.users.displayName, qieId: schema.users.qieId, qieIdResolved: schema.users.qieIdResolved, deletedAt: schema.users.deletedAt })
@@ -296,8 +283,28 @@ export async function provisional(ctx: CoreContext, id: number, version: 1 | 2 |
 }
 
 /** One person's side for head-to-head: their first-sealed wallet's picks and points. */
-export function sideFor<T extends { userId: string; sealedAt: Date | null }>(scored: T[], userId: string): T | undefined {
-  return scored.filter((s) => s.userId === userId).sort((a, b) => (a.sealedAt?.getTime() ?? Infinity) - (b.sealedAt?.getTime() ?? Infinity))[0];
+export function sideFor<T extends { userId: string; wallet: string; sealedAt: Date | null }>(scored: T[], userId: string): T | undefined {
+  return personEntry(scored, userId);
+}
+
+/**
+ * Scores for a finalized matchweek never change, so they are computed once and reused for a few
+ * minutes: player cards and the badge job read every finalized week for every player (audit P1).
+ */
+const FINAL_TTL_MS = 10 * 60_000;
+const finalScores = new WeakMap<CoreContext, Map<number, { at: number; value: ReturnType<typeof provisional> }>>();
+export function scoredWeek(ctx: CoreContext, mw: { id: number; status: string; scoringRulesHash: string | null }, fixtures: Awaited<ReturnType<typeof fixtureRows>>) {
+  const version = rulesVersion(mw.scoringRulesHash);
+  if (mw.status !== "finalized") return provisional(ctx, mw.id, version, fixtures);
+  let byId = finalScores.get(ctx);
+  if (!byId) finalScores.set(ctx, (byId = new Map()));
+  const hit = byId.get(mw.id);
+  const now = Date.now();
+  if (hit && now - hit.at < FINAL_TTL_MS) return hit.value;
+  const value = provisional(ctx, mw.id, version, fixtures);
+  byId.set(mw.id, { at: now, value });
+  value.catch(() => byId!.delete(mw.id));
+  return value;
 }
 
 export { fixtureRows };

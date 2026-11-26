@@ -10,7 +10,8 @@ import {
   buildScoresTree,
   type FixtureLeaf,
 } from "@northeside/merkle";
-import { CURRENT_RULES_HASH, rank, rulesVersion, scoreEntries, type FixtureResult } from "@northeside/scoring";
+import { CURRENT_RULES_HASH, rulesVersion, scoreEntries, type FixtureResult } from "@northeside/scoring";
+import { rankPeople } from "./people";
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { bigintReplacer, need, toJson, type CoreContext } from "./context";
@@ -388,6 +389,9 @@ async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResu
     reveals.map(({ row, payload }) => ({
       id: row.wallet,
       predictionId: row.id,
+      userId: row.userId,
+      wallet: row.wallet,
+      sealedAt: row.sealedAt,
       player: getAddress(row.wallet),
       home: payload.home,
       away: payload.away,
@@ -406,7 +410,11 @@ async function scoreMatchweek(ctx: CoreContext, id: number, results: FixtureResu
       salt: payload.salt as Hex,
     })),
   );
-  return { scored, ranked: rank(scored), scoresTree, revealsTree };
+  // Stored ranks are per person (audit B17), like every table: each of a person's wallets carries
+  // the rank of the wallet that counts for them. The scores tree stays per wallet, as on-chain.
+  const { rankOf } = rankPeople(scored);
+  const ranked = scored.map((entry) => ({ entry, rank: rankOf.get(entry.userId)! }));
+  return { scored, ranked, scoresTree, revealsTree };
 }
 
 // ---------------------------------------------------------------- results

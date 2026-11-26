@@ -1,7 +1,7 @@
 import { badgesAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
 import { buildBadgesTree } from "@northeside/merkle";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getAddress, type Address, type Hex } from "viem";
 import { need, type CoreContext } from "./context";
 import { BADGES, playerCard, type BadgeId } from "./fun";
@@ -55,9 +55,15 @@ export async function badgeLeaves(ctx: CoreContext) {
     if (!cur || t < cur.t) first.set(r.userId, { wallet: r.wallet, t });
   }
   const leaves: { wallet: Address; badgeId: number }[] = [];
+  const ids = [...first.keys()];
+  const live = new Set(
+    ids.length
+      ? (await ctx.db.select({ id: schema.users.id, deletedAt: schema.users.deletedAt }).from(schema.users).where(inArray(schema.users.id, ids))).filter((u) => !u.deletedAt).map((u) => u.id)
+      : [],
+  );
+  // Player cards reuse each finalized week's scores (scoredWeek), so this is one scoring per week.
   for (const [userId, { wallet }] of first) {
-    const [u] = await ctx.db.select({ deletedAt: schema.users.deletedAt }).from(schema.users).where(eq(schema.users.id, userId));
-    if (!u || u.deletedAt) continue;
+    if (!live.has(userId)) continue;
     const card = await playerCard(ctx, userId);
     for (const b of card.badges) if (b.earned) leaves.push({ wallet: getAddress(wallet), badgeId: badgeNumber(b.id) });
   }

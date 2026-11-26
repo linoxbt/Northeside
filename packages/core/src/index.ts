@@ -11,6 +11,7 @@ export * from "./telegram";
 export * from "./jobs";
 export * from "./worker";
 export * from "./live";
+export * from "./people";
 export * from "./h2h";
 export * from "./nsd";
 export * from "./odds";
