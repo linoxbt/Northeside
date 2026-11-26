@@ -18,7 +18,7 @@ export default function OpengraphImage() {
           <div style={{ fontSize: 96, letterSpacing: -4, lineHeight: 1 }}>Call the score.</div>
           <div style={{ fontSize: 96, letterSpacing: -4, lineHeight: 1 }}>Seal it on QIE.</div>
         </div>
-        <div style={{ fontSize: 30, color: "rgba(255,255,255,0.65)" }}>Free Premier League predictions, sealed before kickoff. {nsdRewardsLive ? "No stakes. Free to play." : "No stakes, no prizes."}</div>
+        <div style={{ fontSize: 30, color: "rgba(255,255,255,0.65)" }}>{`Free Premier League predictions, sealed before kickoff. ${nsdRewardsLive ? "No stakes. Free to play." : "No stakes, no prizes."}`}</div>
       </div>
     ),
     size,
