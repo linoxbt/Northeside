@@ -25,7 +25,7 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { badgesAbi, erc20Abi, hostRewardsAbi, identityAbi, matchweeksAbi, nsdRewardsAbi, nsdTokenAbi } from "@northeside/chain";
 import { buildSealedPayload } from "@northeside/commitments";
-import { rulesVersion } from "@northeside/scoring";
+import { RULES_V2_HASH, rulesVersion } from "@northeside/scoring";
 import { FieldCrypto, schema, type Database } from "@northeside/db";
 import type { ApiFootballClient, FootballDataClient, Fixture, MatchResult } from "@northeside/football";
 import {
@@ -71,6 +71,7 @@ import {
   indexChain,
   issueAttestation,
   createMatchweekOnChain,
+  fixturesTreeFor,
   leaderboard,
   payloadAad,
   postRewardRoot,
@@ -763,6 +764,30 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     },
     120_000,
   );
+  it("a repair keeps the rules and lock a matchweek was created with on-chain", async () => {
+    // Matchweek 30 was created on-chain under rules v2 (say by an older release), but its database
+    // row never recorded it. Opening it again must copy v2 from the chain, not label it v3.
+    const now = Number((await pub.getBlock()).timestamp);
+    const start = now + 10 * 24 * 3600;
+    await ctx.db.insert(schema.matchweeks).values({ id: 30, season: 2026, status: "draft", lockTime: new Date(start * 1000) });
+    await ctx.db.insert(schema.fixtures).values(
+      fixturesFor(30, start).map((f) => ({ matchweekId: 30, idx: f.index, externalId: f.externalId, home: f.home, away: f.away, kickoff: new Date(f.kickoff * 1000) })),
+    );
+    const tree = await fixturesTreeFor(ctx, 30);
+    const tx = await wallet(KEYS.operator).writeContract({
+      address: ctx.deployment.matchweeks,
+      abi: matchweeksAbi,
+      functionName: "createMatchweek",
+      args: [30, tree.root, BigInt(start), BigInt(start + 4 * 24 * 3600), 3, RULES_V2_HASH],
+    });
+    expect((await pub.waitForTransactionReceipt({ hash: tx })).status).toBe("success");
+    await createMatchweekOnChain(ctx, 30);
+    const [row] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, 30));
+    expect(row).toMatchObject({ status: "open", scoringRulesHash: RULES_V2_HASH, fixturesRoot: tree.root });
+    expect(rulesVersion(row!.scoringRulesHash)).toBe(2);
+    expect(row!.lockTime.getTime()).toBe(start * 1000);
+  }, 60_000);
+
   it("QIE ID: verified .qie names only (reverse lookup confirmed by the owner lookup)", async () => {
     const reg = artifact("MockQieRegistry.sol/MockQieRegistry.json");
     const deployTx = await wallet(KEYS.deployer).deployContract({ abi: reg.abi, bytecode: reg.bytecode, args: [] });

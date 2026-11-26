@@ -63,6 +63,11 @@ function fixtureLeaves(id: number, rows: Awaited<ReturnType<typeof getFixtures>>
   }));
 }
 
+/** The fixtures Merkle tree for a matchweek's stored games (what createMatchweek commits to). */
+export async function fixturesTreeFor(ctx: CoreContext, id: number) {
+  return buildFixturesTree(fixtureLeaves(id, await getFixtures(ctx, id)));
+}
+
 /** A matchweek's games are those within this many seconds of the middle of its kickoffs. */
 export const MATCHWEEK_WINDOW_SECONDS = 5 * 24 * 3600;
 
@@ -207,14 +212,17 @@ export async function createMatchweekOnChain(ctx: CoreContext, id: number) {
     await confirm(ctx, txHash, `createMatchweek(${id})`);
   }
 
+  // A matchweek that already exists on-chain keeps the rules and lock it was created with: the
+  // chain is the source of truth (a repair must never relabel a v2 matchweek as v3).
+  const exists = chain.status !== ChainStatus.None;
   await ctx.db
     .update(schema.matchweeks)
     .set({
       status: "open",
       fixturesRoot: tree.root,
       fixturesTree: toJson(tree.dump()),
-      scoringRulesHash: CURRENT_RULES_HASH,
-      lockTime: new Date(Number(lockTime) * 1000),
+      scoringRulesHash: exists ? chain.scoringRulesHash : CURRENT_RULES_HASH,
+      lockTime: new Date(Number(exists ? chain.lockTime : lockTime) * 1000),
       ...(txHash ? { createTx: txHash } : {}),
     })
     .where(eq(schema.matchweeks.id, id));
