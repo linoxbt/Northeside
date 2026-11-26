@@ -19,6 +19,7 @@ export const GET = route(async () => {
   if (!s) return json({ user: null });
   const user = await userById(s.userId);
   if (!user) return json({ user: null });
+  const provider = passProvider();
   return json({
     user: {
       id: user.id,
@@ -32,8 +33,9 @@ export const GET = route(async () => {
     wallet: s.wallet,
     wallets: (await walletsOf(user.id)).map((w) => ({ address: w.address, kind: w.kind })),
     verified: await isVerifiedUser(user.id),
-    // False until a real QIE Pass provider is configured: the UI must not offer verification (spec 9.4).
-    verificationAvailable: passProvider() !== null,
+    // False until a verification provider is configured: the UI must not offer verification (spec 9.4).
+    verificationAvailable: provider !== null,
+    verificationMethod: provider?.name ?? null,
   });
 });
 

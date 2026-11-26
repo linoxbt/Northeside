@@ -17,6 +17,8 @@ export interface SessionData {
   wallets?: { address: string; kind: string }[];
   verified?: boolean;
   verificationAvailable?: boolean;
+  /** "qie-name": a .qie name owned by the signed-in wallet verifies one person. */
+  verificationMethod?: "mock" | "qie-name" | null;
 }
 
 export function useSession() {

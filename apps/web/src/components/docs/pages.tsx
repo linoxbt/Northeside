@@ -455,8 +455,9 @@ function Identity() {
         Once QIE ID confirms a person, Northeside issues the attestation above.
       </P>
       <Callout type="warning">
-        Verification is waiting on partner access from the QIE ID team. Until then everyone can play and appears on the tables; the verified-only
-        view and host payouts wait for it.
+        Until QIE Pass can be checked, Northeside verifies with a .qie name instead: the signed-in wallet must own the name (reverse and forward
+        lookups agree), one name verifies one account, and a name that already verified an account cannot verify another. This is weaker than
+        QIE Pass, since one person can own several names, so it limits reward farming by cost rather than by identity.
       </Callout>
     </>
   );
@@ -572,7 +573,7 @@ function Overview() {
           ["Odds engine, live centre, head-to-head, levels, badges, recap, invites", "Live"],
           ["Android app and installable web app", "Live"],
           ["QIE ID .qie names", "Live"],
-          ["QIE ID verification (one person, one player)", "Awaiting partner access from the QIE ID team"],
+          ["QIE Pass verification (one person, one player)", "Awaiting partner access from the QIE ID team; .qie name verification is live meanwhile"],
           ["On-chain, non-transferable achievement badges", "Built and tested; deployment pending"],
         ]}
       />
@@ -602,7 +603,7 @@ function Hosts() {
         items={[
           ["Create a league", "Pick a name and share the link."],
           ["Fans play weekly", "Ten scores, sealed before kickoff."],
-          ["Sponsors pay per fan", "For each verified player who returns, up to a cap. Starts when verification is live."],
+          ["Sponsors pay per fan", "For each verified player who returns, up to a cap."],
           ["Claim on-chain", "Claim your QUSDC from the host page with a Merkle proof."],
         ]}
       />

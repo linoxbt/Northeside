@@ -2,8 +2,8 @@ import { contactText } from "./contact";
 import { nsdRewardsLive } from "./nsd-live";
 
 export const LEGAL_VERSION = nsdRewardsLive
-  ? "1.3 · 26 November 2026 · adds $NSD rewards · pending review by Nigerian counsel"
-  : "1.2 · 17 November 2026 · pending review by Nigerian counsel before launch";
+  ? "1.4 · 26 November 2026 · adds $NSD rewards and .qie name verification"
+  : "1.2 · 17 November 2026";
 
 export interface LegalSection {
   /** Anchor id, so other pages can link to a section (e.g. /docs/privacy#cookies). */
@@ -39,7 +39,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         heading: "Who can play",
         body: [
           "You must be 18 or older. You confirm this before your first seal.",
-          "One person, one account. You may link up to three wallets to the same person through QIE Pass; they count as one player everywhere.",
+          "One person, one account. Verified players are confirmed through QIE Pass or, until QIE Pass can be checked, a .qie name the wallet owns (one name verifies one account). You may link up to three wallets to the same person; they count as one player everywhere.",
         ],
       },
       {
@@ -133,7 +133,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         body: [
           "Account: your wallet addresses, a display name if you set one, and your email if you sign in with email (stored encrypted).",
           "Game: your predictions, sealed hashes, league memberships and the transactions you send.",
-          "Verification: if you verify with QIE Pass, a verified flag and an encrypted, salted reference from QIE. We never receive identity documents or selfies; QIE Pass and its provider handle those.",
+          "Verification: if you verify, a verified flag and an encrypted, salted reference (your .qie name, or a reference from QIE Pass). We never receive identity documents or selfies.",
           "Assistant: if you use Ask Northeside, the questions you ask. We count them for the daily limit; we do not store the conversation.",
           "Technical: IP address and device details in short-lived security logs, used for rate limits and abuse prevention.",
         ],

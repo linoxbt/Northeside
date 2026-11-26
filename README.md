@@ -123,7 +123,7 @@ Requires Node 22, pnpm 10 and Foundry 1.7 (`forge`, `anvil`).
 - **QIE Pass**: Mode B (Northeside attests after checking Pass). QIE has not published the dApp interface yet; until it does, verification is off on mainnet, the UI says "coming soon", and host payouts count nobody.
 - **Contracts v1.1**: the audit's contract fixes (claims enforce rate and cap, pause holds results, results 2 h after lock, pausable identity, admin-only unpause, replaceRoot/voidRoot near expiry) are in the source and tested; mainnet runs v1 (source `7c92418`) until v1.1 is deployed (see docs/OWNER-ACTIONS.md).
 - **Results oracle**: operator-run, from two providers that must agree, with a 12-hour on-chain challenge window. Overrides need a written reason that is published with the evidence.
-- **Legal texts**: drafts pending review by Nigerian counsel.
+- **Legal texts**: Terms and Privacy at version 1.4 (no external legal review; owner decision for the hackathon).
 - All player, wallet and revenue numbers are targets until they appear on `/stats`.
 
 ## Built with

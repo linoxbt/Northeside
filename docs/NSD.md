@@ -48,10 +48,11 @@ The worker job `post-nsd-roots` does the same weekly once `NSD_REWARDS_ENABLED=1
 
 ## Launch checklist (owner decisions)
 
-- [ ] **Legal review** of a token reward for a free prediction game in your markets (prize
-      competition and digital-asset rules), and terms of use updated.
-- [ ] **Verification live**: QIE Pass (or another one-person check) connected; without it nobody
-      can claim, by design.
+- [x] **Legal review**: dropped by the owner for the hackathon (26 Nov 2026). Terms 1.4 carry the
+      $NSD clause.
+- [x] **Verification live**: a .qie name owned by the player's wallet verifies one account
+      (`QIE_PASS_MODE=qie-name`) until QIE Pass can be checked. Without verification nobody can
+      claim, by design.
 - [ ] **Tokenomics**: total supply, how much goes to the rewards pool, the weekly pool, the split by
       position, and what happens to the rest of the supply.
 - [x] **Keys**: pauser separate from the operator (`0x2AEa…5353`). Admin on a hardware wallet: owner to confirm.

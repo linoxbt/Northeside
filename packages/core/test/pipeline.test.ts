@@ -51,6 +51,8 @@ import {
   postBadgeRoot,
   badgeClaimsFor,
   qieNameOf,
+  qieNamePassProvider,
+  passProviderFromEnv,
   ownsQieName,
   refreshQieId,
   displayName,
@@ -849,6 +851,24 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     await send("setOwner", ["ana.qie", cat.wallet]);
     expect(await refreshQieId(qctx, ana.userId)).toEqual({ qieId: null, resolved: false, changed: true });
     expect(displayName(await row(ana.userId), ana.wallet)).toBe("Ana");
+
+    // Verification fallback: a .qie name the signed-in wallet owns verifies one account.
+    const q = new URLSearchParams();
+    expect(passProviderFromEnv(1990, { QIE_PASS_MODE: "qie-name" }, ctx)).toBeNull(); // no registry: not offered
+    expect(passProviderFromEnv(1990, { QIE_PASS_MODE: "qie-name" }, qctx)?.name).toBe("qie-name");
+    expect(passProviderFromEnv(1990, {}, qctx)).toBeNull();
+    const pass = qieNamePassProvider(qctx);
+    const dan = await player("Dan");
+    const eve = await player("Eve");
+    await send("setName", [dan.wallet, "dan.qie"]);
+    expect(await pass.complete({ userId: ben.userId, wallet: ben.wallet, query: q })).toEqual({ reason: "no_name" });
+    const ok = await pass.complete({ userId: dan.userId, wallet: dan.wallet, query: q });
+    expect(ok).toEqual({ personRef: "qie-name:dan.qie", label: "dan.qie" });
+    await issueAttestation(qctx, dan.userId, dan.wallet, "qie-name:dan.qie");
+    expect(await pass.complete({ userId: dan.userId, wallet: dan.wallet, query: q })).toMatchObject({ personRef: "qie-name:dan.qie" }); // same account may retry
+    // Dan hands the name to Eve: it cannot verify a second account.
+    await send("setName", [eve.wallet, "dan.qie"]);
+    expect(await pass.complete({ userId: eve.userId, wallet: eve.wallet, query: q })).toEqual({ reason: "name_taken" });
   });
 
   it("gas drip: once per email, wallet and device; empty wallets only; daily cap", async () => {

@@ -319,7 +319,7 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   /** Apply pending database migrations (run on demand after a deploy that adds one). */
   /**
    * $NSD rewards for recently finalized matchweeks. Off unless NSD_REWARDS_ENABLED=1 and the
-   * rewards contract is configured (launch needs verified identity and legal review first).
+   * rewards contract is configured (only verified people are paid).
    */
   "post-nsd-roots": async () => {
     const ctx = getCtx();

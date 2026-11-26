@@ -5,8 +5,10 @@ score predictions on-chain before kickoff; sponsors pay league hosts in QUSDC fo
 returning players. Full spec: the "Northeside — Build Specification" doc.
 
 ## Decisions (locked)
-1. No cash prizes or token rewards to players yet. $NSD token rewards for top players are planned and
-   need verified identity (one person, one account) and legal review before launch. PrizeVault is designed, not deployed.
+1. No cash prizes to players. $NSD token rewards for top players go to verified players only (one person,
+   one account). Until QIE Pass can be checked, a .qie name owned by the player's wallet is the verification
+   (one name, one account). The owner dropped the legal-review gate for the hackathon (26 Nov 2026).
+   PrizeVault is designed, not deployed.
 2. Sponsors pay hosts, not players (QUSDC per verified, returning player).
 3. Players send their own commit transactions. No relayer, no forwarder. New wallets get a small,
    rate-limited QIEV3 gas drip.

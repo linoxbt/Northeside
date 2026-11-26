@@ -6,15 +6,16 @@ import { checkState, passProvider } from "@/lib/server/services/identity";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/v1/identity/callback: QIE Pass consent came back; prepare the attestation. */
+/** GET /api/v1/identity/callback: verification came back (QIE Pass, or the .qie name check); prepare the attestation. */
 export const GET = route(async (req) => {
   const s = await requireSession();
   const provider = passProvider();
   if (!provider) throw new HttpError(503, "pass_unavailable", "QIE Pass verification is not available yet");
   const query = new URL(req.url).searchParams;
   if (!checkState(s.userId, query.get("state") ?? "")) throw new HttpError(400, "bad_state", "Verification expired, start again");
-  const result = await provider.complete({ userId: s.userId, query });
+  const result = await provider.complete({ userId: s.userId, wallet: s.wallet, query });
   if (!result) return NextResponse.redirect(`${getCtx().siteUrl}/me?verify=failed`);
+  if ("reason" in result) return NextResponse.redirect(`${getCtx().siteUrl}/me?verify=${result.reason === "no_name" ? "no-name" : "name-taken"}`);
   await issueAttestation(getCtx(), s.userId, s.wallet, result.personRef);
   return NextResponse.redirect(`${getCtx().siteUrl}/me?verify=sign`);
 });

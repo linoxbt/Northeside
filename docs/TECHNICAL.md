@@ -93,5 +93,5 @@ or QIE Wallet directly.
 - QIE ID verification for the verified badge and host payouts.
 - **$NSD rewards** (built and tested, not deployed): a fixed-supply token (1,000,000) with 30% for
   players over the first 2-month season, paid weekly by finishing position to verified people
-  only, one claim per person per matchweek, enforced on-chain. Launch waits for verification and
-  legal review.
+  only, one claim per person per matchweek, enforced on-chain. Verification uses a .qie name the
+  wallet owns until QIE Pass can be checked. Paying waits only for the pool to be funded.

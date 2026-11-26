@@ -55,11 +55,12 @@ get an alert, and it is retried after you top up, as long as that is within 14 d
 `cast call 0x31aFa5801f3FB5444dF458569429d4e82483395f "available()(uint256)" --rpc-url https://rpc1mainnet.qie.digital/`.
 Tokens that are not owed to anyone can be taken back any time with `withdrawAvailable` (admin).
 
-## 3. Turn on verification (nobody can claim $NSD without it)
+## 3. Verification (done: .qie name fallback)
 
-Rewards go to verified people only (IdentityAdapter `personOf`). QIE Pass verification is not wired
-up yet (build task: QIE ID verification). Until it is, every reward run skips with "no verified
-players to reward" and nothing is paid.
+Rewards go to verified people only (IdentityAdapter `personOf`). Until QIE Pass can be checked,
+`QIE_PASS_MODE=qie-name` is set on Netlify: on their profile a player verifies with the .qie name
+their signed-in wallet owns and confirms one transaction from that wallet. One name verifies one
+account. A wallet only counts for a matchweek's rewards if it was verified before that week locked.
 
 ## 4. Rotate secrets that were pasted into chat
 
@@ -88,5 +89,4 @@ independent of the admin.
 
 ## 7. Legal
 
-CLAUDE.md decision 1: $NSD rewards need legal review before players are paid. The Terms are at
-version 1.3 with an $NSD clause, marked "pending review by Nigerian counsel".
+Dropped by the owner for the hackathon (26 Nov 2026). Terms and Privacy are at version 1.4.

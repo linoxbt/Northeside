@@ -50,7 +50,10 @@ export function Profile() {
     }
   }, [user]);
 
-  // Back from QIE Pass: submit the attestation from the player's own wallet.
+  const [verifyParam, setVerifyParam] = useState<string | null>(null);
+  useEffect(() => setVerifyParam(new URLSearchParams(location.search).get("verify")), []);
+
+  // Back from verification: submit the attestation from the player's own wallet.
   useEffect(() => {
     if (!user || new URLSearchParams(location.search).get("verify") !== "sign") return;
     void finishVerification();
@@ -58,8 +61,11 @@ export function Profile() {
   }, [user]);
 
   if (session.isLoading) return <PanelSkeleton />;
+
   if (!user) return <SignInPanel title="Sign in to see your profile" />;
   const wallets = session.data?.wallets ?? [];
+  const byName = session.data?.verificationMethod === "qie-name";
+  const verifyNote = VERIFY_NOTES[verifyParam ?? ""] ?? null;
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     setErr(null);
@@ -183,11 +189,24 @@ export function Profile() {
       </Card>
 
       <Card className="space-y-2">
-        <h2 className="text-[20px] tracking-[-0.02em]">Verified human (QIE Pass)</h2>
-        {session.data?.verified ? null : session.data?.verificationAvailable ? (
-          <Button variant="ghost" onClick={() => { track("verification_started"); location.href = "/api/v1/identity/start"; }}>Get verified</Button>
+        <h2 className="text-[20px] tracking-[-0.02em]">{byName ? "Verified player (.qie name)" : "Verified human (QIE Pass)"}</h2>
+        {session.data?.verified ? (
+          <p className="text-[14px] leading-6 text-ink-2">Verified. This account counts as one person on the table and for $NSD rewards.</p>
+        ) : session.data?.verificationAvailable ? (
+          <>
+            {byName ? (
+              <p className="text-[14px] leading-6 text-ink-2">
+                Verify with the .qie name your signed-in wallet owns. One .qie name verifies one account, and you confirm it with one
+                transaction from your wallet. No name yet? Get one in QIE Wallet, set it as your wallet&apos;s name, then come back.
+              </p>
+            ) : null}
+            {verifyNote ? <p role="status" className="rounded-xl bg-subtle px-4 py-3 text-[14px] leading-6 text-ink-2">{verifyNote}</p> : null}
+            <Button variant="ghost" onClick={() => { track("verification_started"); location.href = "/api/v1/identity/start"; }}>
+              {byName ? "Verify with my .qie name" : "Get verified"}
+            </Button>
+          </>
         ) : (
-          // Spec 9.4: never offer or claim QIE Pass verification before a real one works on mainnet.
+          // Spec 9.4: never offer or claim verification before a real one works on mainnet.
           <p className="rounded-xl bg-subtle px-4 py-3 text-[14px] leading-6 text-ink-2">
             Coming soon.
           </p>
@@ -285,3 +304,9 @@ export function Profile() {
     </div>
   );
 }
+
+const VERIFY_NOTES: Record<string, string> = {
+  "no-name": "Your signed-in wallet has no .qie name yet, or its name points to another wallet. Set a .qie name for this wallet in QIE Wallet and try again.",
+  "name-taken": "That .qie name already verified another Northeside account. Each name verifies one account.",
+  failed: "Verification did not complete. Try again.",
+};

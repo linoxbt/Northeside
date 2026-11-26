@@ -87,5 +87,5 @@ end of the season. The other 700,000 move only by treasury decisions.
 
 ## Before launch
 
-Legal review in your markets, verification live, the 70% decisions above, the admin key on a
-hardware wallet and a separate pauser. Steps: docs/NSD.md.
+Verification live (.qie name fallback, done), the pool funded in installments, the 70% decisions
+above, the admin key on a hardware wallet and a separate pauser. Steps: docs/NSD.md.

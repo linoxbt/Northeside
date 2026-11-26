@@ -3,7 +3,10 @@ import { passProviderFromEnv } from "@northeside/core";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getCtx } from "../ctx";
 
-export const passProvider = () => passProviderFromEnv(getCtx().deployment.chainId);
+export const passProvider = () => {
+  const ctx = getCtx();
+  return passProviderFromEnv(ctx.deployment.chainId, process.env, ctx);
+};
 
 /** CSRF state for the QIE Pass round trip, bound to the user and expiring after 15 minutes. */
 export function signState(userId: string) {

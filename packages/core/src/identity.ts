@@ -3,6 +3,7 @@ import { schema } from "@northeside/db";
 import { eq } from "drizzle-orm";
 import { encodeAbiParameters, getAddress, keccak256, type Address, type Hex } from "viem";
 import { need, type CoreContext } from "./context";
+import { qieNameOf } from "./qieid";
 
 /** personHash = keccak256(abi.encode(stablePersonRefFromQIE, pepper)). The raw reference stays off-chain. */
 export function personHash(personRef: string, pepper: Hex): Hex {
@@ -10,14 +11,19 @@ export function personHash(personRef: string, pepper: Hex): Hex {
 }
 
 /**
- * How Northeside learns that a user passed QIE Pass. QIE has not published the dApp interface yet
- * (spec 9.4), so the real provider is pending; the mock provider exists for testnet and local
- * development and refuses to run on mainnet.
+ * How Northeside learns that a user is a verified person. QIE has not published how a dApp checks
+ * QIE Pass status (spec 9.4), so two providers exist:
+ * - "qie-name" (mainnet fallback): the signed-in wallet must own a .qie name, confirmed both ways in
+ *   QIE's public name registry. One .qie name counts as one person. Weaker than QIE Pass: one human
+ *   can own several names, so it limits farming by cost, not by identity.
+ * - "mock": testnet and local development only; refuses to run on mainnet.
  */
+export type PassResult = { personRef: string; label?: string } | { reason: "no_name" | "name_taken" } | null;
+
 export interface PassProvider {
-  readonly name: string;
+  readonly name: "mock" | "qie-name";
   start(input: { userId: string; state: string; callbackUrl: string }): Promise<string>;
-  complete(input: { userId: string; query: URLSearchParams }): Promise<{ personRef: string } | null>;
+  complete(input: { userId: string; wallet: Address; query: URLSearchParams }): Promise<PassResult>;
 }
 
 export function mockPassProvider(chainId: number): PassProvider {
@@ -33,8 +39,30 @@ export function mockPassProvider(chainId: number): PassProvider {
   };
 }
 
-export function passProviderFromEnv(chainId: number, env: Record<string, string | undefined> = process.env): PassProvider | null {
+/** The .qie name fallback. The person reference is the name itself, so a name verifies one person. */
+export function qieNamePassProvider(ctx: CoreContext): PassProvider {
+  return {
+    name: "qie-name",
+    async start({ state, callbackUrl }) {
+      return `${callbackUrl}?state=${encodeURIComponent(state)}`;
+    },
+    async complete({ userId, wallet }) {
+      const name = await qieNameOf(ctx, wallet);
+      if (!name) return { reason: "no_name" };
+      const personRef = `qie-name:${name}`;
+      // A name already used by another account cannot verify a second one (a name sold or given
+      // away keeps counting as its first owner's person).
+      const ph = personHash(personRef, need(ctx.pepper, "PERSON_PEPPER"));
+      const [taken] = await ctx.db.select({ userId: schema.identities.userId }).from(schema.identities).where(eq(schema.identities.personHash, ph));
+      if (taken && taken.userId !== userId) return { reason: "name_taken" };
+      return { personRef, label: name };
+    },
+  };
+}
+
+export function passProviderFromEnv(chainId: number, env: Record<string, string | undefined> = process.env, ctx?: CoreContext): PassProvider | null {
   if (env.QIE_PASS_MODE === "mock") return mockPassProvider(chainId);
+  if (env.QIE_PASS_MODE === "qie-name" && ctx?.deployment.qieIdRegistry && ctx.pepper && ctx.attester) return qieNamePassProvider(ctx);
   return null; // "qie" mode lands once QIE publishes how a dApp checks Pass status
 }
 
