@@ -227,6 +227,11 @@ async function playerSeals(browser, keyIndex, name, picks, invite) {
     const goals = i % 2 === 0 ? picks[i / 2].h : picks[(i - 1) / 2].a;
     const label = fixtures[i];
     for (let k = 0; k <= goals; k++) await page.getByRole("button", { name: `${label}: one more` }).click();
+    if (i === 1 && fixtures.length > 2) {
+      // Rules v3: one game is a valid slip; the seal button is offered and the game can be skipped.
+      check(await page.getByRole("button", { name: "Seal predictions" }).isVisible(), `${name}: one picked game is enough to seal (rules v3)`);
+      check((await page.getByRole("button", { name: /^Skip / }).count()) === 1, `${name}: a picked game can be skipped again`);
+    }
   }
   await page.screenshot({ path: join(OUT, `${name}-picks.png`), fullPage: true });
   // The matchweek dashboard on a desktop screen too (slip panel beside the board).

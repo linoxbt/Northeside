@@ -1,4 +1,4 @@
-import { RULES_V1_HASH, RULES_V2_HASH } from "@northeside/scoring";
+import { RULES_V1_HASH, RULES_V2_HASH, RULES_V3_HASH } from "@northeside/scoring";
 import type { ReactNode } from "react";
 import { AnalyticsChoice } from "@/components/analytics-choice";
 import { contactHref } from "@/lib/contact";
@@ -62,7 +62,7 @@ function HowToPlay() {
       <Steps
         items={[
           ["Sign in", <>Use your email (a wallet is created for you) or connect QIE Wallet. Confirm you are 18 or older.</>],
-          ["Call the scores", <>Pick a score for every match. Tap 1, X or 2 for a quick pick, or set exact goals. Star one match as your Banker.</>],
+          ["Call the scores", <>Pick a score for as many matches as you like, even just one; a match you skip scores 0. Tap 1, X or 2 for a quick pick, or set exact goals. Star one of your picks as your Banker.</>],
           ["Seal on QIE", <>Your wallet sends one transaction that seals your slip. New wallets get a tiny amount of QIE for gas, so it stays free.</>],
           ["Watch it live", <>At the first kickoff the slip locks. Follow live scores and a provisional table as the games are played.</>],
           ["Get your result", <>Results are checked by two providers and finalized on-chain. Share your recap and go again next week.</>],
@@ -122,12 +122,18 @@ function Scoring() {
           ["Right result (home, draw or away)", "2 points"],
           ["Wrong result", "0 points"],
           ["Postponed or void match", "0 points for everyone"],
+          ["Match you skipped (v3)", "0 points"],
         ]}
       />
+      <H2 id="slip">Your slip</H2>
+      <P>
+        From rules v3 you can seal any number of matches, even just one. A match you skip scores 0, so more picks give you more chances to
+        score. Each picked match is sealed with its score; skipped matches are sealed as empty, so nothing can be added after kickoff.
+      </P>
       <H2 id="banker">Banker</H2>
-      <P>Star one match as your Banker. Its points, crowd bonus included, count double. The Banker is sealed with your picks.</P>
+      <P>Star one of your picks as your Banker. Its points, crowd bonus included, count double. The Banker is sealed with your picks.</P>
       <H2 id="crowd">Beat the crowd</H2>
-      <P>A right call that few players made earns extra, based on how many sealed players called the same result:</P>
+      <P>A right call that few players made earns extra, based on how many of the players who picked that match called the same result:</P>
       <Table
         head={["Players who called it", "Bonus"]}
         rows={[
@@ -144,6 +150,7 @@ function Scoring() {
         rows={[
           ["v1", "Matchweek 11", <span key="1" className="break-all font-mono text-[12px]">{RULES_V1_HASH}</span>],
           ["v2 (Banker, crowd bonus)", "Matchweek 12", <span key="2" className="break-all font-mono text-[12px]">{RULES_V2_HASH}</span>],
+          ["v3 (any number of matches)", "Next matchweek opened", <span key="3" className="break-all font-mono text-[12px]">{RULES_V3_HASH}</span>],
         ]}
       />
     </>

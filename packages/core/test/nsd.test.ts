@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_NSD_FINALE_BPS, nsdConfigFromEnv } from "../src";
+import { STANDARD_NSD_CURVE } from "@northeside/scoring";
+import { nsdConfigFromEnv } from "../src";
 
 describe("$NSD Season 1 defaults (docs/TOKENOMICS.md)", () => {
   const E = 10n ** 18n;
@@ -14,9 +15,21 @@ describe("$NSD Season 1 defaults (docs/TOKENOMICS.md)", () => {
     expect((300_000n * 100n) / 1_000_000n).toBe(30n);
   });
 
-  it("weekly and finale splits each add up to 100%", () => {
-    expect(cfg.schedule.positionsBps.reduce((a, b) => a + b, 0)).toBe(10_000);
-    expect(DEFAULT_NSD_FINALE_BPS.reduce((a, b) => a + b, 0)).toBe(10_000);
+  it("shares the weekly pool and the finale by the standard formula unless a table is set", () => {
+    expect(cfg.schedule.curve).toEqual(STANDARD_NSD_CURVE);
+    expect(cfg.schedule.positionsBps).toBeUndefined();
+    expect(cfg.season.finaleBps).toBeUndefined();
+    const custom = nsdConfigFromEnv({ NSD_PAID_SHARE_BPS: "2000", NSD_MAX_PAID: "50", NSD_MIN_FIELD: "5" });
+    expect(custom.schedule.curve).toEqual({ paidShareBps: 2000, maxPaid: 50, minField: 5, maxShareBps: 2000 });
+    const table = nsdConfigFromEnv({ NSD_POSITIONS_BPS: "[6000,4000]", NSD_FINALE_BPS: "[10000]" });
+    expect(table.schedule.positionsBps).toEqual([6000, 4000]);
+    expect(table.season.finaleBps).toEqual([10000]);
+  });
+
+  it("rejects bad formula settings", () => {
+    expect(() => nsdConfigFromEnv({ NSD_PAID_SHARE_BPS: "0" })).toThrow();
+    expect(() => nsdConfigFromEnv({ NSD_MAX_PAID: "1.5" })).toThrow(/whole number/);
+    expect(() => nsdConfigFromEnv({ NSD_POSITIONS_BPS: "[9000,2000]" })).toThrow(/over 100%/);
   });
 
   it("stays off until enabled", () => {

@@ -112,7 +112,13 @@ function Pick({ side, index, right }: { side: H2HView["challenger"] | null; inde
     <span className={`flex items-center gap-2 font-mono text-[15px] ${right ? "justify-end" : ""}`}>
       {right && f ? <Points f={f} /> : null}
       <span>
-        {side.picks.home[index]}–{side.picks.away[index]}
+        {side.picks.home[index] === null || side.picks.away[index] === null ? (
+          <span title="Not picked" className="text-line-strong">– : –</span>
+        ) : (
+          <>
+            {side.picks.home[index]}–{side.picks.away[index]}
+          </>
+        )}
         {banker ? <span className="ml-1 text-[12px]">★</span> : null}
       </span>
       {!right && f ? <Points f={f} /> : null}

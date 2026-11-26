@@ -1,11 +1,11 @@
-import { RULES_V2, rulesVersion } from "@northeside/scoring";
+import { RULES_V3, rulesVersion } from "@northeside/scoring";
 import "server-only";
 import { currentMatchweek, matchweekWithFixtures, oddsFor } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { desc } from "drizzle-orm";
 import { getCtx } from "../ctx";
 
-const CURRENT_RULES_VERSION = RULES_V2.version;
+const CURRENT_RULES_VERSION = RULES_V3.version;
 
 export function publicMatchweek(data: NonNullable<Awaited<ReturnType<typeof matchweekWithFixtures>>>) {
   const { matchweek: mw, fixtures } = data;

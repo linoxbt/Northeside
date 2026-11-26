@@ -35,10 +35,11 @@ vector shared with TypeScript, and the end-to-end pipeline on a local chain
 1. Only finalized matchweeks; only wallets verified on the IdentityAdapter.
 2. One entry per person: their first-sealed verified wallet.
 3. Ranked among verified people by points, then exact scores (shared ranks, no random tie-breaks).
-4. Season 1 (docs/TOKENOMICS.md): matchweeks 11–21 only; 24,000 NSD a week by position (1st 20%,
-   2nd 12%, 3rd 8%, 4th–10th 4% each, 11th–30th 1.6% each); with matchweek 21 a 36,000 NSD finale
-   for the season table plus every weekly share nobody earned. You must score to earn. Tied players
-   split the positions they occupy; amounts round down; each person gets one leaf per matchweek.
+4. Season 1 (docs/TOKENOMICS.md): matchweeks 11–21 only; 24,000 NSD a week shared by the standard
+   formula: the top 10% of verified people who scored (at most 100 places, nothing below 10 people),
+   place p weighted 1/p, no place over 20% of the pool. With matchweek 21 a 36,000 NSD finale for
+   the season table, same formula, plus every weekly share nobody earned. You must score to earn.
+   Tied players split the places they occupy; amounts round down; one leaf per person per matchweek.
 5. The tree and proofs are stored before `postRoot` is sent; the report behind each root is public
    at `/api/v1/nsd/report/:matchweek`.
 
@@ -55,7 +56,7 @@ The worker job `post-nsd-roots` does the same weekly once `NSD_REWARDS_ENABLED=1
       position, and what happens to the rest of the supply.
 - [ ] **Keys**: admin on a hardware wallet; pauser separate from the operator.
 - [ ] Deploy: `forge script script/DeployNSD.s.sol --rpc-url qie --broadcast` with the env listed
-      in the script; then transfer the reward allocation from the treasury to `NSDRewards`.
+      in the script (on mainnet also `NSD_CONFIRM_MAINNET="deploy NSD on mainnet"`); then transfer the reward allocation from the treasury to `NSDRewards`.
 - [ ] Set `NEXT_PUBLIC_NSD_TOKEN_ADDRESS`, `NEXT_PUBLIC_NSD_REWARDS_ADDRESS`, the pool settings and
       `NSD_REWARDS_ENABLED=1` on Netlify; rebuild.
 - [ ] Only then mention $NSD in the app and marketing (CLAUDE.md).

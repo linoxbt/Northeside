@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Address, Hex } from "viem";
-import { RULES_V1_HASH, RULES_V1_TEXT, computeHostPayouts, rank, scoreFixture, scorePicks, type FixtureResult, type PayoutCandidate, RULES_V2_HASH, CURRENT_RULES_HASH, rulesVersion, crowdBonus, scoreEntries, DEFAULT_NSD_POSITIONS_BPS, nsdPayouts } from "../src";
+import { RULES_V1_HASH, RULES_V1_TEXT, computeHostPayouts, rank, scoreFixture, scorePicks, type FixtureResult, type PayoutCandidate, RULES_V2_HASH, RULES_V3_HASH, CURRENT_RULES_HASH, rulesVersion, breakdown, crowdCounts, slipOf, NO_PICK, crowdBonus, scoreEntries, DEFAULT_NSD_POSITIONS_BPS, nsdPayouts, paidPlaces, harmonicWeights, STANDARD_NSD_CURVE } from "../src";
 
 const played = (index: number, h: number, a: number): FixtureResult => ({ index, homeGoals: h, awayGoals: a, status: "played" });
 
@@ -123,7 +123,7 @@ describe("rules v2: beat the crowd and Banker", () => {
     expect(RULES_V2_HASH).not.toBe(RULES_V1_HASH);
     expect(rulesVersion(RULES_V1_HASH)).toBe(1);
     expect(rulesVersion(RULES_V2_HASH)).toBe(2);
-    expect(CURRENT_RULES_HASH).toBe(RULES_V2_HASH);
+    expect(CURRENT_RULES_HASH).toBe(RULES_V3_HASH);
     expect(() => rulesVersion(`0x${"ab".repeat(32)}`)).toThrow();
   });
 
@@ -222,5 +222,128 @@ describe("$NSD reward schedule", () => {
   it("rejects a schedule over 100% or a zero pool", () => {
     expect(() => nsdPayouts([], { poolPerMatchweek: pool, positionsBps: [6000, 5000] })).toThrow(/over 100%/);
     expect(() => nsdPayouts([], { poolPerMatchweek: 0n, positionsBps: [100] })).toThrow(/positive/);
+  });
+});
+
+describe("rules v3: partial slips", () => {
+  const X = NO_PICK;
+  const results = [played(0, 2, 1), played(1, 0, 0), played(2, 1, 3)];
+  // Ten players: everyone picks game 0 (most call a home win); only four pick game 2.
+  const full = { home: [2, 0, 1], away: [1, 0, 3], banker: 0 };
+  const entries = [
+    full,
+    { home: [1, X, X], away: [0, X, X], banker: 255 }, // one game only
+    { home: [0, X, 0], away: [1, X, 2], banker: 2 }, // banker on a picked game
+    ...Array.from({ length: 7 }, () => ({ home: [1, 1, X], away: [0, 1, X], banker: 255 })),
+  ];
+
+  it("has its own hash and maps to version 3", () => {
+    expect(RULES_V3_HASH).not.toBe(RULES_V2_HASH);
+    expect(rulesVersion(RULES_V3_HASH)).toBe(3);
+  });
+
+  it("each game's crowd is only the players who picked it", () => {
+    const c = crowdCounts(entries, 3);
+    expect(c[0]).toEqual({ players: 10, home: 9, draw: 0, away: 1 });
+    expect(c[1]).toEqual({ players: 8, home: 0, draw: 8, away: 0 });
+    expect(c[2]).toEqual({ players: 2, home: 0, draw: 0, away: 2 });
+  });
+
+  it("skipped games score 0; a one-game slip scores just that game", () => {
+    const [a, b, c] = scoreEntries(3, entries, results);
+    // a: game 0 exact 5 (9 of 10 called home: no bonus) x2 Banker = 10; game 1 exact 0-0 5 (8 of 8: no
+    // bonus); game 2 exact 5 (2 of the 2 who picked it called away: no bonus). Total 20, 3 exact.
+    expect(a).toMatchObject({ points: 20, exactScores: 3 });
+    // b: one game, right result, no bonus.
+    expect(b).toMatchObject({ points: 2, exactScores: 0 });
+    // c: game 0 wrong (away), game 2 right result 2, Banker x2 = 4.
+    expect(c).toMatchObject({ points: 4, exactScores: 0 });
+  });
+
+  it("full slips score exactly as under v2", () => {
+    const fulls = [full, { home: [0, 1, 1], away: [1, 1, 3], banker: 1 }, { home: [3, 2, 0], away: [0, 2, 1], banker: 255 }];
+    expect(scoreEntries(3, fulls, results)).toEqual(scoreEntries(2, fulls, results));
+  });
+
+  it("v2 still rejects a slip with a skipped game", () => {
+    expect(() => scoreEntries(2, [entries[1]!], results)).toThrow();
+  });
+
+  it("breakdown marks skipped games and slipOf shows them as empty", () => {
+    const b = breakdown(3, entries[1]!, entries, results);
+    expect(b.map((x) => x.skipped ?? false)).toEqual([false, true, true]);
+    expect(b[1]).toMatchObject({ points: 0, banker: false });
+    expect(slipOf(entries[1]!)).toEqual({ home: [1, null, null], away: [0, null, null], banker: null });
+  });
+});
+
+describe("$NSD standard formula: top 10% of the field, place p weighted 1/p", () => {
+  const E = 10n ** 18n;
+  const field = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, rank: i + 1 }));
+
+  it("pays the top 10% (rounded up), at most 100 places, and nothing below 10 players", () => {
+    expect([9, 10, 11, 25, 99, 100, 1000, 5000].map((n) => paidPlaces(n))).toEqual([0, 1, 2, 3, 10, 10, 100, 100]);
+    expect(nsdPayouts(field(9), { poolPerMatchweek: 1_000n * E })).toEqual([]);
+    expect(STANDARD_NSD_CURVE).toEqual({ paidShareBps: 1000, maxPaid: 100, minField: 10, maxShareBps: 2000 });
+  });
+
+  const uncapped = { ...STANDARD_NSD_CURVE, maxShareBps: 10_000 };
+
+  it("shares are exactly 1/p over the harmonic sum: 30 players pay 6/11, 3/11, 2/11", () => {
+    expect(harmonicWeights(3)).toEqual([6n, 3n, 2n]);
+    const out = nsdPayouts(field(30), { poolPerMatchweek: 11_000n * E, curve: uncapped });
+    expect(out.map((o) => [o.id, o.amount])).toEqual([
+      ["p1", 6_000n * E],
+      ["p2", 3_000n * E],
+      ["p3", 2_000n * E],
+    ]);
+  });
+
+  it("a tie across the cut-off splits the paid place among everyone tied", () => {
+    // 30 players, 3 paid. Two tied for 3rd share the 3rd place (2/11) and the unpaid 4th (0).
+    const ranked = [...field(2), { id: "c", rank: 3 }, { id: "d", rank: 3 }, ...field(30).slice(4)];
+    const out = nsdPayouts(ranked, { poolPerMatchweek: 11_000n * E, curve: uncapped });
+    expect(out.map((o) => [o.id, o.amount])).toEqual([
+      ["p1", 6_000n * E],
+      ["p2", 3_000n * E],
+      ["c", 1_000n * E],
+      ["d", 1_000n * E],
+    ]);
+  });
+
+  it("never pays more than the pool, and a better place never earns less", () => {
+    for (const n of [10, 17, 64, 333, 1000, 2500]) {
+      const pool = 24_000n * E + 7n; // an awkward pool to exercise rounding
+      const out = nsdPayouts(field(n), { poolPerMatchweek: pool });
+      const total = out.reduce((a, o) => a + o.amount, 0n);
+      expect(total).toBeLessThanOrEqual(pool);
+      for (const o of out) expect(o.amount <= pool / 5n).toBe(true); // the 20% cap
+      const free = nsdPayouts(field(n), { poolPerMatchweek: pool, curve: uncapped }).reduce((a, o) => a + o.amount, 0n);
+      expect(pool - free).toBeLessThan(BigInt(out.length) + 1n); // uncapped: only rounding dust is left
+      for (let i = 1; i < out.length; i++) expect(out[i - 1]!.amount >= out[i]!.amount).toBe(true);
+      expect(out).toHaveLength(paidPlaces(n));
+    }
+  });
+
+  it("no place earns more than 20% of the pool; the rest is held back to roll over", () => {
+    // 30 players, 3 paid: 6/11 and 3/11 are over 20%, so 1st and 2nd get 20%; 3rd keeps 2/11.
+    const out = nsdPayouts(field(30), { poolPerMatchweek: 11_000n * E });
+    expect(out.map((o) => o.amount)).toEqual([2_200n * E, 2_200n * E, 2_000n * E]);
+    // 1,000 players (100 paid): 1st's 1/H(100) = 19.3% is under the cap, so nothing is held back.
+    const big = nsdPayouts(field(1000), { poolPerMatchweek: 24_000n * E });
+    const total = big.reduce((a, o) => a + o.amount, 0n);
+    expect(24_000n * E - total).toBeLessThan(1_000n);
+    expect(big[0]!.amount).toBeLessThan((24_000n * E) / 5n);
+  });
+
+  it("an explicit table still overrides the formula", () => {
+    const out = nsdPayouts(field(3), { poolPerMatchweek: 100n, positionsBps: [10_000] });
+    expect(out.map((o) => o.amount)).toEqual([100n]);
+  });
+
+  it("rejects a bad curve", () => {
+    expect(() => nsdPayouts([], { poolPerMatchweek: 1n, curve: { ...STANDARD_NSD_CURVE, paidShareBps: 0 } })).toThrow(/paid share/);
+    expect(() => nsdPayouts([], { poolPerMatchweek: 1n, curve: { ...STANDARD_NSD_CURVE, maxPaid: 0 } })).toThrow(/max paid/);
+    expect(() => nsdPayouts([], { poolPerMatchweek: 1n, curve: { ...STANDARD_NSD_CURVE, maxShareBps: 0 } })).toThrow(/max share/);
   });
 });

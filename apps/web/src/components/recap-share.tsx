@@ -15,7 +15,7 @@ export function RememberInvite({ code }: { code: string }) {
   return null;
 }
 
-const EMOJI = { exact: "🟩", result: "🟨", miss: "⬛", void: "▫️" } as const;
+const EMOJI = { exact: "🟩", result: "🟨", miss: "⬛", skip: "⬜", void: "▫️" } as const;
 
 export function recapText(r: Recap) {
   const grid = r.grid.map((g) => EMOJI[g.cell]).join("");

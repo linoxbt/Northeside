@@ -1,6 +1,6 @@
-import { sealedPayloadSchema } from "@northeside/commitments";
+import { pickedCount, sealedPayloadSchema } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { breakdown, crowdCounts, explainPick, rank, rulesVersion } from "@northeside/scoring";
+import { breakdown, crowdCounts, explainPick, pickAt, rank, rulesVersion } from "@northeside/scoring";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
@@ -159,7 +159,7 @@ export async function playerCard(ctx: CoreContext, userId: string): Promise<Play
     if (sealed && row.payloadEnc) {
       try {
         const p = sealedPayloadSchema.parse(JSON.parse(ctx.crypto.decrypt(row.payloadEnc, payloadAad(row.wallet, mw.id))));
-        picked = p.home.filter((h, i) => h !== null && p.away[i] !== null).length;
+        picked = pickedCount(p);
       } catch {
         picked = 0;
       }
@@ -294,7 +294,8 @@ export async function topScouts(ctx: CoreContext, limit = 20) {
 
 // ---------------------------------------------------------------- weekly recap
 
-export type RecapCell = "exact" | "result" | "miss" | "void";
+/** "skip": a game the slip did not pick (rules v3). */
+export type RecapCell = "exact" | "result" | "miss" | "skip" | "void";
 
 export interface Recap {
   matchweekId: number;
@@ -343,7 +344,7 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
   const grid = fixtures.map((f) => {
     const x = b.find((y) => y.index === f.idx);
     const r = live.results.find((y) => y.index === f.idx);
-    const cell: RecapCell = !r || r.status === "void" ? "void" : x?.exact ? "exact" : (x?.points ?? 0) > 0 ? "result" : "miss";
+    const cell: RecapCell = !r || r.status === "void" ? "void" : x?.skipped ? "skip" : x?.exact ? "exact" : (x?.points ?? 0) > 0 ? "result" : "miss";
     return { cell, banker: me.banker === f.idx };
   });
   let bestCall: Recap["bestCall"] = null;
@@ -351,22 +352,21 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
     const r = live.results.find((y) => y.index === x.index);
     if (!r || r.status === "void" || x.points <= 0) continue;
     const c = crowd[x.index]!;
-    const total = c.home + c.draw + c.away || 1;
+    const total = c.players || 1;
     const o = r.homeGoals > r.awayGoals ? c.home : r.homeGoals === r.awayGoals ? c.draw : c.away;
     const sharePct = Math.round((o * 100) / total);
     const f = fixtures.find((y) => y.idx === x.index)!;
     if (sharePct >= 100) continue; // everyone called it: not a "best call"
     if (!bestCall || sharePct < bestCall.sharePct || (sharePct === bestCall.sharePct && x.exact && !bestCall.exact)) {
-      bestCall = { home: f.home, away: f.away, pickHome: me.home[x.index]!, pickAway: me.away[x.index]!, exact: x.exact, sharePct };
+      const p = pickAt(me, x.index)!;
+      bestCall = { home: f.home, away: f.away, pickHome: p.home, pickAway: p.away, exact: x.exact, sharePct };
     }
   }
   const lines = fixtures.map((f) => {
     const x = b.find((y) => y.index === f.idx) ?? null;
     const r = live.results.find((y) => y.index === f.idx);
     const v = live.view.find((y) => y.index === f.idx);
-    const h = me.home[f.idx];
-    const a = me.away[f.idx];
-    const pick = h !== undefined && a !== undefined ? { home: h, away: a } : null;
+    const pick = pickAt(me, f.idx);
     const c = crowd[f.idx];
     const o = pick ? (pick.home > pick.away ? "home" : pick.home < pick.away ? "away" : "draw") : null;
     const text = explainPick({
@@ -377,7 +377,7 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
       live: v?.state === "live" || v?.state === "ht",
       banker: me.banker === f.idx,
       points: x,
-      crowd: o && c ? { called: c[o], players: c.home + c.draw + c.away } : null,
+      crowd: o && c ? { called: c[o], players: c.players } : null,
     });
     return { home: f.home, away: f.away, text };
   });
@@ -415,5 +415,5 @@ export async function userByInviteCode(ctx: CoreContext, code: string) {
 
 /** Wordle-style share line: 🟩 exact, 🟨 right result, ⬛ miss, ▫️ void. */
 export function recapEmoji(grid: Recap["grid"]) {
-  return grid.map((g) => (g.cell === "exact" ? "🟩" : g.cell === "result" ? "🟨" : g.cell === "miss" ? "⬛" : "▫️")).join("");
+  return grid.map((g) => (g.cell === "exact" ? "🟩" : g.cell === "result" ? "🟨" : g.cell === "miss" ? "⬛" : g.cell === "skip" ? "⬜" : "▫️")).join("");
 }

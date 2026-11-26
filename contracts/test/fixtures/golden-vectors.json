@@ -70,5 +70,35 @@
     "wallet": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     "amount": "2500000000000000000000",
     "leaf": "0x5f416a6536786c6583845ce47109921861c8e59568b4738e26dd9ae0b1ef9893"
+  },
+  "commitmentV3": {
+    "comment": "Payload v3 (scoring rules v3, partial slips): the v2 encoding, with a skipped game sealed as 255 on both sides. Same context and salt as commitment; games 1 and 3 picked (indexes 0 and 2), Banker on game 1. Generated with cast.",
+    "home": [
+      2,
+      255,
+      0,
+      255,
+      255,
+      255,
+      255,
+      255,
+      255,
+      255
+    ],
+    "away": [
+      1,
+      255,
+      0,
+      255,
+      255,
+      255,
+      255,
+      255,
+      255,
+      255
+    ],
+    "banker": 0,
+    "predictionsHash": "0x60770044d22ae6d8fe6036baf08687df3db1bbe630891048454c4d7c24ddd5f3",
+    "commitment": "0x053231a5a1bc68c9999030672f5b659221fc729fd0184782bfe469b0fa3f6279"
   }
 }

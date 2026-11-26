@@ -2,7 +2,7 @@ import { schema } from "@northeside/db";
 import { and, eq, sql } from "drizzle-orm";
 import type { Hex } from "viem";
 import { z } from "zod";
-import { sealedPayloadSchema } from "@northeside/commitments";
+import { NO_PICK, sealedPayloadSchema } from "@northeside/commitments";
 import { HttpError, idempotent, json, limitWrites, requireSession, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 import { requireAdult } from "@/lib/server/services/accounts";
@@ -71,7 +71,9 @@ export const POST = route(async (req) => {
 
     const enc = encryptPayload(payload);
     const base = { userId: s.userId, wallet: s.wallet.toLowerCase(), matchweekId: mw.id };
-    const draft = { home: payload.home, away: payload.away, ...(payload.banker !== undefined && payload.banker !== 255 ? { banker: payload.banker } : {}) };
+    // The draft mirrors the slip editor: a skipped game (255, rules v3) is an empty game, not 255 goals.
+    const empty = (x: number) => (x === NO_PICK ? null : x);
+    const draft = { home: payload.home.map(empty), away: payload.away.map(empty), ...(payload.banker !== undefined && payload.banker !== 255 ? { banker: payload.banker } : {}) };
     if (confirmed) {
       const values = {
         payloadEnc: enc,

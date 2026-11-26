@@ -34,7 +34,7 @@ function finished(home: string, away: string, h: number, a: number) {
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n * 100) / d) : 0);
 
 export function explainPick(i: ExplainPickInput): string {
-  if (!i.pick) return `You did not pick ${i.home} v ${i.away}.`;
+  if (!i.pick) return `You did not pick ${i.home} v ${i.away}, so it scores 0 for you.`;
   const you = call(i.home, i.away, i.pick.home, i.pick.away);
   const banker = i.banker ? " It is your Banker, so its points count double." : "";
 

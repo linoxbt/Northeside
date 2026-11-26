@@ -1,6 +1,6 @@
 import { sealedPayloadSchema, type SealedPayload } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { breakdown, crowdCounts, rank, rulesVersion, scoreEntries, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
+import { NO_PICK, breakdown, crowdCounts, pickAt, rank, rulesVersion, scoreEntries, slipOf, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
@@ -14,6 +14,11 @@ export const CROWD_SNAPSHOT_EVERY_MS = 6 * 3600_000;
 /** ...and only once this many new people have sealed since the last one, so the difference between
  * two snapshots never isolates one person's picks. */
 export const CROWD_SNAPSHOT_MIN_NEW = 10;
+/**
+ * Partial slips (rules v3): before lock, a game's crowd is shown only once this many people have
+ * picked that game, so a game few people called cannot narrow down whose pick it is.
+ */
+export const MIN_GAME_CROWD = 10;
 
 /** A small cache in app_settings: functions are stateless, and providers have rate limits. */
 async function cached<T>(ctx: CoreContext, key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
@@ -106,7 +111,10 @@ export async function preLockCrowd(ctx: CoreContext, id: number, fixtureCount: n
     snap = {
       at: now,
       players: people.length,
-      fixtures: crowdCounts(people.map((e) => e.payload), fixtureCount).map((c, index) => ({ index, home: c.home, draw: c.draw, away: c.away })),
+      fixtures: crowdCounts(people.map((e) => e.payload), fixtureCount)
+        .map((c, index) => ({ index, home: c.home, draw: c.draw, away: c.away, players: c.players }))
+        .filter((c) => c.players >= MIN_GAME_CROWD)
+        .map(({ index, home, draw, away }) => ({ index, home, draw, away })),
     };
     await ctx.db
       .insert(schema.appSettings)
@@ -146,7 +154,7 @@ export interface LiveView {
   matchweekId: number;
   started: boolean;
   provisional: boolean;
-  rules: 1 | 2;
+  rules: 1 | 2 | 3;
   fixtures: { index: number; state: LiveState; home: number | null; away: number | null; review?: ResultReview }[];
   players: number;
   table: { rank: number; name: string; points: number; exactScores: number; me: boolean }[];
@@ -257,7 +265,7 @@ export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: 
  * Provisional scoring for a locked matchweek: live (or final) scores per fixture, and every valid
  * reveal scored against the games played so far, with the matchweek's rules.
  */
-export async function provisional(ctx: CoreContext, id: number, version: 1 | 2, fixtures: Awaited<ReturnType<typeof fixtureRows>>) {
+export async function provisional(ctx: CoreContext, id: number, version: 1 | 2 | 3, fixtures: Awaited<ReturnType<typeof fixtureRows>>) {
   // Live scores from the primary provider, cached a minute; stored results win once they exist.
   const done = fixtures.every((f) => f.status !== "scheduled");
   const football = ctx.football;
@@ -322,7 +330,7 @@ export interface MatchView {
   home: string;
   away: string;
   kickoff: string;
-  rules: 1 | 2;
+  rules: 1 | 2 | 3;
   locked: boolean;
   finalized: boolean;
   state: LiveState;
@@ -365,7 +373,9 @@ export async function ownSlip(
   }
   if (!picks && row.draft) picks = row.draft as { home: (number | null)[]; away: (number | null)[]; banker?: number | null };
   if (!picks) return null;
-  return { home: picks.home, away: picks.away, banker: picks.banker ?? null, sealed: row.txStatus === "confirmed" };
+  // Sealed v3 slips mark skipped games as 255: show them as not picked.
+  const shown = slipOf({ home: picks.home.map((x) => x ?? NO_PICK), away: picks.away.map((x) => x ?? NO_PICK), banker: picks.banker ?? null });
+  return { ...shown, sealed: row.txStatus === "confirmed" };
 }
 
 /** One game in detail: live state, the crowd market on it, your pick and points, earlier meetings. */
@@ -387,14 +397,16 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
         const c = crowdCounts(entries, fixtures.length)[index] ?? { players: 0, home: 0, draw: 0, away: 0 };
         const tally = new Map<string, number>();
         for (const e of entries) {
-          const k = `${e.home[index]}-${e.away[index]}`;
+          const p = pickAt(e, index);
+          if (!p) continue; // skipped this game (rules v3)
+          const k = `${p.home}-${p.away}`;
           tally.set(k, (tally.get(k) ?? 0) + 1);
         }
         const scorelines = [...tally.entries()]
           .map(([k, count]) => ({ home: Number(k.split("-")[0]), away: Number(k.split("-")[1]), count }))
           .sort((a, b) => b.count - a.count || a.home + a.away - (b.home + b.away));
-        const shown = entries.length > 0;
-        return { players: entries.length, shown, minPlayers: MIN_CROWD, home: c.home, draw: c.draw, away: c.away, scorelines: shown ? scorelines : [] };
+        const shown = c.players > 0;
+        return { players: c.players, shown, minPlayers: MIN_CROWD, home: c.home, draw: c.draw, away: c.away, scorelines: shown ? scorelines : [] };
       })
     : await (async () => {
         const { players, snapshot } = await preLockCrowd(ctx, id, fixtures.length);
@@ -407,9 +419,9 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
   const chart = await cached(ctx, `chart:${id}:${index}:${locked ? "r" : "s"}`, locked ? 3_600_000 : 300_000, async () => {
     const seals = locked
       ? (await crowdEntries(ctx, id, true)).flatMap((e) => {
-          const h = e.payload.home[index], a = e.payload.away[index];
-          if (h === null || h === undefined || a === null || a === undefined || !e.sealedAt) return [];
-          return [{ t: e.sealedAt, outcome: h > a ? ("home" as const) : h === a ? ("draw" as const) : ("away" as const) }];
+          const p = pickAt(e.payload, index);
+          if (!p || !e.sealedAt) return [];
+          return [{ t: e.sealedAt, outcome: p.home > p.away ? ("home" as const) : p.home === p.away ? ("draw" as const) : ("away" as const) }];
         })
       : [];
     const now = ctx.now();
@@ -434,7 +446,8 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
     const side = live ? sideFor(live.scored, viewer.userId) : undefined;
     if (side && live) {
       const b = breakdown(version, side, live.entries, live.results).find((x) => x.index === index) ?? null;
-      mine = { home: side.home[index] ?? null, away: side.away[index] ?? null, banker: side.banker === index, sealed: true, points: b };
+      const p = pickAt(side, index);
+      mine = { home: p?.home ?? null, away: p?.away ?? null, banker: side.banker === index, sealed: true, points: b };
     } else {
       const slip = await ownSlip(ctx, id, viewer.userId);
       if (slip) mine = { home: slip.home[index] ?? null, away: slip.away[index] ?? null, banker: slip.banker === index, sealed: slip.sealed, points: null };

@@ -1,7 +1,7 @@
 import { nsdRewardsAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
 import { buildNsdRewardsTree } from "@northeside/merkle";
-import { DEFAULT_NSD_POSITIONS_BPS, nsdPayouts, rank, validateSchedule, type NsdSchedule } from "@northeside/scoring";
+import { STANDARD_NSD_CURVE, nsdPayouts, rank, validateSchedule, type NsdCurve, type NsdSchedule } from "@northeside/scoring";
 import { and, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { getAddress, parseUnits, type Address, type Hex } from "viem";
 import { need, toJson, type CoreContext } from "./context";
@@ -15,8 +15,8 @@ export interface NsdSeason {
   lastMatchweek: number;
   /** Season finale: paid with the last matchweek to the top of the season table, in base units. */
   finalePool: bigint;
-  /** Finale share per season-table position, in basis points. */
-  finaleBps: number[];
+  /** Explicit finale share per season-table position, in basis points; the weekly curve when unset. */
+  finaleBps?: number[];
 }
 
 export interface NsdConfig {
@@ -29,28 +29,48 @@ export interface NsdConfig {
 /**
  * Season 1 (docs/TOKENOMICS.md): 300,000 NSD (30% of 1,000,000) over matchweeks 11-21.
  * 11 weekly pools of 24,000 NSD, plus a 36,000 NSD finale for the season table, plus every weekly
- * share nobody earned (rollover), all paid with matchweek 21.
+ * share nobody earned (rollover), all paid with matchweek 21. Both are shared by the standard
+ * formula (top 10% of the field, place p weighted 1/p; see @northeside/scoring nsd.ts).
  */
-export const DEFAULT_NSD_FINALE_BPS: number[] = [2500, 1500, 1000, 900, 900, 640, 640, 640, 640, 640];
+const whole = (v: string | undefined, fallback: number, name: string) => {
+  const n = v === undefined || v === "" ? fallback : Number(v);
+  if (!Number.isInteger(n)) throw new Error(`${name} must be a whole number`);
+  return n;
+};
 
 /**
- * $NSD reward settings from env (whole tokens): NSD_POOL_PER_MATCHWEEK (24000),
- * NSD_POSITIONS_BPS (JSON), NSD_SEASON_FIRST (11), NSD_SEASON_LAST (21), NSD_FINALE_POOL (36000),
- * NSD_FINALE_BPS (JSON).
+ * $NSD reward settings from env (whole tokens): NSD_POOL_PER_MATCHWEEK (24000), NSD_SEASON_FIRST
+ * (11), NSD_SEASON_LAST (21), NSD_FINALE_POOL (36000). The formula: NSD_PAID_SHARE_BPS (1000 = top
+ * 10%), NSD_MAX_PAID (100), NSD_MIN_FIELD (10), NSD_MAX_SHARE_BPS (2000 = 20% per place). NSD_POSITIONS_BPS / NSD_FINALE_BPS (JSON arrays)
+ * replace the formula with an explicit table.
  */
 export function nsdConfigFromEnv(env: Env): NsdConfig {
-  const positionsBps = env.NSD_POSITIONS_BPS ? (JSON.parse(env.NSD_POSITIONS_BPS) as number[]) : DEFAULT_NSD_POSITIONS_BPS;
-  const schedule = { poolPerMatchweek: parseUnits(env.NSD_POOL_PER_MATCHWEEK ?? "24000", 18), positionsBps };
+  const curve: NsdCurve = {
+    paidShareBps: whole(env.NSD_PAID_SHARE_BPS, STANDARD_NSD_CURVE.paidShareBps, "NSD_PAID_SHARE_BPS"),
+    maxPaid: whole(env.NSD_MAX_PAID, STANDARD_NSD_CURVE.maxPaid, "NSD_MAX_PAID"),
+    minField: whole(env.NSD_MIN_FIELD, STANDARD_NSD_CURVE.minField, "NSD_MIN_FIELD"),
+    maxShareBps: whole(env.NSD_MAX_SHARE_BPS, STANDARD_NSD_CURVE.maxShareBps, "NSD_MAX_SHARE_BPS"),
+  };
+  const table = (v: string | undefined) => (v ? (JSON.parse(v) as number[]) : undefined);
+  const positionsBps = table(env.NSD_POSITIONS_BPS);
+  const schedule: NsdSchedule = { poolPerMatchweek: parseUnits(env.NSD_POOL_PER_MATCHWEEK ?? "24000", 18), ...(positionsBps ? { positionsBps } : { curve }) };
   validateSchedule(schedule);
+  const finaleBps = table(env.NSD_FINALE_BPS);
   const season: NsdSeason = {
-    firstMatchweek: Number(env.NSD_SEASON_FIRST ?? 11),
-    lastMatchweek: Number(env.NSD_SEASON_LAST ?? 21),
+    firstMatchweek: whole(env.NSD_SEASON_FIRST, 11, "NSD_SEASON_FIRST"),
+    lastMatchweek: whole(env.NSD_SEASON_LAST, 21, "NSD_SEASON_LAST"),
     finalePool: parseUnits(env.NSD_FINALE_POOL ?? "36000", 18),
-    finaleBps: env.NSD_FINALE_BPS ? (JSON.parse(env.NSD_FINALE_BPS) as number[]) : DEFAULT_NSD_FINALE_BPS,
+    ...(finaleBps ? { finaleBps } : {}),
   };
   if (!(season.firstMatchweek >= 1 && season.lastMatchweek >= season.firstMatchweek)) throw new Error("NSD season matchweeks are invalid");
-  validateSchedule({ poolPerMatchweek: season.finalePool, positionsBps: season.finaleBps });
+  validateSchedule(finaleSchedule(schedule, season, season.finalePool));
   return { enabled: env.NSD_REWARDS_ENABLED === "1", schedule, season };
+}
+
+/** The finale is shared like a week (same curve) unless an explicit finale table is set. */
+function finaleSchedule(weekly: NsdSchedule, season: NsdSeason, pool: bigint): NsdSchedule {
+  if (season.finaleBps) return { poolPerMatchweek: pool, positionsBps: season.finaleBps };
+  return weekly.positionsBps ? { poolPerMatchweek: pool, curve: STANDARD_NSD_CURVE } : { poolPerMatchweek: pool, curve: weekly.curve ?? STANDARD_NSD_CURVE };
 }
 
 export interface NsdWinner {
@@ -176,7 +196,7 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
 
     if (finalePool > 0n && totals.size > 0) {
       const seasonRanked = rank([...totals.entries()].filter(([, t]) => t.points > 0).map(([personHash, t]) => ({ id: personHash, points: t.points, exactScores: t.exactScores, t })));
-      const finale = nsdPayouts(seasonRanked.map((x) => ({ rank: x.rank, entry: x.entry })), { poolPerMatchweek: finalePool, positionsBps: season.finaleBps });
+      const finale = nsdPayouts(seasonRanked.map((x) => ({ rank: x.rank, entry: x.entry })), finaleSchedule(schedule, season, finalePool));
       for (const f of finale) {
         const cur = out.get(f.entry.id);
         if (cur) {

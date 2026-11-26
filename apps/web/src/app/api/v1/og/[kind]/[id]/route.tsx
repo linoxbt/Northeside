@@ -111,7 +111,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     const ctx = getCtx();
     const owner = Number.isInteger(mw) && code ? await userByInviteCode(ctx, code.toLowerCase()).catch(() => null) : null;
     const r = owner ? await recapFor(ctx, mw, owner.id).catch(() => null) : null;
-    const W = { bg: "#0a0b0d", ink: "#ffffff", muted: "#9ba0a8", accent: "#19e07a", exact: "#19e07a", result: "#eda100", miss: "#2b2e33", void: "#4a4e55" };
+    const W = { bg: "#0a0b0d", ink: "#ffffff", muted: "#9ba0a8", accent: "#19e07a", exact: "#19e07a", result: "#eda100", miss: "#2b2e33", skip: "#16181b", void: "#4a4e55" };
     const sq = story ? 76 : 64;
     return rendered(new ImageResponse(
       (

@@ -212,12 +212,12 @@ export function MatchDetail({ initial }: { initial: MatchView }) {
           <section className="overflow-hidden rounded-2xl border border-line bg-white">
             <header className="flex items-center justify-between border-b border-line px-4 py-2.5 text-[12px] text-muted">
               <span className="font-mono uppercase tracking-[0.06em]">Outcome</span>
-              <span>Exact 5 · result 2{v.rules === 2 ? " · beat the crowd +3" : ""}</span>
+              <span>Exact 5 · result 2{v.rules >= 2 ? " · beat the crowd +3" : ""}</span>
             </header>
             <ul className="divide-y divide-line">
               {outcomes.map((o) => {
                 const yes = !!pick && satisfies(pick, { market: "1x2", value: o.k });
-                const bonus = v.rules === 2 && v.crowd.shown ? crowdBonus(v.crowd[o.k], v.crowd.home + v.crowd.draw + v.crowd.away) : 0;
+                const bonus = v.rules >= 2 && v.crowd.shown ? crowdBonus(v.crowd[o.k], v.crowd.home + v.crowd.draw + v.crowd.away) : 0;
                 return (
                   <li key={o.k} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_64px_auto]">
                     <div className="flex min-w-0 items-center gap-2.5">

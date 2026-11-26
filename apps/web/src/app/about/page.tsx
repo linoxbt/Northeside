@@ -141,7 +141,7 @@ export default async function About() {
           <h2 className="display text-[30px] sm:text-[40px]">Three steps.</h2>
           <ol className="grid gap-8 sm:grid-cols-3">
             {[
-              ["01", "Pick", "Call ten scores. Star a Banker."],
+              ["01", "Pick", "Call one score or all ten. Star a Banker."],
               ["02", "Seal", "One tap, onchain. Gas is on us."],
               ["03", "Climb", "Beat the crowd. Live table."],
             ].map(([n, t, b]) => (

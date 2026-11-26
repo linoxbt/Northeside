@@ -1,5 +1,5 @@
 import { schema } from "@northeside/db";
-import { breakdown, rulesVersion, type FixtureBreakdown } from "@northeside/scoring";
+import { breakdown, rulesVersion, slipOf, type FixtureBreakdown } from "@northeside/scoring";
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
@@ -61,7 +61,8 @@ export interface H2HSide {
   sealed: boolean;
   points: number | null;
   exactScores: number | null;
-  picks: { home: number[]; away: number[]; banker: number | null } | null;
+  /** Skipped games (rules v3) are null. */
+  picks: { home: (number | null)[]; away: (number | null)[]; banker: number | null } | null;
   fixtures: FixtureBreakdown[];
 }
 
@@ -105,7 +106,7 @@ export async function challengeView(ctx: CoreContext, code: string, viewerUserId
       sealed,
       points: s ? s.points : null,
       exactScores: s ? s.exactScores : null,
-      picks: s ? { home: s.home, away: s.away, banker: s.banker === undefined || s.banker === 255 ? null : s.banker } : null,
+      picks: s ? slipOf(s) : null,
       fixtures: s && live ? breakdown(version, s, live.entries, live.results) : [],
     };
   };

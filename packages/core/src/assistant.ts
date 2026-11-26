@@ -98,6 +98,14 @@ const RULES_TEXT = {
     "Postponed or void games score 0 for everyone.",
     "Ties on points are split by exact scores; still equal means a shared rank.",
   ],
+  3: [
+    "Exact score 5 points, right result 2, wrong 0.",
+    "A slip can hold any number of games, even one; a game you skip scores 0.",
+    "Banker: one of the games you picked counts double, bonus included.",
+    "Beat the crowd: a right call made by at most 50% of the players who picked that game earns +1, at most 25% +2, at most 10% +3.",
+    "Postponed or void games score 0 for everyone.",
+    "Ties on points are split by exact scores; still equal means a shared rank.",
+  ],
 } as const;
 
 /** The facts the assistant may use for one question. */
@@ -109,7 +117,7 @@ export async function assistantFacts(
   const mw = opts.focus
     ? ((await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, opts.focus.matchweekId)))[0] ?? null)
     : await currentMatchweek(ctx);
-  const version = mw ? rulesVersion(mw.scoringRulesHash) : 2;
+  const version = mw ? rulesVersion(mw.scoringRulesHash) : 3;
   const facts: AssistantFacts = {
     now: now.toISOString(),
     rules: [...RULES_TEXT[version]],

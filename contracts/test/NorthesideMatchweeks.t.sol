@@ -580,5 +580,28 @@ contract CommitmentGoldenTest is Base {
         );
         assertTrue(none != CommitmentLib.predictionsHash(home, away), "v2 never collides with v1");
     }
+
+    /// @notice Partial slips (rules v3): skipped games are 255 on both sides; the contract's hash is
+    ///         unchanged, so v3 needs no new deployment.
+    function test_golden_partialSlipV3() public view {
+        string memory json = vm.readFile(GOLDEN);
+        uint256[] memory h = vm.parseJsonUintArray(json, ".commitmentV3.home");
+        uint256[] memory a = vm.parseJsonUintArray(json, ".commitmentV3.away");
+        uint8[] memory home = new uint8[](h.length);
+        uint8[] memory away = new uint8[](a.length);
+        for (uint256 i = 0; i < h.length; ++i) {
+            home[i] = uint8(h[i]);
+            away[i] = uint8(a[i]);
+        }
+        bytes32 ph = CommitmentLib.predictionsHashV2(
+            home, away, uint8(vm.parseJsonUint(json, ".commitmentV3.banker"))
+        );
+        assertEq(ph, vm.parseJsonBytes32(json, ".commitmentV3.predictionsHash"), "v3 predictionsHash");
+        assertEq(
+            _commit(json, vm.parseJsonUint(json, ".commitment.chainId"), ph),
+            vm.parseJsonBytes32(json, ".commitmentV3.commitment"),
+            "v3 commitment"
+        );
+    }
 }
 

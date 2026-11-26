@@ -94,13 +94,45 @@ export interface Entry {
 }
 
 const NO_BANKER = 255;
+/** Rules v3: a skipped game (sealed as 255 on both sides). */
+export const NO_PICK = 255;
 
-/** Crowd counts per fixture index, from every scored entry's picks. */
+/** The pick for game `i`, or null if the slip skipped it (rules v3). */
+export function pickAt(e: { home: readonly (number | null)[]; away: readonly (number | null)[] }, i: number): { home: number; away: number } | null {
+  const h = e.home[i];
+  const a = e.away[i];
+  if (h === undefined || a === undefined || h === null || a === null || h === NO_PICK || a === NO_PICK) return null;
+  return { home: h, away: a };
+}
+
+/** A sealed slip with skipped games (255) as null, for display. Banker 255 becomes null too. */
+export function slipOf(e: { home: readonly number[]; away: readonly number[]; banker?: number | null }): {
+  home: (number | null)[];
+  away: (number | null)[];
+  banker: number | null;
+} {
+  const home: (number | null)[] = [];
+  const away: (number | null)[] = [];
+  for (let i = 0; i < e.home.length; i++) {
+    const p = pickAt(e, i);
+    home.push(p ? p.home : null);
+    away.push(p ? p.away : null);
+  }
+  return { home, away, banker: e.banker === undefined || e.banker === null || e.banker === NO_BANKER ? null : e.banker };
+}
+
+/**
+ * Crowd counts per fixture index. `players` is how many entries picked that game: every entry on a
+ * full slip (v1, v2), only those who called it on a partial slip (v3).
+ */
 export function crowdCounts(entries: Entry[], fixtureCount: number): CrowdCount[] {
-  const out: CrowdCount[] = Array.from({ length: fixtureCount }, () => ({ players: entries.length, home: 0, draw: 0, away: 0 }));
+  const out: CrowdCount[] = Array.from({ length: fixtureCount }, () => ({ players: 0, home: 0, draw: 0, away: 0 }));
   for (const e of entries) {
     for (let i = 0; i < fixtureCount; i++) {
-      const o = outcome(e.home[i]!, e.away[i]!);
+      const pick = pickAt(e, i);
+      if (!pick) continue;
+      out[i]!.players++;
+      const o = outcome(pick.home, pick.away);
       if (o > 0) out[i]!.home++;
       else if (o === 0) out[i]!.draw++;
       else out[i]!.away++;
@@ -132,7 +164,7 @@ export function scoreFixtureV2(predHome: number, predAway: number, result: Fixtu
  * Score every entry of a matchweek. v1: points per fixture. v2: crowd bonus from all entries, and
  * the Banker fixture counts double. The crowd is exactly the list passed in.
  */
-export function scoreEntries<T extends Entry>(version: 1 | 2, entries: T[], results: FixtureResult[]): (T & PlayerScore)[] {
+export function scoreEntries<T extends Entry>(version: 1 | 2 | 3, entries: T[], results: FixtureResult[]): (T & PlayerScore)[] {
   if (version === 1) return entries.map((e) => ({ ...e, ...scorePicks(e, results) }));
   const n = results.reduce((m, r) => Math.max(m, r.index + 1), 0);
   const crowd = crowdCounts(entries, n);
@@ -140,10 +172,13 @@ export function scoreEntries<T extends Entry>(version: 1 | 2, entries: T[], resu
     let points = 0;
     let exactScores = 0;
     for (const r of results) {
-      const h = e.home[r.index];
-      const a = e.away[r.index];
-      if (h === undefined || a === undefined) throw new Error(`No prediction for fixture ${r.index}`);
-      const s = scoreFixtureV2(h, a, r, crowd[r.index]!);
+      const pick = pickAt(e, r.index);
+      if (!pick) {
+        // v3 skips score 0; v1/v2 slips must be full, so a gap there is a bug upstream.
+        if (version === 3 && e.home[r.index] !== undefined && e.away[r.index] !== undefined) continue;
+        throw new Error(`No prediction for fixture ${r.index}`);
+      }
+      const s = scoreFixtureV2(pick.home, pick.away, r, crowd[r.index]!);
       points += e.banker !== undefined && e.banker !== NO_BANKER && e.banker === r.index ? s.points * 2 : s.points;
       if (s.exact) exactScores += 1;
     }
@@ -157,17 +192,19 @@ export interface FixtureBreakdown {
   bonus: number;
   exact: boolean;
   banker: boolean;
+  /** Rules v3: the slip did not pick this game (0 points). */
+  skipped?: boolean;
 }
 
 /** One entry's points per fixture (Banker doubling applied), against the crowd of `all` entries. */
-export function breakdown(version: 1 | 2, entry: Entry, all: Entry[], results: FixtureResult[]): FixtureBreakdown[] {
+export function breakdown(version: 1 | 2 | 3, entry: Entry, all: Entry[], results: FixtureResult[]): FixtureBreakdown[] {
   const n = results.reduce((m, r) => Math.max(m, r.index + 1), 0);
-  const crowd = version === 2 ? crowdCounts(all, n) : null;
+  const crowd = version >= 2 ? crowdCounts(all, n) : null;
   return results.map((r) => {
-    const h = entry.home[r.index]!;
-    const a = entry.away[r.index]!;
-    const isBanker = version === 2 && entry.banker !== undefined && entry.banker !== NO_BANKER && entry.banker === r.index;
-    const s = crowd ? scoreFixtureV2(h, a, r, crowd[r.index]!) : { ...scoreFixture(h, a, r), bonus: 0 };
+    const pick = pickAt(entry, r.index);
+    if (!pick) return { index: r.index, points: 0, bonus: 0, exact: false, banker: false, skipped: true };
+    const isBanker = version >= 2 && entry.banker !== undefined && entry.banker !== NO_BANKER && entry.banker === r.index;
+    const s = crowd ? scoreFixtureV2(pick.home, pick.away, r, crowd[r.index]!) : { ...scoreFixture(pick.home, pick.away, r), bonus: 0 };
     return { index: r.index, points: isBanker ? s.points * 2 : s.points, bonus: s.bonus, exact: s.exact, banker: isBanker };
   });
 }

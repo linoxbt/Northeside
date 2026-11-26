@@ -40,12 +40,38 @@ export const RULES_V2 = {
 export const RULES_V2_TEXT = JSON.stringify(RULES_V2);
 export const RULES_V2_HASH: Hex = keccak256(toBytes(RULES_V2_TEXT));
 
-/** Rules for new matchweeks. */
-export const CURRENT_RULES_HASH: Hex = RULES_V2_HASH;
+/**
+ * Scoring rules v3: v2 with partial slips. A player may seal any number of games, at least one; a
+ * game they skipped scores 0. Each game's crowd is the scored players who picked that game, so the
+ * beat-the-crowd shares are "of the players who called this game". When every slip is full, v3
+ * scores exactly like v2. The Banker must be one of the games picked.
+ */
+export const RULES_V3 = {
+  version: 3,
+  exactScore: 5,
+  correctOutcome: 2,
+  wrong: 0,
+  voidFixture: 0,
+  skippedFixture: 0,
+  slip: "any number of games, at least one; a skipped game is sealed as 255 and scores 0",
+  crowdBonus:
+    "correct call made by <=10% of the scored players who picked that game +3, <=25% +2, <=50% +1 (called*10<=n, called*4<=n, called*2<=n)",
+  banker: "one sealed picked fixture per player, or none; its points including bonus count double; exact-score count unchanged",
+  ranking: "points desc, then exact scores desc; equal on both = shared rank; no random tie-breaks",
+} as const;
+
+export const RULES_V3_TEXT = JSON.stringify(RULES_V3);
+export const RULES_V3_HASH: Hex = keccak256(toBytes(RULES_V3_TEXT));
+
+export type RulesVersion = 1 | 2 | 3;
+
+/** Rules for new matchweeks. Matchweeks already created keep the rules they were created with. */
+export const CURRENT_RULES_HASH: Hex = RULES_V3_HASH;
 
 /** Which rules a matchweek uses, from the scoringRulesHash it was created with. */
-export function rulesVersion(scoringRulesHash: string | null | undefined): 1 | 2 {
+export function rulesVersion(scoringRulesHash: string | null | undefined): RulesVersion {
   const h = (scoringRulesHash ?? "").toLowerCase();
+  if (h === RULES_V3_HASH.toLowerCase()) return 3;
   if (h === RULES_V2_HASH.toLowerCase()) return 2;
   if (h === RULES_V1_HASH.toLowerCase()) return 1;
   // A missing hash means the matchweek row is incomplete; guessing v1 would reject every v2 seal (audit B3).

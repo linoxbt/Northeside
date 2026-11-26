@@ -12,8 +12,15 @@ The index is also the leaf index in the fixtures Merkle tree whose root is store
 
 ```
 home[i], away[i]  = goals predicted for fixture i, integers 0..9
-predictionsHash   = keccak256(abi.encode(uint8[] home, uint8[] away))
+predictionsHash   = keccak256(abi.encode(uint8[] home, uint8[] away))                  // payload v1
+predictionsHash   = keccak256(abi.encode(uint8[] home, uint8[] away, uint8 banker))    // payload v2, v3
 ```
+
+`banker` is the Banker fixture index, or 255 for none. Payload v3 (scoring rules v3, partial slips)
+uses the v2 hash unchanged; a game the player skipped is sealed as `255` for both home and away, and
+at least one game must be picked. The arrays always have one entry per fixture, so a skipped game
+can never be filled in after kickoff. Golden vectors: `commitmentV2` and `commitmentV3` in
+`contracts/test/fixtures/golden-vectors.json`.
 
 ## Commitment
 

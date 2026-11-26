@@ -42,8 +42,10 @@ are separate.
 
 Scoring: exact score 5, correct result 2. Rules v2 (from matchweek 12) add a sealed **Banker**
 (one game counts double) and a **beat-the-crowd** bonus (+1/+2/+3 when at most 50%/25%/10% of
-players called the result). The rules' hash is stored per matchweek, so they cannot change after
-a matchweek opens.
+players called the result). Rules v3 (from the next matchweek opened) allow partial slips: any
+number of games, at least one; a skipped game scores 0 and each game's crowd is the players who
+picked it. With full slips v3 scores exactly like v2. The rules' hash is stored per matchweek, so
+they cannot change after a matchweek opens.
 
 ## Identity: one person, one player
 

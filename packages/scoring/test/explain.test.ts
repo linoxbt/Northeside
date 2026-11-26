@@ -10,7 +10,7 @@ describe("plain-language explanations", () => {
     expect(explainPick({ ...g, pick: { home: 1, away: 1 }, result: null, banker: true })).toBe(
       "You called a 1–1 draw. An exact score earns 5 points and the right result 2. It is your Banker, so its points count double.",
     );
-    expect(explainPick({ ...g, pick: null, result: null })).toBe("You did not pick Arsenal v Chelsea.");
+    expect(explainPick({ ...g, pick: null, result: null })).toBe("You did not pick Arsenal v Chelsea, so it scores 0 for you.");
   });
 
   it("exact score, right result, wrong", () => {

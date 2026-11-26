@@ -29,11 +29,15 @@ export function SealBarWithWallet(props: SealBarProps) {
 function SealBar(props: {
   mwId: number;
   fixturesRoot: Hex;
-  /** Scoring rules version of the matchweek: 2 seals the Banker with the picks. */
-  version: 1 | 2;
+  /** Scoring rules version of the matchweek: 2 seals the Banker with the picks, 3 allows partial slips. */
+  version: 1 | 2 | 3;
   picks: Picks;
   complete: boolean;
   picked: number;
+  /** Games with only one score filled in. */
+  half: number;
+  /** The Banker is on a game without a pick. */
+  bankerSkipped: boolean;
   total: number;
   resealing: boolean;
   unsealed: boolean;
@@ -131,9 +135,12 @@ function SealBar(props: {
       // 2. Payload and random salt, built and kept in this browser before anything is sent.
       const payload = buildSealedPayload(
         { chainId: chain.id, matchweeks: publicEnv.matchweeks, player: wallet, matchweekId: props.mwId, fixturesRoot: props.fixturesRoot },
-        { home: props.picks.home as number[], away: props.picks.away as number[] },
+        // Rules v3: a game left empty is sealed as 255 ("not picked") on both sides.
+        props.version === 3
+          ? { home: props.picks.home.map((x) => x ?? 255), away: props.picks.away.map((x) => x ?? 255) }
+          : { home: props.picks.home as number[], away: props.picks.away as number[] },
         undefined,
-        props.version === 2 ? { version: 2, banker: props.picks.banker ?? 255 } : {},
+        props.version >= 2 ? { version: props.version, banker: props.picks.banker ?? 255 } : {},
       );
       // Kept in the pending slot: the previous, valid backup stays untouched until this one succeeds.
       localStorage.setItem(pendingKey(props.mwId, wallet), JSON.stringify({ payload, synced: false } satisfies LocalSeal));
@@ -179,6 +186,23 @@ function SealBar(props: {
     }
   }
 
+  // v1/v2: every game. v3: any number of games, at least one, none half-filled, Banker on a pick.
+  const partial = props.version === 3;
+  const ready = partial ? props.picked >= 1 && props.half === 0 && !props.bankerSkipped : props.complete;
+  const hint = partial
+    ? props.picked === 0
+      ? "Pick at least one game to seal"
+      : props.half > 0
+        ? `Finish or skip ${props.half} half-filled game${props.half === 1 ? "" : "s"}`
+        : props.bankerSkipped
+          ? "Your Banker is on a game you have not picked"
+          : props.picked < props.total
+            ? `${props.total - props.picked} game${props.total - props.picked === 1 ? "" : "s"} skipped: they score 0`
+            : null
+    : !props.complete
+      ? `Pick all ${props.total} games to seal (${props.total - props.picked} left)`
+      : null;
+
   // Above the bottom nav, whose height includes the iPhone home-indicator inset (audit B18).
   return (
     <div className="sticky bottom-[calc(76px+env(safe-area-inset-bottom))] z-10 lg:static">
@@ -187,9 +211,11 @@ function SealBar(props: {
           <p className="font-medium tracking-[-0.01em]">{props.picked}/{props.total} picked</p>
           <p className="text-muted">
             {step ??
-              (!props.complete
-                ? `Pick all ${props.total} games to seal (${props.total - props.picked} left)`
-                : props.unsealed
+              (!ready
+                ? hint
+                : hint && !props.unsealed && !props.resealing
+                  ? hint
+                  : props.unsealed
                   ? "Re-seal to keep your changes"
                   : props.resealing
                     ? "Sealed. You can re-seal until lock"
@@ -197,14 +223,14 @@ function SealBar(props: {
           </p>
           {error ? <p role="alert" className="text-bad">{error}</p> : null}
         </div>
-        {props.complete ? (
+        {ready ? (
           <Button variant="accent" className="shrink-0" disabled={step !== null} onClick={() => void seal()}>
             {props.resealing ? "Re-seal" : "Seal predictions"}
           </Button>
         ) : (
-          // Not every game has a score yet: take the player to the first empty one.
-          <Button variant="secondary" className="shrink-0" onClick={() => goToFirstEmpty(props.picks)}>
-            {props.total - props.picked} to go
+          // Not ready yet: take the player to the game that needs attention.
+          <Button variant="secondary" className="shrink-0" onClick={() => goToFirstEmpty(props.picks, partial)}>
+            {partial ? (props.picked === 0 ? "Pick a game" : props.half > 0 ? "Finish it" : "Fix Banker") : `${props.total - props.picked} to go`}
           </Button>
         )}
       </Card>
@@ -212,9 +238,13 @@ function SealBar(props: {
   );
 }
 
-/** Scroll to the first game without a full score and flash it. */
-function goToFirstEmpty(picks: Picks) {
-  const i = picks.home.findIndex((h, j) => h === null || h === undefined || picks.away[j] === null || picks.away[j] === undefined);
+/** Scroll to the first game that needs a score (v3: the first half-filled game, or the Banker game) and flash it. */
+function goToFirstEmpty(picks: Picks, partial = false) {
+  const empty = (v: number | null | undefined) => v === null || v === undefined;
+  let i = partial
+    ? picks.home.findIndex((h, j) => empty(h) !== empty(picks.away[j]))
+    : picks.home.findIndex((h, j) => empty(h) || empty(picks.away[j]));
+  if (partial && i < 0) i = picks.banker ?? (picks.home.every((h) => empty(h)) ? 0 : -1);
   const el = i >= 0 ? document.getElementById(`game-${i}`) : null;
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "center" });

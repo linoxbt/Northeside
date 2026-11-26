@@ -91,6 +91,8 @@ export interface LiveDTO {
 }
 
 const NO_BANKER = 255;
+/** Rules v3: a skipped game in a sealed slip. */
+const NO_PICK = 255;
 /** Common scorelines for Quick pick. */
 const QUICK = [[1, 0], [2, 1], [1, 1], [2, 0], [0, 0], [0, 1], [1, 2], [2, 2], [3, 1], [0, 2]] as const;
 const outcomeOf = (h: number | null, a: number | null) => (h === null || a === null ? null : h > a ? "home" : h === a ? "draw" : "away");
@@ -182,7 +184,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     return () => clearInterval(t);
   }, [wallet, mw.id, mw.lockTime, qc]);
 
-  const v2 = (mw.rules ?? 1) === 2;
+  const v2 = (mw.rules ?? 1) >= 2;
+  /** Rules v3: a slip can hold any number of games; skipped games score 0. */
+  const partial = mw.rules === 3;
   const crowd = useQuery({
     queryKey: ["crowd", mw.id, open],
     queryFn: () => api<CrowdDTO>(`/api/v1/matchweeks/${mw.id}/crowd`),
@@ -247,6 +251,16 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
       }),
     [persist],
   );
+  /** Rules v3: take a game off the slip (it then scores 0). Its Banker goes with it. */
+  const clearGame = useCallback(
+    (i: number) =>
+      setPicks((p) => {
+        const next = { home: p.home.map((x, j) => (j === i ? null : x)), away: p.away.map((x, j) => (j === i ? null : x)), banker: p.banker === i ? null : p.banker };
+        persist(next);
+        return next;
+      }),
+    [persist],
+  );
   const quickPick = useCallback(() => {
     setPicks((p) => {
       const fill = p.home.map((h, i) => (h === null || p.away[i] === null ? QUICK[Math.floor(Math.random() * QUICK.length)]! : null));
@@ -266,9 +280,13 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
     const p = mine.data;
     if (!p?.commitment) return null;
     const norm = (b: number | undefined) => (b === undefined || b === NO_BANKER ? null : b);
-    if (p.sealedPicks && p.sealedPicks.commitment.toLowerCase() === p.commitment.toLowerCase()) return { ...p.sealedPicks, banker: norm(p.sealedPicks.banker) };
+    // Skipped games are sealed as 255 (rules v3): in the slip they are simply empty.
+    const goals = (xs: number[]) => xs.map((x) => (x === NO_PICK ? null : x));
+    if (p.sealedPicks && p.sealedPicks.commitment.toLowerCase() === p.commitment.toLowerCase()) {
+      return { home: goals(p.sealedPicks.home), away: goals(p.sealedPicks.away), banker: norm(p.sealedPicks.banker) };
+    }
     const local = readLocalSeal(mw.id, wallet ?? undefined);
-    if (local && local.payload.commitment.toLowerCase() === p.commitment.toLowerCase()) return { home: local.payload.home, away: local.payload.away, banker: norm(local.payload.banker) };
+    if (local && local.payload.commitment.toLowerCase() === p.commitment.toLowerCase()) return { home: goals(local.payload.home), away: goals(local.payload.away), banker: norm(local.payload.banker) };
     return null;
   }, [mine.data, mw.id, wallet]);
   // After lock the sealed picks are the only picks that count: show them, read-only.
@@ -282,6 +300,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
 
   const complete = picks.home.every((x) => x !== null) && picks.away.every((x) => x !== null);
   const picked = picks.home.filter((x, i) => x !== null && picks.away[i] !== null).length;
+  // Games with only one side filled in: they must be finished or cleared before sealing.
+  const half = picks.home.filter((x, i) => (x === null) !== (picks.away[i] === null)).length;
+  const bankerSkipped = picks.banker !== null && picks.banker !== undefined && (picks.home[picks.banker] === null || picks.away[picks.banker] === null);
   const sealed = mine.data?.commitment && mine.data.txStatus !== "none" && mine.data.txStatus !== "failed";
   const lockedNotice =
     !open && user && mine.isFetched && !sealedPicks
@@ -526,6 +547,17 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                               <Stepper compact label={`${f.home} goals`} value={h} disabled={!editable} onChange={(v) => update("home", f.index, v)} />
                               <span className="text-[13px] text-muted">:</span>
                               <Stepper compact label={`${f.away} goals`} value={a} disabled={!editable} onChange={(v) => update("away", f.index, v)} />
+                              {partial && editable && (h !== null || a !== null) ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Skip ${f.home} v ${f.away}`}
+                                  title="Skip this game (it scores 0)"
+                                  onClick={() => clearGame(f.index)}
+                                  className="flex size-7 shrink-0 items-center justify-center rounded-full text-[15px] text-muted hover:bg-subtle hover:text-ink"
+                                >
+                                  ×
+                                </button>
+                              ) : null}
                               {mineF ? (
                                 <span className={`w-7 text-right font-mono text-[12px] font-bold ${mineF.points ? "text-accent-deep" : "text-muted"}`}>+{mineF.points}</span>
                               ) : null}
@@ -630,7 +662,20 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
           ) : null}
 
           {user && user.adultConfirmed && open ? (
-            <SealBar mwId={mw.id} fixturesRoot={mw.fixturesRoot as Hex} version={v2 ? 2 : 1} picks={picks} complete={complete} picked={picked} total={n} resealing={!!sealed} unsealed={unsealed} onSealed={onSealed} />
+            <SealBar
+              mwId={mw.id}
+              fixturesRoot={mw.fixturesRoot as Hex}
+              version={partial ? 3 : v2 ? 2 : 1}
+              picks={picks}
+              complete={complete}
+              picked={picked}
+              half={half}
+              bankerSkipped={bankerSkipped}
+              total={n}
+              resealing={!!sealed}
+              unsealed={unsealed}
+              onSealed={onSealed}
+            />
           ) : null}
 
           {user && user.adultConfirmed && open ? <ChallengeButton mwId={mw.id} /> : null}

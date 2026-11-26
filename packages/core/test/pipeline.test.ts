@@ -452,7 +452,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(crowd11!.fixtures[1]).toEqual({ index: 1, home: 1, draw: 1, away: 1 });
       // The live view agrees with the final scores, with Bo's Banker breakdown.
       const live11 = await liveView(ctx, 11, { userId: u2.id });
-      expect(live11).toMatchObject({ started: true, provisional: false, rules: 2, players: 3, me: { rank: 1, points: 14, exactScores: 1 } });
+      expect(live11).toMatchObject({ started: true, provisional: false, rules: 3, players: 3, me: { rank: 1, points: 14, exactScores: 1 } });
       expect(live11!.me!.fixtures[1]).toEqual({ index: 1, points: 12, bonus: 1, exact: true, banker: true });
       expect(live11!.table.map((r) => [r.name, r.points, r.me])).toEqual([["Bo", 14, true], ["Ada", 10, false], ["Cy", 2, false]]);
       expect(live11!.fixtures.map((f) => f.state)).toEqual(["ft", "ft", "void"]);
@@ -609,7 +609,8 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(await refreshFixtures(ctx, 11)).toEqual([expect.objectContaining({ matchweekId: 12, created: true })]); // refreshes the draft, no 13
       await createMatchweekOnChain(ctx, 12);
       await seal(KEYS.p1, u1.id, 12, [1, 1, 1], [0, 0, 0]);
-      await seal(KEYS.p2, u2.id, 12, [0, 0, 0], [1, 1, 1]);
+      // Rules v3: Bo seals a one-game slip (games 1 and 3 skipped, sealed as 255).
+      await seal(KEYS.p2, u2.id, 12, [255, 1, 255], [255, 0, 255]);
       await seal(KEYS.p3, u3.id, 12, [0, 0, 0], [0, 0, 0]);
       // p3 re-seals; the server only saw it as pending (no receipt yet). The chain holds the re-seal.
       await sealPending(KEYS.p3, 12, [2, 2, 2], [2, 2, 2]);
@@ -657,6 +658,9 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(await jobs.finalize()).toEqual([expect.objectContaining({ id: 12, status: "ok" })]);
       const ranked = await ctx.db.select().from(schema.predictions).where(eq(schema.predictions.matchweekId, 12));
       expect(ranked.some((p) => p.rank !== null)).toBe(true);
+      // The one-game slip was revealed and scored: exact 1-0 on its only game, skipped games 0.
+      const bo12 = ranked.find((p) => p.wallet === acct(KEYS.p2).address.toLowerCase());
+      expect(bo12).toMatchObject({ revealValid: true, points: 5, exactScores: 1 });
       expect(await jobs.finalize()).toEqual([]); // stored once; not redone every pass
 
       // FR-29: results notice with rank change, only to reachable users, never twice.
@@ -727,14 +731,16 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(proof?.rewardLeaves[0]?.claimTx).toBe(claimTx);
 
       // $NSD for matchweek 12, the season's last: weekly + finale + rollover, one leaf per person.
-      // Weekly: Ada 18 pts -> 5,000; Bo scored 0 -> nothing (you must score to earn); 2nd and 3rd unused.
-      // Rollover: MW11 3rd (2,000) + MW12 2nd and 3rd (5,000) = 7,000. Finale pool 6,000 + 7,000 = 13,000.
-      // Season table: Ada 10 + 18 = 28 (1st, 60% = 7,800), Bo 14 + 0 = 14 (2nd, 40% = 5,200).
+      // Weekly: Ada 18 pts -> 5,000 (1st); Bo's one-game slip scored 5 -> 3,000 (2nd); 3rd unused.
+      // Rollover: MW11 3rd (2,000) + MW12 3rd (2,000) = 4,000. Finale pool 6,000 + 4,000 = 10,000.
+      // Season table: Ada 10 + 18 = 28 (1st, 60% = 6,000), Bo 14 + 5 = 19 (2nd, 40% = 4,000).
       const finale = await computeNsdRewards(ctx, 12, nsdCfg);
       expect(finale.map((w) => [w.wallet, w.weekly, w.finale, w.seasonRank, w.amount])).toEqual([
-        [acct(KEYS.p1).address, 5_000n * E, 7_800n * E, 1, 12_800n * E],
-        [acct(KEYS.p2).address, 0n, 5_200n * E, 2, 5_200n * E],
+        [acct(KEYS.p1).address, 5_000n * E, 6_000n * E, 1, 11_000n * E],
+        [acct(KEYS.p2).address, 3_000n * E, 4_000n * E, 2, 7_000n * E],
       ]);
+      // The standard formula pays nobody with a field of 2 (it needs 10 people who scored).
+      expect(await computeNsdRewards(ctx, 12, { ...nsdCfg, schedule: { poolPerMatchweek: 10_000n * E } })).toSatisfy((w: { weekly: bigint }[]) => w.every((x) => x.weekly === 0n));
       expect(await postNsdRoot(ctx, 12, nsdCfg)).toMatchObject({ matchweekId: 12, total: 18_000n * E, winners: 2 });
       const boFinale = (await nsdClaimsFor(ctx, [acct(KEYS.p2).address])).find((c) => c.matchweekId === 12)!;
       await advance(24 * 3600 + 60);
@@ -742,10 +748,10 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
         address: ctx.deployment.nsdRewards!,
         abi: nsdRewardsAbi,
         functionName: "claim",
-        args: [12, acct(KEYS.p2).address, 5_200n * E, boFinale.proof as Hex[]],
+        args: [12, acct(KEYS.p2).address, 7_000n * E, boFinale.proof as Hex[]],
       });
       expect((await pub.waitForTransactionReceipt({ hash: finaleTx })).status).toBe("success");
-      expect(await pub.readContract({ address: ctx.deployment.nsdToken!, abi: nsdTokenAbi, functionName: "balanceOf", args: [acct(KEYS.p2).address] })).toBe(10_200n * E);
+      expect(await pub.readContract({ address: ctx.deployment.nsdToken!, abi: nsdTokenAbi, functionName: "balanceOf", args: [acct(KEYS.p2).address] })).toBe(12_000n * E);
 
       // FR-25: after expiry the unallocated budget (90 - 2 allocated) goes back to the sponsor.
       await advance(31 * 24 * 3600);

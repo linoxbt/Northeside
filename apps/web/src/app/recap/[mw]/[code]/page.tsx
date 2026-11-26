@@ -36,6 +36,7 @@ const CELL: Record<Recap["grid"][number]["cell"], string> = {
   exact: "bg-accent text-accent-ink",
   result: "bg-[#eda100] text-ink",
   miss: "bg-ink-2 text-white/60",
+  skip: "border border-dashed border-line bg-white text-muted",
   void: "bg-line text-muted",
 };
 
@@ -63,7 +64,7 @@ export default async function RecapPage({ params }: { params: Promise<{ mw: stri
             #{r.rank} of {r.players}
             {r.beatPct > 0 ? <span className="text-accent"> · beat {r.beatPct}%</span> : null}
           </p>
-          <ol className="mt-5 grid grid-cols-5 gap-1.5" aria-label="Picks: exact, right result, miss or void">
+          <ol className="mt-5 grid grid-cols-5 gap-1.5" aria-label="Picks: exact, right result, miss, not picked or void">
             {r.grid.map((g, i) => (
               <li key={i} title={g.cell} className={`flex aspect-square items-center justify-center rounded-lg text-[16px] ${CELL[g.cell]}`}>
                 {g.banker ? "★" : ""}
@@ -126,7 +127,7 @@ export default async function RecapPage({ params }: { params: Promise<{ mw: stri
           Can you beat {r.points}? Play free
         </Link>
         <p className="text-center text-[12px] text-muted">
-          🟩 exact · 🟨 right result · ⬛ miss · ★ Banker.{" "}
+          🟩 exact · 🟨 right result · ⬛ miss · ⬜ not picked · ★ Banker.{" "}
           <Link href={`/proof/${r.matchweekId}`} prefetch={false} className="underline underline-offset-4">
             Every pick is on-chain
           </Link>

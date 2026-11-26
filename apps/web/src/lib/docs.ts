@@ -47,7 +47,7 @@ export const TABS: { id: DocTab; label: string }[] = [
 
 export const PAGES: DocPage[] = [
   // Play
-  { slug: "how-to-play", title: "How to play", description: "Call the score of every match, seal your slip on QIE before kickoff and climb the tables.", tab: "learn", group: "Get started", icon: "play", keywords: "start seal slip kickoff lock free 18" },
+  { slug: "how-to-play", title: "How to play", description: "Call the score of any match you like, seal your slip on QIE before kickoff and climb the tables.", tab: "learn", group: "Get started", icon: "play", keywords: "start seal slip kickoff lock free 18" },
   { slug: "app", title: "Get the app", description: "Install Northeside on Android, or add it to your iPhone home screen.", tab: "learn", group: "Get started", icon: "phone", keywords: "android apk iphone install mobile" },
   { slug: "scoring", title: "Scoring and bonuses", description: "Exact score 5, right result 2, a Banker that doubles one match and a bonus for beating the crowd.", tab: "learn", group: "The game", icon: "target", keywords: "points banker crowd bonus rules ties rank" },
   { slug: "odds", title: "Odds and markets", description: "How the chance of every result is estimated, and how sealed picks move it.", tab: "learn", group: "The game", icon: "chart", keywords: "dixon coles model probability crowd chart market" },
