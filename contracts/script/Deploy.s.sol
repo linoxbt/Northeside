@@ -101,7 +101,7 @@ contract Deploy {
             c.maxCampaign,
             c.maxTotal
         );
-        IdentityAdapter identity = new IdentityAdapter(c.admin, c.attester);
+        IdentityAdapter identity = new IdentityAdapter(c.admin, c.attester, c.pauser);
 
         vm.stopBroadcast();
         d = Deployed(c.qusdc, address(matchweeks), address(rewards), address(identity));

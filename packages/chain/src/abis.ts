@@ -86,6 +86,19 @@ export const matchweeksAbi = [
   },
   {
     "type": "function",
+    "name": "MIN_RESULTS_DELAY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "OPERATOR_ROLE",
     "inputs": [],
     "outputs": [
@@ -932,6 +945,17 @@ export const matchweeksAbi = [
   {
     "type": "error",
     "name": "NotLocked",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SameAsChallenged",
     "inputs": [
       {
         "name": "id",
@@ -2638,6 +2662,22 @@ export const hostRewardsAbi = [
   },
   {
     "type": "error",
+    "name": "OverTerms",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "allowed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
@@ -2704,6 +2744,11 @@ export const identityAbi = [
         "name": "attester",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "pauser",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "nonpayable"
@@ -2756,6 +2801,19 @@ export const identityAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PAUSER_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -2982,6 +3040,26 @@ export const identityAbi = [
   },
   {
     "type": "function",
+    "name": "pause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "paused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "personCount",
     "inputs": [],
     "outputs": [
@@ -3110,6 +3188,13 @@ export const identityAbi = [
   },
   {
     "type": "function",
+    "name": "unpause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "walletCount",
     "inputs": [
       {
@@ -3153,6 +3238,19 @@ export const identityAbi = [
         "name": "by",
         "type": "address",
         "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Paused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
         "internalType": "address"
       }
     ],
@@ -3260,6 +3358,19 @@ export const identityAbi = [
   },
   {
     "type": "event",
+    "name": "Unpaused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Verified",
     "inputs": [
       {
@@ -3346,6 +3457,16 @@ export const identityAbi = [
         "internalType": "bytes32"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "EnforcedPause",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ExpectedPause",
+    "inputs": []
   },
   {
     "type": "error",
@@ -4114,6 +4235,45 @@ export const nsdRewardsAbi = [
   },
   {
     "type": "function",
+    "name": "pausedSince",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pausedSoFar",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pausedTotal",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "personClaimed",
     "inputs": [
       {
@@ -4264,6 +4424,11 @@ export const nsdRewardsAbi = [
           },
           {
             "name": "postedAt",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "pausedAtPost",
             "type": "uint64",
             "internalType": "uint64"
           },

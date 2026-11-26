@@ -73,8 +73,9 @@ contract HostRewardsHandler {
             sponsor: sponsor,
             grossAmount: gross,
             feeBps: feeBps,
-            ratePerPlayer: 1e5,
-            capPerHost: 50e6,
+            // Wide terms: this suite checks escrow accounting; the per-claim terms limit has its own tests.
+            ratePerPlayer: 500e6,
+            capPerHost: 500e6,
             firstMatchweek: 11,
             lastMatchweek: 12,
             expiry: uint64(block.timestamp + life),
@@ -294,7 +295,9 @@ contract HostRewardsInvariantTest is HostRewardsFixture {
         handler.replaceRoot(0, 30e6, 30e6, 30e6); // must revert: only 3 QUSDC left in the campaign
         assertEq(handler.replaced(), 0, "over-allocation refused");
         handler.warp(1 days);
-        for (uint256 i = 0; i < 3; ++i) handler.claim(i);
+        for (uint256 i = 0; i < 3; ++i) {
+            handler.claim(i);
+        }
         invariant_balanceEqualsLiability();
         invariant_accountingOrder();
     }

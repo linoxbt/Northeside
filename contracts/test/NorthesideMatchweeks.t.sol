@@ -34,7 +34,7 @@ contract NorthesideMatchweeksTest is Base {
         mw = new NorthesideMatchweeks(admin, operator, results, pauser, challengers);
         lockTime = uint64(block.timestamp + 3 days);
         vm.prank(operator);
-        mw.createMatchweek(ID, FIXTURES, lockTime, lockTime, 10, RULES);
+        mw.createMatchweek(ID, FIXTURES, lockTime, lockTime + 2 hours, 10, RULES);
     }
 
     // ------------------------------------------------------------ construction and roles
@@ -73,10 +73,10 @@ contract NorthesideMatchweeksTest is Base {
     function test_create_emits() public {
         vm.expectEmit(true, false, false, true, address(mw));
         emit INorthesideMatchweeks.MatchweekCreated(
-            12, FIXTURES, lockTime + 7 days, lockTime + 7 days, 10, RULES
+            12, FIXTURES, lockTime + 7 days, lockTime + 7 days + 2 hours, 10, RULES
         );
         vm.prank(operator);
-        mw.createMatchweek(12, FIXTURES, lockTime + 7 days, lockTime + 7 days, 10, RULES);
+        mw.createMatchweek(12, FIXTURES, lockTime + 7 days, lockTime + 7 days + 2 hours, 10, RULES);
     }
 
     function test_create_onlyOperator() public {
@@ -86,27 +86,29 @@ contract NorthesideMatchweeksTest is Base {
             )
         );
         vm.prank(alice);
-        mw.createMatchweek(12, FIXTURES, lockTime, lockTime, 10, RULES);
+        mw.createMatchweek(12, FIXTURES, lockTime, lockTime + 2 hours, 10, RULES);
     }
 
     function test_create_rejectsDuplicateId() public {
         vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.MatchweekExists.selector, ID));
         vm.prank(operator);
-        mw.createMatchweek(ID, keccak256("other"), lockTime + 1, lockTime + 1, 10, RULES);
+        mw.createMatchweek(ID, keccak256("other"), lockTime + 1, lockTime + 1 + 2 hours, 10, RULES);
     }
 
     function test_create_rejectsInvalidParams() public {
         vm.startPrank(operator);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, bytes32(0), lockTime, lockTime, 10, RULES);
+        mw.createMatchweek(20, bytes32(0), lockTime, lockTime + 2 hours, 10, RULES);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, lockTime, lockTime, 10, bytes32(0));
+        mw.createMatchweek(20, FIXTURES, lockTime, lockTime + 2 hours, 10, bytes32(0));
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, uint64(block.timestamp), uint64(block.timestamp), 10, RULES);
+        mw.createMatchweek(
+            20, FIXTURES, uint64(block.timestamp), uint64(block.timestamp) + 2 hours, 10, RULES
+        );
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, lockTime, lockTime, 0, RULES);
+        mw.createMatchweek(20, FIXTURES, lockTime, lockTime + 2 hours, 0, RULES);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
-        mw.createMatchweek(20, FIXTURES, lockTime, lockTime, 33, RULES);
+        mw.createMatchweek(20, FIXTURES, lockTime, lockTime + 2 hours, 33, RULES);
         vm.stopPrank();
     }
 
@@ -210,7 +212,7 @@ contract NorthesideMatchweeksTest is Base {
     }
 
     function test_propose_onlyResultsRole() public {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.expectRevert(
             abi.encodeWithSelector(
                 IAccessControl.AccessControlUnauthorizedAccount.selector, operator, mw.RESULTS_ROLE()
@@ -221,7 +223,7 @@ contract NorthesideMatchweeksTest is Base {
     }
 
     function test_propose_requiresRootAndEvidence() public {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.startPrank(results);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
         mw.proposeResults(ID, bytes32(0), REV, SCORES, "ipfs://evidence");
@@ -315,7 +317,7 @@ contract NorthesideMatchweeksTest is Base {
     }
 
     function test_challenge_afterWindowReverts() public {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.prank(results);
         mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.warp(block.timestamp + 12 hours);
@@ -325,7 +327,7 @@ contract NorthesideMatchweeksTest is Base {
     }
 
     function test_challenge_onlyChallenger() public {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.prank(results);
         mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.expectRevert(
@@ -338,7 +340,7 @@ contract NorthesideMatchweeksTest is Base {
     }
 
     function test_propose_requiresAllThreeRoots() public {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.startPrank(results);
         vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
         mw.proposeResults(ID, keccak256("r"), bytes32(0), SCORES, "ipfs://e");
@@ -350,7 +352,7 @@ contract NorthesideMatchweeksTest is Base {
     /// @dev Audit M-2: reveals and scores are proposed with the results and sit through the window;
     ///      finalize can only confirm them.
     function test_finalize_confirmsProposedRootsOnly() public {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.prank(results);
         mw.proposeResults(ID, keccak256("r1"), keccak256("rev1"), keccak256("scores1"), "ipfs://v1");
         vm.prank(challenger);
@@ -414,11 +416,52 @@ contract NorthesideMatchweeksTest is Base {
         new NorthesideMatchweeks(admin, operator, results, pauser, bad);
     }
 
-    function test_pause_doesNotBlockResults() public {
+    /// @dev Audit S5: a pause holds results and finalization (a compromised results key is contained)
+    ///      but challenges still work; after the admin unpauses, the flow continues.
+    function test_pause_holdsResultsButNotChallenges() public {
+        vm.warp(lockTime + 2 hours);
+        vm.prank(results);
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.prank(pauser);
         mw.pause();
-        _finalize();
-        assertTrue(mw.isFinalized(ID), "results flow while paused");
+        vm.prank(challenger);
+        mw.challenge(ID, "ipfs://why");
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vm.prank(results);
+        mw.proposeResults(ID, keccak256("r2"), REV, SCORES, "ipfs://e2");
+        vm.prank(admin);
+        mw.unpause();
+        vm.prank(results);
+        mw.proposeResults(ID, keccak256("r2"), REV, SCORES, "ipfs://e2");
+        vm.warp(block.timestamp + 12 hours);
+        vm.prank(pauser);
+        mw.pause();
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        vm.prank(results);
+        mw.finalize(ID);
+    }
+
+    /// @dev Audit S5: the challenged root set cannot be proposed again unchanged.
+    function test_propose_rejectsTheChallengedRootsAgain() public {
+        vm.warp(lockTime + 2 hours);
+        vm.prank(results);
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
+        vm.prank(challenger);
+        mw.challenge(ID, "ipfs://why");
+        vm.expectRevert(abi.encodeWithSelector(INorthesideMatchweeks.SameAsChallenged.selector, ID));
+        vm.prank(results);
+        mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e-again");
+        vm.prank(results);
+        mw.proposeResults(ID, keccak256("r-corrected"), REV, SCORES, "ipfs://e-fixed");
+    }
+
+    /// @dev Audit L-1: results cannot open within MIN_RESULTS_DELAY of lock.
+    function test_create_rejectsResultsTooSoonAfterLock() public {
+        vm.expectRevert(INorthesideMatchweeks.InvalidParams.selector);
+        vm.prank(operator);
+        mw.createMatchweek(32, FIXTURES, lockTime, lockTime + 2 hours - 1, 10, RULES);
+        vm.prank(operator);
+        mw.createMatchweek(32, FIXTURES, lockTime, lockTime + 2 hours, 10, RULES);
     }
 
     // ------------------------------------------------------------ commitments
@@ -459,7 +502,7 @@ contract NorthesideMatchweeksTest is Base {
     }
 
     function _finalize() internal {
-        vm.warp(lockTime);
+        vm.warp(lockTime + 2 hours); // results open 2 hours after lock (audit L-1)
         vm.prank(results);
         mw.proposeResults(ID, keccak256("r"), REV, SCORES, "ipfs://e");
         vm.warp(block.timestamp + 12 hours);
@@ -468,61 +511,74 @@ contract NorthesideMatchweeksTest is Base {
     }
 }
 
-/// @notice Golden vectors from test/fixtures/golden-vectors.json; packages/commitments checks the
-///         same constants in TypeScript.
+/// @notice Golden vectors read from test/fixtures/golden-vectors.json; packages/commitments checks the
+///         same file in TypeScript, so the two sides can never drift apart silently.
 contract CommitmentGoldenTest is Base {
-    function test_golden_predictionsHashAndCommitment() public pure {
-        uint8[] memory home = new uint8[](10);
-        uint8[] memory away = new uint8[](10);
-        uint8[10] memory h = [2, 1, 0, 3, 1, 2, 0, 1, 2, 1];
-        uint8[10] memory a = [1, 1, 0, 2, 0, 2, 1, 0, 3, 0];
-        for (uint256 i = 0; i < 10; ++i) {
-            home[i] = h[i];
-            away[i] = a[i];
+    string internal constant GOLDEN = "./test/fixtures/golden-vectors.json";
+
+    function _picks(string memory json) internal pure returns (uint8[] memory home, uint8[] memory away) {
+        uint256[] memory h = vm.parseJsonUintArray(json, ".commitment.home");
+        uint256[] memory a = vm.parseJsonUintArray(json, ".commitment.away");
+        home = new uint8[](h.length);
+        away = new uint8[](a.length);
+        for (uint256 i = 0; i < h.length; ++i) {
+            home[i] = uint8(h[i]);
+            away[i] = uint8(a[i]);
         }
+    }
+
+    function _commit(string memory json, uint256 chainId, bytes32 ph) internal pure returns (bytes32) {
+        return CommitmentLib.commitment(
+            chainId,
+            vm.parseJsonAddress(json, ".commitment.matchweeksContract"),
+            vm.parseJsonAddress(json, ".commitment.player"),
+            uint32(vm.parseJsonUint(json, ".commitment.matchweekId")),
+            vm.parseJsonBytes32(json, ".commitment.fixturesRoot"),
+            ph,
+            vm.parseJsonBytes32(json, ".commitment.salt")
+        );
+    }
+
+    function test_golden_predictionsHashAndCommitment() public view {
+        string memory json = vm.readFile(GOLDEN);
+        (uint8[] memory home, uint8[] memory away) = _picks(json);
         bytes32 ph = CommitmentLib.predictionsHash(home, away);
-        assertEq(ph, 0xfa61aa58ff916dea0a1f8867c21c48358c74b4fc9020bb3ff00c25cac70fd692, "predictionsHash");
-
-        bytes32 fixturesRoot = 0x1111111111111111111111111111111111111111111111111111111111111111;
-        bytes32 salt = 0x4242424242424242424242424242424242424242424242424242424242424242;
-        address contractAddr = 0x5FbDB2315678afecb367f032d93F642f64180aa3;
-        address player = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
-
+        assertEq(ph, vm.parseJsonBytes32(json, ".commitment.predictionsHash"), "predictionsHash");
         assertEq(
-            CommitmentLib.commitment(1990, contractAddr, player, 11, fixturesRoot, ph, salt),
-            0x0639aa0bd046ece58f43455acb28452abf44f14924186ea05ae33f28f577bc44,
+            _commit(json, vm.parseJsonUint(json, ".commitment.chainId"), ph),
+            vm.parseJsonBytes32(json, ".commitment.commitment"),
             "mainnet commitment"
         );
         assertEq(
-            CommitmentLib.commitment(1983, contractAddr, player, 11, fixturesRoot, ph, salt),
-            0x21271ce9ed3be7a319a96b60fa37c84538fb16b109dc6665d3abdc6a95bf546b,
+            _commit(json, 1983, ph),
+            vm.parseJsonBytes32(json, ".commitment.commitmentTestnet"),
             "chain id changes the commitment"
         );
     }
 
-    function test_golden_predictionsHashV2AndCommitment() public pure {
-        uint8[] memory home = new uint8[](10);
-        uint8[] memory away = new uint8[](10);
-        uint8[10] memory h = [2, 1, 0, 3, 1, 2, 0, 1, 2, 1];
-        uint8[10] memory a = [1, 1, 0, 2, 0, 2, 1, 0, 3, 0];
-        for (uint256 i = 0; i < 10; ++i) {
-            home[i] = h[i];
-            away[i] = a[i];
-        }
-        bytes32 fixturesRoot = 0x1111111111111111111111111111111111111111111111111111111111111111;
-        bytes32 salt = 0x4242424242424242424242424242424242424242424242424242424242424242;
-        address contractAddr = 0x5FbDB2315678afecb367f032d93F642f64180aa3;
-        address player = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+    function test_golden_predictionsHashV2AndCommitment() public view {
+        string memory json = vm.readFile(GOLDEN);
+        (uint8[] memory home, uint8[] memory away) = _picks(json);
+        uint256 chainId = vm.parseJsonUint(json, ".commitment.chainId");
 
-        bytes32 ph = CommitmentLib.predictionsHashV2(home, away, 3);
-        assertEq(ph, 0xbc922856cce144ca2d9a8cd19ae3be5be91656f0571de7f9c35ce25b83746523, "v2 predictionsHash");
-        assertEq(
-            CommitmentLib.commitment(1990, contractAddr, player, 11, fixturesRoot, ph, salt),
-            0xa9f9f845f68e2f0303ff865b9fc61daa991e1d1b6190475af9e87f118e26af6e,
-            "v2 commitment"
+        bytes32 ph = CommitmentLib.predictionsHashV2(
+            home, away, uint8(vm.parseJsonUint(json, ".commitmentV2.banker"))
         );
-        bytes32 none = CommitmentLib.predictionsHashV2(home, away, 255);
-        assertEq(none, 0xfccd96bd075421c2e00d9e09fd3f2d082b2e79ec9be6bbc4a4b705d1dca3cff4, "v2 no banker");
+        assertEq(ph, vm.parseJsonBytes32(json, ".commitmentV2.predictionsHash"), "v2 predictionsHash");
+        assertEq(
+            _commit(json, chainId, ph), vm.parseJsonBytes32(json, ".commitmentV2.commitment"), "v2 commitment"
+        );
+
+        bytes32 none = CommitmentLib.predictionsHashV2(
+            home, away, uint8(vm.parseJsonUint(json, ".commitmentV2.noBanker.banker"))
+        );
+        assertEq(none, vm.parseJsonBytes32(json, ".commitmentV2.noBanker.predictionsHash"), "v2 no banker");
+        assertEq(
+            _commit(json, chainId, none),
+            vm.parseJsonBytes32(json, ".commitmentV2.noBanker.commitment"),
+            "v2 no-banker commitment"
+        );
         assertTrue(none != CommitmentLib.predictionsHash(home, away), "v2 never collides with v1");
     }
 }
+

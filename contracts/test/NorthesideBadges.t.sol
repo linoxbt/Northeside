@@ -95,7 +95,9 @@ contract NorthesideBadgesTest is Base {
     function test_onlyOperatorPostsRoots_andZeroRootRejected() public {
         bytes32 role = badges.OPERATOR_ROLE();
         vm.prank(eve);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, eve, role));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, eve, role)
+        );
         badges.postRoot(keccak256("x"));
         vm.prank(operator);
         vm.expectRevert(NorthesideBadges.ZeroRoot.selector);
@@ -111,7 +113,11 @@ contract NorthesideBadgesTest is Base {
         vm.expectRevert(abi.encodeWithSelector(NorthesideBadges.UnknownRound.selector, 7));
         badges.claim(7, SNIPER, p);
         vm.prank(operator);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, operator, bytes32(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, operator, bytes32(0)
+            )
+        );
         badges.revokeRoot(1);
         vm.prank(admin);
         badges.revokeRoot(1);
@@ -131,7 +137,11 @@ contract NorthesideBadgesTest is Base {
         vm.expectRevert(Pausable.EnforcedPause.selector);
         badges.claim(1, SNIPER, p);
         vm.prank(pauser);
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, bytes32(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, bytes32(0)
+            )
+        );
         badges.unpause();
         vm.prank(admin);
         badges.unpause();
@@ -139,7 +149,9 @@ contract NorthesideBadgesTest is Base {
     }
 
     function test_metadataUri_andInterfaces() public {
-        assertTrue(keccak256(bytes(badges.uri(5))) == keccak256("https://northeside.example/api/v1/badges/5"), "uri");
+        assertTrue(
+            keccak256(bytes(badges.uri(5))) == keccak256("https://northeside.example/api/v1/badges/5"), "uri"
+        );
         vm.expectRevert(abi.encodeWithSelector(NorthesideBadges.BadBadge.selector, 256));
         badges.uri(256);
         vm.prank(admin);
@@ -151,7 +163,8 @@ contract NorthesideBadgesTest is Base {
 
     function testFuzz_unlistedBadgeOrWalletFails(address who, uint8 badgeId) public {
         vm.assume(badgeId != 0);
-        bool listed = (who == ada && (badgeId == FIRST_SEAL || badgeId == SNIPER)) || (who == bo && badgeId == FIRST_SEAL);
+        bool listed = (who == ada && (badgeId == FIRST_SEAL || badgeId == SNIPER))
+            || (who == bo && badgeId == FIRST_SEAL);
         vm.assume(!listed && who != address(0));
         for (uint256 i = 0; i < leaves.length; ++i) {
             bytes32[] memory p = Merkle.proof(leaves, i);

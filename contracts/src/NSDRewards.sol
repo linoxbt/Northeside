@@ -50,10 +50,16 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
     uint128 public maxPerMatchweek;
     /// @notice Allocated to live roots and not yet claimed or released.
     uint128 public outstanding;
+    /// @notice Seconds the contract has spent paused, counting finished pauses only.
+    uint64 public pausedTotal;
+    /// @notice When the current pause began (0 while not paused).
+    uint64 public pausedSince;
 
     struct Root {
         bytes32 root;
         uint64 postedAt;
+        /// Pause time already counted when the root was posted: later pauses extend its window.
+        uint64 pausedAtPost;
         bool released;
         uint128 allocated;
         uint128 claimed;
@@ -64,10 +70,14 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
     mapping(uint32 matchweekId => mapping(bytes32 personHash => bool)) public personClaimed;
 
     event RootPosted(uint32 indexed matchweekId, bytes32 root, uint128 total, string reportURI);
-    event RootReplaced(uint32 indexed matchweekId, bytes32 oldRoot, bytes32 root, uint128 total, string reportURI);
+    event RootReplaced(
+        uint32 indexed matchweekId, bytes32 oldRoot, bytes32 root, uint128 total, string reportURI
+    );
     event RootVoided(uint32 indexed matchweekId, bytes32 oldRoot, uint128 released);
     event Released(uint32 indexed matchweekId, uint128 amount);
-    event Claimed(uint32 indexed matchweekId, address indexed wallet, bytes32 indexed personHash, uint128 amount);
+    event Claimed(
+        uint32 indexed matchweekId, address indexed wallet, bytes32 indexed personHash, uint128 amount
+    );
     event MaxPerMatchweekSet(uint128 amount);
     event Withdrawn(address indexed to, uint128 amount);
 
@@ -96,8 +106,9 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
         uint128 maxPerMatchweek_
     ) {
         if (
-            admin == address(0) || operator == address(0) || pauser == address(0) || address(token_) == address(0)
-                || address(matchweeks_) == address(0) || address(identity_) == address(0) || maxPerMatchweek_ == 0
+            admin == address(0) || operator == address(0) || pauser == address(0)
+                || address(token_) == address(0) || address(matchweeks_) == address(0)
+                || address(identity_) == address(0) || maxPerMatchweek_ == 0
         ) revert InvalidParams();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(OPERATOR_ROLE, operator);
@@ -125,8 +136,16 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
         return _roots[matchweekId].postedAt + CLAIM_DELAY;
     }
 
+    /// @notice Total pause time so far, including a pause still in progress.
+    function pausedSoFar() public view returns (uint64) {
+        return pausedTotal + (pausedSince == 0 ? 0 : uint64(block.timestamp) - pausedSince);
+    }
+
+    /// @notice The claim window is extended by every second the contract was paused after the root
+    ///         was posted, so an emergency pause never eats into players' time to claim.
     function claimClosesAt(uint32 matchweekId) public view returns (uint64) {
-        return _roots[matchweekId].postedAt + CLAIM_DELAY + CLAIM_WINDOW;
+        Root storage r = _roots[matchweekId];
+        return r.postedAt + CLAIM_DELAY + CLAIM_WINDOW + (pausedSoFar() - r.pausedAtPost);
     }
 
     function leafHash(uint32 matchweekId, address wallet, uint128 amount) public pure returns (bytes32) {
@@ -150,6 +169,7 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
 
         r.root = root;
         r.postedAt = uint64(block.timestamp);
+        r.pausedAtPost = pausedSoFar();
         r.allocated = total;
         outstanding += total;
         emit RootPosted(matchweekId, root, total, reportURI);
@@ -174,6 +194,7 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
         outstanding = outstanding - r.allocated + total;
         r.root = root;
         r.postedAt = uint64(block.timestamp);
+        r.pausedAtPost = pausedSoFar();
         r.allocated = total;
         emit RootReplaced(matchweekId, old, root, total, reportURI);
     }
@@ -209,11 +230,14 @@ contract NSDRewards is AccessControl, Pausable, ReentrancyGuard {
 
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
+        pausedSince = uint64(block.timestamp);
     }
 
     /// @notice Only the admin can lift a pause, so a leaked pauser key cannot undo an emergency stop.
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
+        pausedTotal += uint64(block.timestamp) - pausedSince;
+        pausedSince = 0;
     }
 
     // ---------------------------------------------------------------- players

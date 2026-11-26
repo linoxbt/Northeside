@@ -46,6 +46,7 @@ contract DeployTest is Base {
         assertTrue(id.hasRole(id.DEFAULT_ADMIN_ROLE(), c.admin), "admin on identity");
         assertTrue(mw.hasRole(mw.CHALLENGER_ROLE(), c.challengers[1]), "second challenger");
         assertTrue(mw.hasRole(mw.PAUSER_ROLE(), c.pauser), "separate pauser");
+        assertTrue(id.hasRole(id.PAUSER_ROLE(), c.pauser), "identity pauser");
         assertFalse(mw.hasRole(mw.PAUSER_ROLE(), c.operator), "operator is not the pauser");
         assertFalse(mw.hasRole(mw.DEFAULT_ADMIN_ROLE(), vm.addr(DEPLOYER_KEY)), "deployer keeps no role");
         assertEq(hr.maxCampaignBudget(), 500e6, "campaign cap");
@@ -98,7 +99,11 @@ contract DeployTest is Base {
         c.qusdc = address(0);
         Deploy.Deployed memory d = script.deploy(c, DEPLOYER_KEY);
         assertEq(keccak256(bytes(IERC20Metadata(d.qusdc).symbol())), keccak256("QUSDC"), "symbol");
-        assertEq(keccak256(bytes(IERC20Metadata(d.qusdc).name())), keccak256("Mock QUSDC"), "a mock, not real QUSDC");
+        assertEq(
+            keccak256(bytes(IERC20Metadata(d.qusdc).name())),
+            keccak256("Mock QUSDC"),
+            "a mock, not real QUSDC"
+        );
         assertEq(address(HostRewards(d.hostRewards).token()), d.qusdc, "rewards use the mock");
     }
 

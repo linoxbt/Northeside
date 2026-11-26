@@ -1,5 +1,5 @@
 {
-  "description": "Golden vectors shared by forge tests (test/NorthesideMatchweeks.t.sol and test/IdentityAdapter.t.sol) and Vitest (packages/commitments). Generated with cast; any change to the canonical encoding must update both sides.",
+  "description": "Golden vectors read by the forge tests (NorthesideMatchweeks, HostRewards, NSDRewards, IdentityAdapter) and by Vitest (packages/commitments, packages/merkle). Generated with cast; any change to the canonical encoding must update both sides.",
   "commitment": {
     "chainId": 1990,
     "matchweeksContract": "0x5FbDB2315678afecb367f032d93F642f64180aa3",

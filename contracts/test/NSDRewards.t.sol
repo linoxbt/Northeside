@@ -40,9 +40,11 @@ abstract contract NSDFixture is Base {
         address[] memory challengers = new address[](1);
         challengers[0] = makeAddr("challenger");
         mw = new NorthesideMatchweeks(admin, operator, resultsKey, pauser, challengers);
-        id = new IdentityAdapter(admin, attester);
+        id = new IdentityAdapter(admin, attester, address(0));
         token = new NorthesideToken("Northeside", "NSD", 100_000_000 * uint256(NSD), treasury);
-        rewards = new NSDRewards(admin, operator, pauser, IERC20(address(token)), mw, IPersonRegistry(address(id)), CAP);
+        rewards = new NSDRewards(
+            admin, operator, pauser, IERC20(address(token)), mw, IPersonRegistry(address(id)), CAP
+        );
         vm.prank(treasury);
         token.transfer(address(rewards), 1_000_000 * uint256(NSD));
 
@@ -55,15 +57,31 @@ abstract contract NSDFixture is Base {
         _createAndFinalize(11);
         _createAndFinalize(12);
         vm.prank(operator);
-        mw.createMatchweek(13, keccak256("f13"), uint64(block.timestamp + 1 days), uint64(block.timestamp + 1 days), 10, keccak256("rules"));
+        mw.createMatchweek(
+            13,
+            keccak256("f13"),
+            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 1 days + 2 hours),
+            10,
+            keccak256("rules")
+        );
     }
 
     function _createAndFinalize(uint32 mwId) internal {
         vm.prank(operator);
-        mw.createMatchweek(mwId, keccak256(abi.encode("f", mwId)), uint64(block.timestamp + 1 hours), uint64(block.timestamp + 1 hours), 10, keccak256("rules"));
-        vm.warp(block.timestamp + 1 hours);
+        mw.createMatchweek(
+            mwId,
+            keccak256(abi.encode("f", mwId)),
+            uint64(block.timestamp + 1 hours),
+            uint64(block.timestamp + 3 hours),
+            10,
+            keccak256("rules")
+        );
+        vm.warp(block.timestamp + 3 hours); // results open 2 hours after lock (audit L-1)
         vm.prank(resultsKey);
-        mw.proposeResults(mwId, keccak256(abi.encode("r", mwId)), keccak256("rev"), keccak256("scores"), "ipfs://e");
+        mw.proposeResults(
+            mwId, keccak256(abi.encode("r", mwId)), keccak256("rev"), keccak256("scores"), "ipfs://e"
+        );
         vm.warp(block.timestamp + 12 hours);
         vm.prank(resultsKey);
         mw.finalize(mwId);
@@ -75,7 +93,11 @@ abstract contract NSDFixture is Base {
         uint128 total;
     }
 
-    function _tree(uint32 mwId, address[] memory wallets, uint128[] memory amounts) internal view returns (Tree memory t) {
+    function _tree(uint32 mwId, address[] memory wallets, uint128[] memory amounts)
+        internal
+        view
+        returns (Tree memory t)
+    {
         t.leaves = new bytes32[](wallets.length);
         for (uint256 i = 0; i < wallets.length; ++i) {
             t.leaves[i] = rewards.leafHash(mwId, wallets[i], amounts[i]);
@@ -116,9 +138,14 @@ contract NSDTokenTest is NSDFixture {
 contract NSDRewardsTest is NSDFixture {
     /// @dev test/fixtures/golden-vectors.json -> nsdRewardLeaf (also checked by packages/merkle).
     function test_golden_leafHash() public view {
+        string memory json = vm.readFile("./test/fixtures/golden-vectors.json");
         assertEq(
-            rewards.leafHash(11, 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 2_500 * NSD),
-            0x5f416a6536786c6583845ce47109921861c8e59568b4738e26dd9ae0b1ef9893,
+            rewards.leafHash(
+                uint32(vm.parseJsonUint(json, ".nsdRewardLeaf.matchweekId")),
+                vm.parseJsonAddress(json, ".nsdRewardLeaf.wallet"),
+                uint128(vm.parseJsonUint(json, ".nsdRewardLeaf.amount"))
+            ),
+            vm.parseJsonBytes32(json, ".nsdRewardLeaf.leaf"),
             "golden nsd leaf"
         );
     }
@@ -202,7 +229,11 @@ contract NSDRewardsTest is NSDFixture {
         rewards.postRoot(11, ok.root, ok.total, "ipfs://x");
         vm.stopPrank();
 
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, rewards.OPERATOR_ROLE()));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, rewards.OPERATOR_ROLE()
+            )
+        );
         vm.prank(stranger);
         rewards.postRoot(12, ok.root, ok.total, "ipfs://x");
     }
@@ -299,7 +330,11 @@ contract NSDRewardsTest is NSDFixture {
         rewards.pause();
         vm.expectRevert(Pausable.EnforcedPause.selector);
         rewards.claim(11, bo, 200 * NSD, Merkle.proof(t.leaves, 2));
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, bytes32(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, bytes32(0)
+            )
+        );
         vm.prank(pauser);
         rewards.unpause();
         vm.prank(admin);
@@ -307,11 +342,50 @@ contract NSDRewardsTest is NSDFixture {
         rewards.claim(11, bo, 200 * NSD, Merkle.proof(t.leaves, 2));
     }
 
+    function test_pause_extendsTheClaimWindow() public {
+        Tree memory t = _three(11, 500 * NSD, 300 * NSD, 200 * NSD);
+        vm.prank(operator);
+        rewards.postRoot(11, t.root, t.total, "ipfs://1");
+        uint64 closes = rewards.claimClosesAt(11);
+        vm.warp(block.timestamp + 30 days);
+        vm.prank(pauser);
+        rewards.pause();
+        vm.warp(block.timestamp + 10 days);
+        // A pause still in progress already counts.
+        assertEq(rewards.claimClosesAt(11), closes + 10 days, "extended while paused");
+        vm.prank(admin);
+        rewards.unpause();
+        assertEq(rewards.claimClosesAt(11), closes + 10 days, "extension kept after unpause");
+        assertEq(uint256(rewards.pausedTotal()), 10 days, "pause time recorded");
+
+        // The original deadline has passed, but the paused days were given back.
+        vm.warp(closes + 5 days);
+        rewards.claim(11, bo, 200 * NSD, Merkle.proof(t.leaves, 2));
+        vm.expectRevert(abi.encodeWithSelector(NSDRewards.ClaimWindowOpen.selector, uint32(11)));
+        rewards.release(11);
+        vm.warp(closes + 10 days);
+        vm.expectRevert(abi.encodeWithSelector(NSDRewards.ClaimWindowOver.selector, uint32(11)));
+        rewards.claim(11, ada, 500 * NSD, Merkle.proof(t.leaves, 0));
+        rewards.release(11);
+
+        // A root posted after the pause gets no extension from it.
+        Tree memory u = _three(12, 1 * NSD, 1 * NSD, 1 * NSD);
+        vm.prank(operator);
+        rewards.postRoot(12, u.root, u.total, "ipfs://2");
+        assertEq(
+            rewards.claimClosesAt(12),
+            uint64(block.timestamp) + rewards.CLAIM_DELAY() + rewards.CLAIM_WINDOW(),
+            "no carry-over"
+        );
+    }
+
     function test_constructorGuards() public {
         vm.expectRevert(NSDRewards.InvalidParams.selector);
         new NSDRewards(admin, operator, pauser, IERC20(address(token)), mw, IPersonRegistry(address(id)), 0);
         vm.expectRevert(NSDRewards.InvalidParams.selector);
-        new NSDRewards(address(0), operator, pauser, IERC20(address(token)), mw, IPersonRegistry(address(id)), CAP);
+        new NSDRewards(
+            address(0), operator, pauser, IERC20(address(token)), mw, IPersonRegistry(address(id)), CAP
+        );
     }
 
     function testFuzz_claimNeverExceedsAllocation(uint128 a, uint128 b, uint128 c) public {

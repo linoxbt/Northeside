@@ -28,7 +28,9 @@ contract DeployBadgesTest is Base {
         assertTrue(b.hasRole(b.OPERATOR_ROLE(), c.operator), "operator");
         assertTrue(b.hasRole(b.PAUSER_ROLE(), c.pauser), "pauser");
         assertFalse(b.hasRole(b.DEFAULT_ADMIN_ROLE(), vm.addr(DEPLOYER_KEY)), "deployer has no role");
-        assertTrue(keccak256(bytes(b.uri(1))) == keccak256("https://northeside.example/api/v1/badges/1"), "uri");
+        assertTrue(
+            keccak256(bytes(b.uri(1))) == keccak256("https://northeside.example/api/v1/badges/1"), "uri"
+        );
         assertEq(b.rounds(), 0, "no roots yet");
     }
 

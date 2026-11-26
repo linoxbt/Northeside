@@ -40,9 +40,14 @@ contract DeployBadges {
     }
 
     function validate(Config memory c) public pure {
-        require(c.admin != address(0) && c.operator != address(0) && c.pauser != address(0), "missing address");
+        require(
+            c.admin != address(0) && c.operator != address(0) && c.pauser != address(0), "missing address"
+        );
         require(c.pauser != c.operator, "pauser must be a key separate from the operator");
-        require(c.admin != c.operator && c.admin != c.pauser, "admin must not share a key with the operator or pauser");
+        require(
+            c.admin != c.operator && c.admin != c.pauser,
+            "admin must not share a key with the operator or pauser"
+        );
         bytes memory u = bytes(c.baseURI);
         require(u.length > 8 && u[u.length - 1] == "/", "BADGES_BASE_URI must be a URL ending in /");
     }

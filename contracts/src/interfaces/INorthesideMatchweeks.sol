@@ -59,6 +59,7 @@ interface INorthesideMatchweeks {
     error WrongStatus(uint32 id, Status status);
     error WindowOpen(uint32 id);
     error WindowClosed(uint32 id);
+    error SameAsChallenged(uint32 id);
 
     function createMatchweek(
         uint32 id,

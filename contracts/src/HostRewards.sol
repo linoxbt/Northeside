@@ -54,8 +54,8 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         address sponsor;
         uint128 grossAmount; // what the sponsor pays in, fee included (token base units)
         uint16 feeBps; // platform fee taken from grossAmount at funding
-        uint128 ratePerPlayer; // per countable player, per matchweek (informational; enforced off-chain)
-        uint128 capPerHost; // per host, per matchweek (informational; enforced off-chain)
+        uint128 ratePerPlayer; // per countable player, per matchweek (enforced in claim)
+        uint128 capPerHost; // per host, per matchweek (enforced in claim)
         uint32 firstMatchweek;
         uint32 lastMatchweek;
         uint64 expiry; // no roots after this; refunds of unallocated budget open
@@ -146,6 +146,7 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     error InvalidProof();
     error UnsupportedToken();
     error NothingToRefund();
+    error OverTerms(uint128 amount, uint256 allowed);
 
     constructor(
         address admin,
@@ -327,6 +328,12 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         bytes32 leaf = leafHash(id, matchweekId, host, amount, countablePlayers);
         if (leafClaimed[leaf]) revert AlreadyClaimed();
         if (!MerkleProof.verifyCalldata(proof, root, leaf)) revert InvalidProof();
+
+        // The locked terms bound every payout on-chain, so a bad or malicious root cannot pay one host
+        // more than the sponsor agreed to (audit S6).
+        uint256 allowed = uint256(countablePlayers) * c.terms.ratePerPlayer;
+        if (allowed > c.terms.capPerHost) allowed = c.terms.capPerHost;
+        if (amount > allowed) revert OverTerms(amount, allowed);
 
         uint128 claimedForMw = claimedFor[id][matchweekId] + amount;
         if (claimedForMw > allocatedFor[id][matchweekId]) revert OverBudget();

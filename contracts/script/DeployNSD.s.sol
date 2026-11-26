@@ -20,6 +20,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///   MATCHWEEKS_ADDRESS, IDENTITY_ADDRESS   the live Northeside contracts
 ///   NSD_SUPPLY             whole tokens, e.g. 100000000
 ///   NSD_MAX_PER_MATCHWEEK  whole tokens, the most one matchweek's root may allocate
+/// On QIE mainnet (1990) also:
+///   NSD_CONFIRM_MAINNET    must be exactly "deploy NSD on mainnet". Rewards need verified identity and
+///                          legal review first (CLAUDE.md decision 1), so a mainnet run is never accidental.
 contract DeployNSD {
     struct Config {
         address admin;
@@ -37,7 +40,16 @@ contract DeployNSD {
         address rewards;
     }
 
+    string internal constant MAINNET_CONFIRMATION = "deploy NSD on mainnet";
+
     function run() external {
+        if (block.chainid == 1990) {
+            require(
+                keccak256(bytes(vm.envOr("NSD_CONFIRM_MAINNET", string(""))))
+                    == keccak256(bytes(MAINNET_CONFIRMATION)),
+                "mainnet: set NSD_CONFIRM_MAINNET to confirm (rewards need identity and legal sign-off)"
+            );
+        }
         Config memory c = configFromEnv();
         Deployed memory d = deploy(c, vm.envUint("DEPLOYER_PRIVATE_KEY"));
         string memory key = "nsd";
@@ -56,18 +68,26 @@ contract DeployNSD {
         c.treasury = vm.envAddress("NSD_TREASURY_ADDRESS");
         c.matchweeks = vm.envAddress("MATCHWEEKS_ADDRESS");
         c.identity = vm.envAddress("IDENTITY_ADDRESS");
-        c.supply = vm.envUint("NSD_SUPPLY") * 1e18;
-        c.maxPerMatchweek = uint128(vm.envUint("NSD_MAX_PER_MATCHWEEK") * 1e18);
+        uint256 supply = vm.envUint("NSD_SUPPLY");
+        uint256 perMatchweek = vm.envUint("NSD_MAX_PER_MATCHWEEK");
+        // Whole tokens in env; checked before scaling so a typo cannot overflow or silently truncate.
+        require(supply <= type(uint128).max / 1e18, "NSD_SUPPLY too large");
+        require(perMatchweek <= type(uint128).max / 1e18, "NSD_MAX_PER_MATCHWEEK too large");
+        c.supply = supply * 1e18;
+        c.maxPerMatchweek = uint128(perMatchweek * 1e18);
     }
 
     function validate(Config memory c) public pure {
         require(
-            c.admin != address(0) && c.operator != address(0) && c.pauser != address(0) && c.treasury != address(0)
-                && c.matchweeks != address(0) && c.identity != address(0),
+            c.admin != address(0) && c.operator != address(0) && c.pauser != address(0)
+                && c.treasury != address(0) && c.matchweeks != address(0) && c.identity != address(0),
             "missing address"
         );
         require(c.pauser != c.operator, "pauser must be a key separate from the operator");
-        require(c.admin != c.operator && c.admin != c.pauser, "admin must not share a key with the operator or pauser");
+        require(
+            c.admin != c.operator && c.admin != c.pauser,
+            "admin must not share a key with the operator or pauser"
+        );
         require(c.supply > 0 && c.maxPerMatchweek > 0, "supply and per-matchweek cap must be positive");
         require(c.maxPerMatchweek <= c.supply, "per-matchweek cap above total supply");
     }
@@ -79,7 +99,10 @@ contract DeployNSD {
             "unexpected chain: expected QIE mainnet (1990), QIE testnet (1983) or local (31337)"
         );
         validate(c);
-        require(c.matchweeks.code.length > 0 && c.identity.code.length > 0, "matchweeks/identity are not contracts");
+        require(
+            c.matchweeks.code.length > 0 && c.identity.code.length > 0,
+            "matchweeks/identity are not contracts"
+        );
         vm.startBroadcast(deployerKey);
         NorthesideToken token = new NorthesideToken("Northeside", "NSD", c.supply, c.treasury);
         NSDRewards rewards = new NSDRewards(

@@ -5,6 +5,7 @@ import {vm} from "./utils/Vm.sol";
 import {Base} from "./utils/Base.sol";
 import {IdentityAdapter} from "../src/IdentityAdapter.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract IdentityAdapterTest is Base {
     IdentityAdapter internal id;
@@ -12,6 +13,7 @@ contract IdentityAdapterTest is Base {
     uint256 internal constant ATTESTER_KEY = 0xA77E57;
     address internal attester;
     address internal admin = makeAddr("admin");
+    address internal pauser = makeAddr("pauser");
     address internal w1 = makeAddr("w1");
     address internal w2 = makeAddr("w2");
     address internal w3 = makeAddr("w3");
@@ -21,7 +23,7 @@ contract IdentityAdapterTest is Base {
     function setUp() public {
         vm.warp(1_763_000_000);
         attester = vm.addr(ATTESTER_KEY);
-        id = new IdentityAdapter(admin, attester);
+        id = new IdentityAdapter(admin, attester, pauser);
     }
 
     function _sig(uint256 key, address wallet, bytes32 person, uint64 deadline)
@@ -236,5 +238,48 @@ contract IdentityAdapterTest is Base {
             keccak256(abi.encodePacked("\x19\x01", own, structHash)),
             "contract formula"
         );
+    }
+
+    function test_pause_stopsNewLinksButNotRevocation() public {
+        _submit(w1, PERSON);
+        vm.prank(pauser);
+        id.pause();
+
+        uint64 deadline = uint64(block.timestamp + 1 hours);
+        bytes memory sig = _sig(ATTESTER_KEY, w2, PERSON, deadline);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        id.submitAttestation(w2, PERSON, deadline, sig);
+        vm.prank(attester);
+        vm.expectRevert(Pausable.EnforcedPause.selector);
+        id.attest(w2, PERSON);
+
+        // Cleaning up after a leaked attester still works while paused.
+        vm.prank(admin);
+        id.revoke(w1);
+        vm.prank(admin);
+        id.invalidateNonce(w2);
+        assertFalse(id.isVerified(w1), "revoked while paused");
+
+        // The pauser cannot unpause; the admin can.
+        vm.prank(pauser);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, pauser, bytes32(0)
+            )
+        );
+        id.unpause();
+        vm.prank(admin);
+        id.unpause();
+        _submit(w3, PERSON);
+        assertTrue(id.isVerified(w3), "links again after unpause");
+    }
+
+    function test_pause_onlyPauser() public {
+        bytes32 role = id.PAUSER_ROLE();
+        vm.prank(attester);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, attester, role)
+        );
+        id.pause();
     }
 }

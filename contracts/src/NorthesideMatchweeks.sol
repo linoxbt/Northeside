@@ -26,6 +26,9 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
     uint64 public constant DISPUTE_WINDOW = 12 hours;
+    /// @notice Results can never be proposed sooner than this after lock (audit L-1): a game lasts
+    ///         about two hours, so a matchweek cannot be set up to accept results at kickoff.
+    uint64 public constant MIN_RESULTS_DELAY = 2 hours;
     uint32 public constant MAX_FIXTURES = 32;
 
     struct Commit {
@@ -78,7 +81,8 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
         if (_matchweeks[id].status != Status.None) revert MatchweekExists(id);
         if (
             fixturesRoot == bytes32(0) || scoringRulesHash == bytes32(0) || lockTime <= block.timestamp
-                || resultsNotBefore < lockTime || fixtureCount == 0 || fixtureCount > MAX_FIXTURES
+                || resultsNotBefore < lockTime + MIN_RESULTS_DELAY || fixtureCount == 0
+                || fixtureCount > MAX_FIXTURES
         ) revert InvalidParams();
 
         Matchweek storage mw = _matchweeks[id];
@@ -123,9 +127,14 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
         bytes32 revealsRoot,
         bytes32 scoresRoot,
         string calldata evidenceURI
-    ) external onlyRole(RESULTS_ROLE) {
+    ) external onlyRole(RESULTS_ROLE) whenNotPaused {
         Matchweek storage mw = _matchweeks[id];
         if (mw.status != Status.Open && mw.status != Status.Challenged) revert WrongStatus(id, mw.status);
+        // A challenged set cannot simply be proposed again (audit S5): corrected results must differ.
+        if (
+            mw.status == Status.Challenged && resultsRoot == mw.resultsRoot && revealsRoot == mw.revealsRoot
+                && scoresRoot == mw.scoresRoot
+        ) revert SameAsChallenged(id);
         if (block.timestamp < mw.lockTime) revert NotLocked(id);
         if (block.timestamp < mw.resultsNotBefore) revert TooEarly(id);
         if (
@@ -157,7 +166,7 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
 
     /// @inheritdoc INorthesideMatchweeks
     /// @dev Takes no data: it can only confirm the roots that sat through the dispute window.
-    function finalize(uint32 id) external onlyRole(RESULTS_ROLE) {
+    function finalize(uint32 id) external onlyRole(RESULTS_ROLE) whenNotPaused {
         Matchweek storage mw = _matchweeks[id];
         if (mw.status != Status.ResultsProposed) revert WrongStatus(id, mw.status);
         if (block.timestamp < mw.disputeEnds) revert WindowOpen(id);
@@ -169,7 +178,8 @@ contract NorthesideMatchweeks is INorthesideMatchweeks, AccessControl, Pausable 
 
     // ---------------------------------------------------------------- emergency
 
-    /// @notice Stops new commits. Results, challenges and finalization keep working.
+    /// @notice Stops commits, result proposals and finalization, so a compromised results key can be
+    ///         contained (audit S5). Challenges keep working while paused.
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }

@@ -200,7 +200,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       500_000_000n,
       2_000_000_000n,
     ]);
-    const identity = await deploy("IdentityAdapter.sol/IdentityAdapter.json", [acct(KEYS.admin).address, acct(KEYS.attester).address]);
+    const identity = await deploy("IdentityAdapter.sol/IdentityAdapter.json", [acct(KEYS.admin).address, acct(KEYS.attester).address, "0x0000000000000000000000000000000000000000"]);
     // $NSD: fixed supply to the deployer, a rewards pool funded with 1,000,000 NSD.
     const nsdToken = await deploy("NorthesideToken.sol/NorthesideToken.json", ["Northeside", "NSD", 100_000_000n * 10n ** 18n, acct(KEYS.deployer).address]);
     const nsdRewards = await deploy("NSDRewards.sol/NSDRewards.json", [

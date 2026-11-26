@@ -32,7 +32,15 @@ contract NSDHandler {
     /// @notice Successful claims by either of Ada's wallets (one person), per matchweek.
     mapping(uint32 => uint256) public adaClaims;
 
-    constructor(NSDRewards r, NorthesideToken t, address op, address ad, address pa, address tr, address[3] memory w) {
+    constructor(
+        NSDRewards r,
+        NorthesideToken t,
+        address op,
+        address ad,
+        address pa,
+        address tr,
+        address[3] memory w
+    ) {
         rewards = r;
         token = t;
         operator = op;
@@ -44,7 +52,9 @@ contract NSDHandler {
 
     function _leaves(uint32 mw, uint128[3] memory a) internal view returns (bytes32[] memory l) {
         l = new bytes32[](3);
-        for (uint256 i = 0; i < 3; ++i) l[i] = rewards.leafHash(mw, wallets[i], a[i]);
+        for (uint256 i = 0; i < 3; ++i) {
+            l[i] = rewards.leafHash(mw, wallets[i], a[i]);
+        }
     }
 
     function post(uint256 seed, uint128 a, uint128 b, uint128 c, bool replace) external {

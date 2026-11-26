@@ -19,8 +19,12 @@ contract DeployNSDTest is Base {
         script = new DeployNSD();
         address[] memory ch = new address[](1);
         ch[0] = makeAddr("challenger");
-        matchweeks = address(new NorthesideMatchweeks(makeAddr("mwAdmin"), makeAddr("mwOp"), makeAddr("mwRes"), makeAddr("mwPause"), ch));
-        identity = address(new IdentityAdapter(makeAddr("idAdmin"), makeAddr("attester")));
+        matchweeks = address(
+            new NorthesideMatchweeks(
+                makeAddr("mwAdmin"), makeAddr("mwOp"), makeAddr("mwRes"), makeAddr("mwPause"), ch
+            )
+        );
+        identity = address(new IdentityAdapter(makeAddr("idAdmin"), makeAddr("attester"), address(0)));
     }
 
     function _config() internal returns (DeployNSD.Config memory c) {
@@ -72,7 +76,45 @@ contract DeployNSDTest is Base {
 
     function test_rejectsUnknownChain() public {
         vm.chainId(1);
-        vm.expectRevert(bytes("unexpected chain: expected QIE mainnet (1990), QIE testnet (1983) or local (31337)"));
+        vm.expectRevert(
+            bytes("unexpected chain: expected QIE mainnet (1990), QIE testnet (1983) or local (31337)")
+        );
         script.deploy(_config(), DEPLOYER_KEY);
+    }
+
+    function _env() internal {
+        vm.setEnv("ADMIN_ADDRESS", vm.toString(makeAddr("admin")));
+        vm.setEnv("OPERATOR_ADDRESS", vm.toString(makeAddr("operator")));
+        vm.setEnv("PAUSER_ADDRESS", vm.toString(makeAddr("pauser")));
+        vm.setEnv("NSD_TREASURY_ADDRESS", vm.toString(makeAddr("treasury")));
+        vm.setEnv("MATCHWEEKS_ADDRESS", vm.toString(matchweeks));
+        vm.setEnv("IDENTITY_ADDRESS", vm.toString(identity));
+        vm.setEnv("NSD_SUPPLY", "100000000");
+        vm.setEnv("NSD_MAX_PER_MATCHWEEK", "100000");
+    }
+
+    function test_configFromEnv_scalesAndBoundsWholeTokens() public {
+        _env();
+        DeployNSD.Config memory c = script.configFromEnv();
+        assertEq(c.supply, 100_000_000e18, "supply in base units");
+        assertEq(uint256(c.maxPerMatchweek), 100_000e18, "cap in base units");
+        // 2^128 / 1e18 is about 3.4e20 whole tokens: one more digit than that must fail, not truncate.
+        vm.setEnv("NSD_MAX_PER_MATCHWEEK", "400000000000000000000");
+        vm.expectRevert(bytes("NSD_MAX_PER_MATCHWEEK too large"));
+        script.configFromEnv();
+        vm.setEnv("NSD_MAX_PER_MATCHWEEK", "100000");
+        vm.setEnv("NSD_SUPPLY", "400000000000000000000");
+        vm.expectRevert(bytes("NSD_SUPPLY too large"));
+        script.configFromEnv();
+    }
+
+    function test_mainnetRunNeedsExplicitConfirmation() public {
+        _env();
+        vm.chainId(1990);
+        vm.setEnv("NSD_CONFIRM_MAINNET", "yes");
+        vm.expectRevert(
+            bytes("mainnet: set NSD_CONFIRM_MAINNET to confirm (rewards need identity and legal sign-off)")
+        );
+        script.run();
     }
 }

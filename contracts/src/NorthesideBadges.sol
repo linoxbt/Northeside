@@ -91,7 +91,9 @@ contract NorthesideBadges is ERC1155, AccessControl, Pausable {
         if (round == 0 || round > rounds) revert UnknownRound(round);
         if (revokedRound[round]) revert Revoked(round);
         if (claimed[msg.sender][badgeId]) revert AlreadyClaimed(msg.sender, badgeId);
-        if (!MerkleProof.verifyCalldata(proof, roots[round], leafHash(msg.sender, badgeId))) revert InvalidProof();
+        if (!MerkleProof.verifyCalldata(proof, roots[round], leafHash(msg.sender, badgeId))) {
+            revert InvalidProof();
+        }
         claimed[msg.sender][badgeId] = true;
         emit BadgeClaimed(msg.sender, badgeId, round);
         _mint(msg.sender, badgeId, 1, "");
@@ -105,7 +107,10 @@ contract NorthesideBadges is ERC1155, AccessControl, Pausable {
     // ------------------------------------------------------------------ soulbound
 
     /// @dev Only mints (from zero) and burns (to zero); every transfer reverts.
-    function _update(address from, address to, uint256[] memory ids, uint256[] memory values) internal override {
+    function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
+        internal
+        override
+    {
         if (from != address(0) && to != address(0)) revert Soulbound();
         super._update(from, to, ids, values);
     }
@@ -136,7 +141,12 @@ contract NorthesideBadges is ERC1155, AccessControl, Pausable {
         _unpause();
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC1155, AccessControl) returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC1155, AccessControl)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
     }
 }

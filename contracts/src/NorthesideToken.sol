@@ -10,7 +10,9 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract NorthesideToken is ERC20 {
     error InvalidParams();
 
-    constructor(string memory name_, string memory symbol_, uint256 supply, address recipient) ERC20(name_, symbol_) {
+    constructor(string memory name_, string memory symbol_, uint256 supply, address recipient)
+        ERC20(name_, symbol_)
+    {
         if (supply == 0 || recipient == address(0)) revert InvalidParams();
         _mint(recipient, supply);
     }

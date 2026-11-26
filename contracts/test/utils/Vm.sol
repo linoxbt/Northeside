@@ -47,6 +47,10 @@ interface Vm {
     function keyExistsJson(string calldata json, string calldata key) external view returns (bool);
     function parseJsonBytes32(string calldata json, string calldata key) external pure returns (bytes32);
     function parseJsonUint(string calldata json, string calldata key) external pure returns (uint256);
+    function parseJsonUintArray(string calldata json, string calldata key)
+        external
+        pure
+        returns (uint256[] memory);
 }
 
 address constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));

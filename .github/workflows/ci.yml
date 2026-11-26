@@ -26,6 +26,8 @@ jobs:
         with: { version: v1.7.1 }
       - run: forge fmt --check
       - run: forge build --sizes
+      # QIE mainnet rejects Cancun opcodes (TSTORE, MCOPY): fail if any compiled contract uses one.
+      - run: node script/check-opcodes.mjs
       - run: forge test -vv
         env: { FOUNDRY_PROFILE: ci }
       - uses: crytic/slither-action@v0.4.1

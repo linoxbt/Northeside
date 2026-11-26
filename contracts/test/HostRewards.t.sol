@@ -53,7 +53,7 @@ abstract contract HostRewardsFixture is Base {
             13,
             keccak256("f13"),
             uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 1 days),
+            uint64(block.timestamp + 1 days + 2 hours),
             10,
             keccak256("rules")
         );
@@ -68,11 +68,11 @@ abstract contract HostRewardsFixture is Base {
             id,
             keccak256(abi.encode("f", id)),
             uint64(block.timestamp + 1 hours),
-            uint64(block.timestamp + 1 hours),
+            uint64(block.timestamp + 3 hours),
             10,
             keccak256("rules")
         );
-        vm.warp(block.timestamp + 1 hours);
+        vm.warp(block.timestamp + 3 hours); // results open 2 hours after lock (audit L-1)
         vm.prank(resultsKey);
         mw.proposeResults(
             id, keccak256(abi.encode("r", id)), keccak256("rev"), keccak256("scores"), "ipfs://e"
@@ -87,7 +87,7 @@ abstract contract HostRewardsFixture is Base {
             sponsor: sponsor,
             grossAmount: gross,
             feeBps: feeBps,
-            ratePerPlayer: ONE / 10,
+            ratePerPlayer: ONE,
             capPerHost: 50 * ONE,
             firstMatchweek: 11,
             lastMatchweek: 14,
@@ -866,11 +866,59 @@ contract HostRewardsTest is HostRewardsFixture {
         assertEq(rewards.treasury(), stranger, "treasury");
     }
 
+    /// @dev Audit S6: a valid proof for an amount above the locked terms is refused on-chain.
+    function test_claim_enforcesRateAndCap() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        address[] memory hs = new address[](2);
+        hs[0] = hostA;
+        hs[1] = hostB;
+        uint128[] memory amounts = new uint128[](2);
+        amounts[0] = 6 * ONE; // 5 players at 1 QUSDC each allow 5: over the rate
+        amounts[1] = 3 * ONE; // 3 players allow 3: within terms
+        uint32[] memory players = new uint32[](2);
+        players[0] = 5;
+        players[1] = 3;
+        Tree memory t = _tree(id, 11, hs, amounts, players);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + rewards.CLAIM_DELAY());
+        vm.expectRevert(
+            abi.encodeWithSelector(HostRewards.OverTerms.selector, uint128(6 * ONE), uint256(5 * ONE))
+        );
+        rewards.claim(id, 11, hostA, 6 * ONE, 5, Merkle.proof(t.leaves, 0));
+        rewards.claim(id, 11, hostB, 3 * ONE, 3, Merkle.proof(t.leaves, 1));
+        assertEq(qusdc.balanceOf(hostB), 3 * ONE, "within terms is paid");
+    }
+
+    function test_claim_capPerHostBoundsLargeLeagues() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        address[] memory hs = new address[](1);
+        hs[0] = hostA;
+        uint128[] memory amounts = new uint128[](1);
+        amounts[0] = 60 * ONE; // 1,000 players would allow 1,000, but the cap is 50
+        uint32[] memory players = new uint32[](1);
+        players[0] = 1_000;
+        Tree memory t = _tree(id, 11, hs, amounts, players);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + rewards.CLAIM_DELAY());
+        vm.expectRevert(
+            abi.encodeWithSelector(HostRewards.OverTerms.selector, uint128(60 * ONE), uint256(50 * ONE))
+        );
+        rewards.claim(id, 11, hostA, 60 * ONE, 1_000, Merkle.proof(t.leaves, 0));
+    }
+
     function test_golden_leafHash() public view {
-        // test/fixtures/golden-vectors.json -> hostRewardLeaf
+        string memory json = vm.readFile("./test/fixtures/golden-vectors.json");
         assertEq(
-            rewards.leafHash(1, 11, 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 2_500_000, 25),
-            0x7fe9820cce734a58dc4617c73ed67f4a053295972f019755c929f240f0bd288f,
+            rewards.leafHash(
+                uint64(vm.parseJsonUint(json, ".hostRewardLeaf.campaignId")),
+                uint32(vm.parseJsonUint(json, ".hostRewardLeaf.matchweekId")),
+                vm.parseJsonAddress(json, ".hostRewardLeaf.host"),
+                uint128(vm.parseJsonUint(json, ".hostRewardLeaf.amount")),
+                uint32(vm.parseJsonUint(json, ".hostRewardLeaf.countablePlayers"))
+            ),
+            vm.parseJsonBytes32(json, ".hostRewardLeaf.leaf"),
             "leaf matches StandardMerkleTree encoding"
         );
     }

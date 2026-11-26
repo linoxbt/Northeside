@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
@@ -14,8 +15,12 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 ///      submits directly). This is disclosed as "verified by Northeside using QIE Pass", not as
 ///      trustless. personHash = keccak256(abi.encode(stablePersonRefFromQIE, pepper)); the raw QIE
 ///      reference never goes on-chain.
-contract IdentityAdapter is AccessControl, EIP712 {
+///      A leaked attester key could link wallets to made-up persons (audit L-3). PAUSER_ROLE stops
+///      new links at once; revoking and invalidating nonces keep working while paused, and only the
+///      cold admin can unpause (after removing the leaked attester).
+contract IdentityAdapter is AccessControl, Pausable, EIP712 {
     bytes32 public constant ATTESTER_ROLE = keccak256("ATTESTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     uint8 public constant MAX_WALLETS_PER_PERSON = 3;
 
     bytes32 public constant ATTESTATION_TYPEHASH =
@@ -38,15 +43,27 @@ contract IdentityAdapter is AccessControl, EIP712 {
     error NotLinked(address wallet);
     error TooManyWallets(bytes32 personHash);
 
-    constructor(address admin, address attester) EIP712("Northeside Identity", "1") {
+    constructor(address admin, address attester, address pauser) EIP712("Northeside Identity", "1") {
         if (admin == address(0)) revert InvalidParams();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         if (attester != address(0)) _grantRole(ATTESTER_ROLE, attester);
+        if (pauser != address(0)) _grantRole(PAUSER_ROLE, pauser);
+    }
+
+    /// @notice Stop new links (submitAttestation and attest). Revoke and invalidateNonce still work.
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    /// @notice Only the cold admin resumes linking.
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _unpause();
     }
 
     /// @notice Link `wallet` to `personHash` with an attestation signed by an attester.
     function submitAttestation(address wallet, bytes32 personHash, uint64 deadline, bytes calldata signature)
         external
+        whenNotPaused
     {
         if (block.timestamp > deadline) revert AttestationExpired();
         bytes32 structHash =
@@ -57,7 +74,7 @@ contract IdentityAdapter is AccessControl, EIP712 {
     }
 
     /// @notice Direct path for the attester (pays the gas itself).
-    function attest(address wallet, bytes32 personHash) external onlyRole(ATTESTER_ROLE) {
+    function attest(address wallet, bytes32 personHash) external onlyRole(ATTESTER_ROLE) whenNotPaused {
         _link(wallet, personHash, msg.sender);
     }
 
