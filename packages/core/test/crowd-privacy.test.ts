@@ -23,6 +23,7 @@ const ctx = {
   db,
   crypto,
   now: () => new Date(clock),
+  deployment: { chainId: 31337 },
   log: { info() {}, warn() {}, error() {} },
   alert: async () => {},
   football: null,

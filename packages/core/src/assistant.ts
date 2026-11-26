@@ -1,5 +1,5 @@
 import { key, scoreGrid } from "@northeside/odds";
-import { explainPick, rulesVersion } from "@northeside/scoring";
+import { explainPick, matchweekRulesVersion } from "@northeside/scoring";
 import type { CoreContext } from "./context";
 import { playerCard, recapFor } from "./fun";
 import { crowdView, fixtureRows, liveView, ownSlip, resultReviews } from "./live";
@@ -117,7 +117,7 @@ export async function assistantFacts(
   const mw = opts.focus
     ? ((await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, opts.focus.matchweekId)))[0] ?? null)
     : await currentMatchweek(ctx);
-  const version = mw ? rulesVersion(mw.scoringRulesHash) : 3;
+  const version = mw ? matchweekRulesVersion(ctx.deployment.chainId, mw) : 3;
   const facts: AssistantFacts = {
     now: now.toISOString(),
     rules: [...RULES_TEXT[version]],

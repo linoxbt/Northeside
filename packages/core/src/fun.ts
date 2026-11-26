@@ -1,6 +1,6 @@
 import { pickedCount, sealedPayloadSchema } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { breakdown, crowdCounts, explainPick, pickAt, rulesVersion } from "@northeside/scoring";
+import { breakdown, crowdCounts, explainPick, pickAt, matchweekRulesVersion } from "@northeside/scoring";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
@@ -167,7 +167,7 @@ export async function playerCard(ctx: CoreContext, userId: string): Promise<Play
     }
     let final: WeekFacts["final"] = null;
     if (sealed && mw.status === "finalized") {
-      const version = rulesVersion(mw.scoringRulesHash);
+      const version = matchweekRulesVersion(ctx.deployment.chainId, mw);
       const live = await scoredWeek(ctx, mw, fixtures);
       const me = sideFor(live.scored, userId);
       if (me) {
@@ -327,7 +327,7 @@ export async function recapFor(ctx: CoreContext, matchweekId: number, userId: st
   const [mw] = await ctx.db.select().from(schema.matchweeks).where(eq(schema.matchweeks.id, matchweekId));
   if (!mw || ctx.now() < mw.lockTime) return null;
   const fixtures = await fixtureRows(ctx, mw.id);
-  const version = rulesVersion(mw.scoringRulesHash);
+  const version = matchweekRulesVersion(ctx.deployment.chainId, mw);
   const live = await scoredWeek(ctx, mw, fixtures);
   const me = sideFor(live.scored, userId);
   if (!me) return null;

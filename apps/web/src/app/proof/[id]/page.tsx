@@ -1,4 +1,4 @@
-import { rulesVersion } from "@northeside/scoring";
+import { rulesOverride, rulesVersion } from "@northeside/scoring";
 import { proofData } from "@northeside/core";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -64,6 +64,7 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
   if (!data) notFound();
   const ctx = getCtx();
   const m = data.matchweek;
+  const override = rulesOverride(ctx.deployment.chainId, { id: m.id, scoringRulesHash: m.scoringRulesHash });
   const onChain = Object.fromEntries(data.commitments.map((c) => [c.player.toLowerCase(), c.commitment]));
   const verified = data.reveals.filter((r) => r.valid).length;
   // Long matchweeks are paginated so the page stays light at thousands of players (audit P4).
@@ -124,6 +125,13 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
           </Row>
           <Row k={`Scoring rules (${m.scoringRulesHash ? (() => { try { return `v${rulesVersion(m.scoringRulesHash)}`; } catch { return "unknown version"; } })() : "not set"})`}>
             <Hash v={m.scoringRulesHash} />
+            {override ? (
+              <p className="mt-2 text-[13px] leading-5 text-ink-2">
+                Exception: this matchweek was opened on-chain under rules v{override.onChain} (every game) just before v{override.version} (any
+                number of games) shipped. Nobody had sealed yet, so on {override.decided} Northeside decided to run and score it under
+                v{override.version}. It is one of only two matchweeks with this exception (12 and 13).
+              </p>
+            ) : null}
           </Row>
           <Row k="Results root">
             <Hash v={m.resultsRoot} />

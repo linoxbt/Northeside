@@ -2,7 +2,7 @@ import "server-only";
 import { matchweeksAbi } from "@northeside/chain";
 import { sealedPayloadSchema, verifyPayload, type SealedPayload } from "@northeside/commitments";
 import { payloadAad } from "@northeside/core";
-import { rulesVersion } from "@northeside/scoring";
+import { matchweekRulesVersion } from "@northeside/scoring";
 import { schema } from "@northeside/db";
 import { and, eq } from "drizzle-orm";
 import type { Hex } from "viem";
@@ -39,7 +39,7 @@ export function checkPayload(s: Session, raw: unknown, mw: { id: number; fixture
     throw new HttpError(400, "wrong_fixtures", "Payload fixtures root does not match");
   }
   if (payload.home.length !== fixtureCount) throw new HttpError(400, "wrong_count", `Expected ${fixtureCount} predictions`);
-  const version = rulesVersion(mw.scoringRulesHash);
+  const version = matchweekRulesVersion(getCtx().deployment.chainId, mw);
   if (payload.v !== version) throw new HttpError(400, "wrong_version", `This matchweek uses scoring rules v${version}; reload and seal again`);
   return payload;
 }

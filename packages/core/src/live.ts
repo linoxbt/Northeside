@@ -1,6 +1,6 @@
 import { sealedPayloadSchema, type SealedPayload } from "@northeside/commitments";
 import { schema } from "@northeside/db";
-import { NO_PICK, breakdown, crowdCounts, pickAt, rulesVersion, scoreEntries, slipOf, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
+import { NO_PICK, breakdown, crowdCounts, pickAt, matchweekRulesVersion, scoreEntries, slipOf, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
@@ -207,7 +207,7 @@ export function resultReviews(
 export async function liveView(ctx: CoreContext, id: number, viewer?: { userId: string } | null): Promise<LiveView | null> {
   const mw = await matchweekRow(ctx, id);
   if (!mw) return null;
-  const version = rulesVersion(mw.scoringRulesHash);
+  const version = matchweekRulesVersion(ctx.deployment.chainId, mw);
   const fixtures = await fixtureRows(ctx, id);
   if (ctx.now() < mw.lockTime) {
     return { matchweekId: id, started: false, provisional: true, rules: version, fixtures: [], players: 0, table: [], me: null };
@@ -294,7 +294,7 @@ export function sideFor<T extends { userId: string; wallet: string; sealedAt: Da
 const FINAL_TTL_MS = 10 * 60_000;
 const finalScores = new WeakMap<CoreContext, Map<number, { at: number; value: ReturnType<typeof provisional> }>>();
 export function scoredWeek(ctx: CoreContext, mw: { id: number; status: string; scoringRulesHash: string | null }, fixtures: Awaited<ReturnType<typeof fixtureRows>>) {
-  const version = rulesVersion(mw.scoringRulesHash);
+  const version = matchweekRulesVersion(ctx.deployment.chainId, mw);
   if (mw.status !== "finalized") return provisional(ctx, mw.id, version, fixtures);
   let byId = finalScores.get(ctx);
   if (!byId) finalScores.set(ctx, (byId = new Map()));
@@ -392,7 +392,7 @@ export async function matchView(ctx: CoreContext, id: number, index: number, vie
   const fixtures = await fixtureRows(ctx, id);
   const f = fixtures.find((x) => x.idx === index);
   if (!f) return null;
-  const version = rulesVersion(mw.scoringRulesHash);
+  const version = matchweekRulesVersion(ctx.deployment.chainId, mw);
   const locked = ctx.now() >= mw.lockTime;
   const odds = await oddsFor(ctx, id).catch(() => null);
 

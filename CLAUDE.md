@@ -33,6 +33,9 @@ returning players. Full spec: the "Northeside — Build Specification" doc.
 - Do not promise prizes or token rewards in UI or marketing until $NSD rewards are live.
 - Scoring rules are versioned and hashed on-chain per matchweek (`packages/scoring`): a rules change
   is a new version for new matchweeks, never an edit to an existing one.
+  One recorded exception: mainnet matchweeks 12 and 13 opened under v2 with no seals, and the owner
+  chose (26 Nov 2026) to run them under v3 (`RULES_OVERRIDES` in `packages/scoring/src/rules.ts`,
+  disclosed on their Proof pages). Never add a matchweek that already has a sealed slip.
 
 ## Workflow
 - One FR ID per branch/PR where practical; commit messages start with the ID

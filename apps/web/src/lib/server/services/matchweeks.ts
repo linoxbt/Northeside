@@ -1,4 +1,4 @@
-import { RULES_V3, rulesVersion } from "@northeside/scoring";
+import { RULES_V3, matchweekRulesVersion } from "@northeside/scoring";
 import "server-only";
 import { currentMatchweek, matchweekWithFixtures, oddsFor } from "@northeside/core";
 import { schema } from "@northeside/db";
@@ -18,7 +18,7 @@ export function publicMatchweek(data: NonNullable<Awaited<ReturnType<typeof matc
     locked: ctx.now() >= mw.lockTime,
     fixturesRoot: mw.fixturesRoot,
     /** Scoring rules version (2 = Banker and beat-the-crowd bonus). */
-    rules: mw.scoringRulesHash ? rulesVersion(mw.scoringRulesHash) : CURRENT_RULES_VERSION,
+    rules: mw.scoringRulesHash ? matchweekRulesVersion(ctx.deployment.chainId, mw) : CURRENT_RULES_VERSION,
     createTx: mw.createTx,
     resultsRoot: mw.resultsRoot,
     disputeEnds: mw.disputeEnds?.toISOString() ?? null,

@@ -77,3 +77,33 @@ export function rulesVersion(scoringRulesHash: string | null | undefined): Rules
   // A missing hash means the matchweek row is incomplete; guessing v1 would reject every v2 seal (audit B3).
   throw new Error(scoringRulesHash ? `Unknown scoring rules hash ${scoringRulesHash}` : "Matchweek has no scoring rules hash yet");
 }
+
+/**
+ * Matchweeks scored under different rules than the hash they were created with on-chain, per chain
+ * id. The ONLY exception to "rules never change after a matchweek opens": on QIE mainnet, matchweeks
+ * 12 and 13 were opened under v2 (every game) just before v3 (any number of games) shipped. Nobody
+ * had sealed in either, and the owner decided on 26 Nov 2026 to run both under v3. Their Proof
+ * pages say so. Never add a matchweek that already has a sealed slip.
+ */
+export const RULES_OVERRIDES: Readonly<Record<number, Readonly<Record<number, { version: RulesVersion; onChain: RulesVersion; decided: string }>>>> = {
+  1990: {
+    12: { version: 3, onChain: 2, decided: "2026-11-26" },
+    13: { version: 3, onChain: 2, decided: "2026-11-26" },
+  },
+};
+
+/** The rules override for a matchweek, if its on-chain hash is still the one the override replaces. */
+export function rulesOverride(chainId: number, mw: { id: number; scoringRulesHash: string | null | undefined }) {
+  const o = RULES_OVERRIDES[chainId]?.[mw.id];
+  if (!o || !mw.scoringRulesHash) return null;
+  try {
+    return rulesVersion(mw.scoringRulesHash) === o.onChain ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The rules a matchweek is played and scored under: its on-chain rules, or a recorded override. */
+export function matchweekRulesVersion(chainId: number, mw: { id: number; scoringRulesHash: string | null | undefined }): RulesVersion {
+  return rulesOverride(chainId, mw)?.version ?? rulesVersion(mw.scoringRulesHash);
+}

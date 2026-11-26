@@ -1,5 +1,5 @@
 import { schema } from "@northeside/db";
-import { breakdown, rulesVersion, slipOf, type FixtureBreakdown } from "@northeside/scoring";
+import { breakdown, matchweekRulesVersion, slipOf, type FixtureBreakdown } from "@northeside/scoring";
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import type { CoreContext } from "./context";
@@ -92,7 +92,7 @@ export async function challengeView(ctx: CoreContext, code: string, viewerUserId
     .from(schema.predictions)
     .where(and(eq(schema.predictions.matchweekId, mw.id), inArray(schema.predictions.userId, ids)));
 
-  const version = rulesVersion(mw.scoringRulesHash);
+  const version = matchweekRulesVersion(ctx.deployment.chainId, mw);
   const live = locked ? await provisional(ctx, mw.id, version, fixtures) : null;
 
   const side = (userId: string): H2HSide => {
