@@ -75,7 +75,7 @@ or QIE Wallet directly.
   challenges.
 - **Weekly recap card**: points, rank, "beat N% of players", a 🟩🟨⬛ grid of the picks and the
   best call, with a share image; the recap link doubles as an invite.
-- **On-chain badges** (`NorthesideBadges`, built and tested, deploy pending): soulbound ERC-1155
+- **On-chain badges** (`NorthesideBadges`, live on mainnet at `contracts/deployments/1990-badges.json`, source verified): soulbound ERC-1155
   tokens on QIE. The operator posts one cumulative Merkle root of every (wallet, badge) earned from
   on-chain play; each player mints from their own wallet. Not transferable, no value, never paid
   out. Deploy with `forge script script/DeployBadges.s.sol`, then set `NEXT_PUBLIC_BADGES_ADDRESS`.
