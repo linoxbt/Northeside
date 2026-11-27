@@ -12,15 +12,18 @@ data" screen, or use `cast send` with the admin key on a hardware wallet.
 
 | # | Action | Why | How |
 | --- | --- | --- | --- |
-| 1 | Alerts: create a Telegram bot, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_OPERATOR_CHAT_ID` on Netlify (production), redeploy | Every URGENT alert (an $NSD root Northeside did not post, a matchweek or result it did not make) only reaches the logs until then; `/api/v1/status` stays `healthy: false` | docs/DEPLOYMENT.md, section 9. Email works too: `RESEND_API_KEY`, `EMAIL_FROM`, `ALERT_EMAIL_TO` |
+| 1 | ~~Alerts~~ **Done 27 Nov**: Telegram (@northesidebot) set on Netlify; `/api/v1/status` is healthy | | |
 | 2 | ~~Fund the pauser~~ **Done 27 Nov** (0.01 QIEV3) | | |
-| 3 | Move the pause power (section 1) | The operator key on Netlify can still pause and unpause Matchweeks and HostRewards | /owner, step 3 |
+| 3 | Move the pause power: **Matchweeks done 27 Nov**; HostRewards still to do (optional until a sponsor funds a campaign) | A leaked operator key could pause or unpause host payouts | /owner, step 3 |
 | 4 | Grant `CHALLENGER_ROLE` to two independent wallets, each with a little QIEV3 | Today only the admin can challenge results | /owner, step 4 |
 | 5 | ~~Badges~~ **Done 27 Nov**: NorthesideBadges `0xF3518998135CEC527E1270B63780f32d4bceBd90`, source verified, admin/operator/pauser as above | | |
 | 6 | Paste the QIE Pass partner docs (getpass.qie.digital/dashboard/docs) | Request format and signing for the QIE Pass provider; the endpoints and headers are known | Copy the page text |
 | 7 | ~~Contact email~~ **Done 27 Nov**: northesideapp@gmail.com | | |
 
-Done: pool funded (48,000 NSD, cap 60,000), .qie-name verification live, legal-review gate dropped.
+Done: pool funded (96,000 NSD on 27 Nov), .qie-name verification live, legal-review gate dropped.
+
+Recommended next: lower the cap from 60,000 to 24,000 (one week) on /owner, step 1, and raise it to about
+60,000 just before matchweek 21 (finale). Challengers (step 4) are optional: the admin is already one.
 
 ## 1. Move the pause power off the server (security, do first)
 
