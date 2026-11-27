@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import * as schema from "../src/schema";
 import { FieldCrypto } from "../src/crypto";
+import { poolerUrl } from "../src/index";
 import { applyMigrations } from "../src/apply-migrations";
 import { MIGRATIONS } from "../src/migrations.generated";
 import { createHash } from "node:crypto";
@@ -180,5 +181,20 @@ describe("FieldCrypto", () => {
   it("hmac is deterministic per key", () => {
     expect(c.hmac("a@b.c")).toBe(c.hmac("a@b.c"));
     expect(c.hmac("a@b.c")).not.toBe(new FieldCrypto(Buffer.alloc(32, 8).toString("base64")).hmac("a@b.c"));
+  });
+});
+
+describe("poolerUrl (outage 27 Nov: session pool exhausted)", () => {
+  it("moves a Supabase session-pooler URL to the transaction pooler", () => {
+    expect(poolerUrl("postgresql://u.ref:pw@aws-0-eu-west-2.pooler.supabase.com:5432/postgres", {})).toBe(
+      "postgresql://u.ref:pw@aws-0-eu-west-2.pooler.supabase.com:6543/postgres",
+    );
+  });
+  it("leaves other URLs and opted-out session mode alone", () => {
+    const tx = "postgresql://u.ref:pw@aws-0-eu-west-2.pooler.supabase.com:6543/postgres";
+    expect(poolerUrl(tx, {})).toBe(tx);
+    expect(poolerUrl("postgres://postgres@127.0.0.1:54329/db", {})).toBe("postgres://postgres@127.0.0.1:54329/db");
+    const session = "postgresql://u.ref:pw@aws-0-eu-west-2.pooler.supabase.com:5432/postgres";
+    expect(poolerUrl(session, { DATABASE_SESSION_MODE: "1" })).toBe(session);
   });
 });
