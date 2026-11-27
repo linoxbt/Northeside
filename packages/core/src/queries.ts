@@ -318,7 +318,10 @@ export async function stats(ctx: CoreContext) {
     weekly,
     verifiedPersons,
     transactions: {
-      commits: await count("Committed"),
+      // Team/test wallets are left out here as well, like every player metric.
+      commits: excluded.size
+        ? rowsOf<{ player: string }>(await q(sql`select lower(args->>'player') as player from chain_events where event_name = 'Committed'`)).filter((r) => !excluded.has(r.player)).length
+        : await count("Committed"),
       claims: await count("Claimed"),
       drips,
       operator:

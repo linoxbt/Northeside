@@ -9,14 +9,18 @@
 #     so a missing or stale local variable cannot ship a wrong bundle;
 #   - stamps the deploy with the commit hash.
 #
-# Needs: NETLIFY_AUTH_TOKEN, NETLIFY_ACCOUNT_ID, NETLIFY_SITE_ID. Optional: GITHUB_TOKEN, GITHUB_REPO
-# (owner/name, default linoxbt/Northeside), SKIP_TESTS=1 (only after the same commit passed CI).
+# Needs: NETLIFY_AUTH_TOKEN, NETLIFY_ACCOUNT_ID, NETLIFY_SITE_ID, GITHUB_TOKEN (the CI gate is not
+# optional). Optional: GITHUB_REPO (owner/name, default linoxbt/Northeside), SITE_URL (default
+# https://northeside.netlify.app), SKIP_TESTS=1 (the same commit already passed CI).
+# After publishing it smoke-tests the live site and re-publishes the previous deploy if that fails.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 : "${NETLIFY_AUTH_TOKEN:?set NETLIFY_AUTH_TOKEN}"
 : "${NETLIFY_ACCOUNT_ID:?set NETLIFY_ACCOUNT_ID}"
 : "${NETLIFY_SITE_ID:?set NETLIFY_SITE_ID}"
+: "${GITHUB_TOKEN:?set GITHUB_TOKEN: a commit is deployed only after its CI run succeeded}"
+SITE_URL="${SITE_URL:-https://northeside.netlify.app}"
 REPO="${GITHUB_REPO:-linoxbt/Northeside}"
 
 if [ -n "$(git status --porcelain)" ]; then
@@ -30,7 +34,7 @@ if ! git merge-base --is-ancestor "$SHA" origin/main; then
   exit 1
 fi
 
-if [ -n "${GITHUB_TOKEN:-}" ]; then
+if true; then
   conclusion="$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/$REPO/actions/runs?head_sha=$SHA&per_page=20" |
     node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).workflow_runs.filter(w=>w.name==="CI");console.log(r.length?`${r[0].status}/${r[0].conclusion}`:"none")})')"
@@ -68,14 +72,42 @@ set -a; . "$PUBENV"; set +a
 # it fail with "Project not found", so it is hidden from the CLI.
 env -u NETLIFY_SITE_ID npx netlify build --offline --context production --filter @northeside/web
 MSG="$(git log -1 --format='%h %s' | cut -c1-120)"
+API="https://api.netlify.com/api/v1"
+# The deploy that is live now, to restore if the new one fails its smoke test.
+PREVIOUS="$(curl -fsS -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "$API/sites/$NETLIFY_SITE_ID" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).published_deploy?.id ?? ""))')"
+published=0
 for attempt in 1 2 3 4 5; do
   if env -u NETLIFY_SITE_ID npx netlify deploy --prod --no-build --skip-functions-cache --filter @northeside/web \
     --dir apps/web/.netlify/static --message "$MSG"; then
-    echo "deploy: $SHA is live"
-    exit 0
+    published=1
+    break
   fi
   echo "deploy: upload attempt $attempt failed; retrying" >&2
   sleep 8
 done
-echo "deploy: upload failed 5 times" >&2
+[ "$published" = 1 ] || { echo "deploy: upload failed 5 times" >&2; exit 1; }
+
+# Smoke test: the pages and APIs that need the database must answer 200, several at once (a
+# connection-pool problem only shows under concurrency: outage of 27 Nov 2026).
+smoke() {
+  local fails=0
+  for round in 1 2 3; do
+    for path in / /api/v1/status /api/v1/stats /api/v1/matchweeks/current /stats /live; do
+      curl -s -o /dev/null -w "%{http_code}\n" --max-time 30 "$SITE_URL$path" &
+    done > /tmp/ns-smoke.$$ ; wait
+    fails=$((fails + $(grep -vc '^200$' /tmp/ns-smoke.$$ || true)))
+  done
+  rm -f /tmp/ns-smoke.$$
+  [ "$fails" -eq 0 ]
+}
+sleep 10
+if smoke; then
+  echo "deploy: $SHA is live and passed the smoke test"
+  exit 0
+fi
+echo "deploy: smoke test FAILED for $SHA" >&2
+if [ -n "$PREVIOUS" ]; then
+  curl -fsS -X POST -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" "$API/sites/$NETLIFY_SITE_ID/deploys/$PREVIOUS/restore" >/dev/null &&
+    echo "deploy: restored the previous deploy $PREVIOUS" >&2
+fi
 exit 1

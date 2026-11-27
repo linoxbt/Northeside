@@ -30,7 +30,8 @@ export const metadata = { title: "About", description: "Free Premier League pred
 export default async function About() {
   const { mw, s } = await load();
   const live = backendConfigured();
-  const latest = s?.weekly.at(-1);
+  // The latest matchweek with a returning rate (both weeks locked), like /stats.
+  const latest = s?.weekly.filter((w) => w.returningRate !== null).at(-1) ?? s?.weekly.at(-1);
 
   return (
     <>
@@ -95,7 +96,7 @@ export default async function About() {
           <h2 className="display text-[30px] sm:text-[40px]">Every number is onchain.</h2>
           <dl className="mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-y-10 sm:grid-cols-4 sm:divide-x sm:divide-line-strong">
             <Stat value={s ? s.activatedWallets.toLocaleString("en-GB") : "—"} label="Activated wallets" />
-            <Stat value={s ? s.verifiedPersons.toLocaleString("en-GB") : "—"} label="Verified persons" />
+            <Stat value={s ? s.verifiedPersons.toLocaleString("en-GB") : "—"} label="Verified players" />
             <Stat value={latest?.returningRate != null ? `${Math.round(latest.returningRate * 100)}%` : "—"} label="Returning rate" />
             <Stat value={s ? formatQusdc(s.qusdcSettled, 0) : "—"} label="QUSDC to hosts" />
           </dl>
@@ -143,7 +144,7 @@ export default async function About() {
           <ol className="grid gap-8 sm:grid-cols-3">
             {[
               ["01", "Pick", "Call one score or all ten. Star a Banker."],
-              ["02", "Seal", "One tap, onchain. Gas is on us."],
+              ["02", "Seal", "One tap, onchain. New wallets get free gas."],
               ["03", "Climb", "Beat the crowd. Live table."],
             ].map(([n, t, b]) => (
               <li key={n} className="border-t border-ink pt-5">

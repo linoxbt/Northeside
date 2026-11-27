@@ -131,14 +131,20 @@ function SealBar(props: {
         const drip = await api<{ status: string }>("/api/v1/drip", { method: "POST", json: { deviceId: deviceId() } }).catch((e: { code?: string }) => {
           throw new Error(DRIP_REFUSED[e.code ?? ""] ?? NO_GAS_TOPUP);
         });
-        // One free top-up per account: a wallet that already had it gets no more.
-        if (drip.status === "already") throw new Error("Your free gas was already sent and has been used. Add a little QIEV3 to this wallet to seal.");
-        track("drip_sent");
+        // "already" with an empty wallet means the one free top-up is still on its way (a used one would
+        // have left a balance): wait for it like a fresh one.
+        if (drip.status !== "already") track("drip_sent");
         for (let i = 0; i < 30 && balance < needed; i++) {
           await new Promise((r) => setTimeout(r, 2000));
           balance = await publicClient.getBalance({ address: wallet });
         }
-        if (balance < needed) throw new Error("Your free gas is on its way; try sealing again in a minute.");
+        if (balance < needed) {
+          throw new Error(
+            drip.status === "already"
+              ? "Your free gas was already sent and has not arrived yet. Try again in a few minutes, or add a little QIEV3 to this wallet."
+              : "Your free gas is on its way; try sealing again in a minute.",
+          );
+        }
       }
 
       // 2. Payload and random salt, built and kept in this browser before anything is sent.
@@ -276,4 +282,5 @@ const DRIP_REFUSED: Record<string, string> = {
   daily_cap: "Free gas is paused for today. Add a little QIEV3, or try again tomorrow.",
   drip_empty: "Free gas is temporarily unavailable. Add a little QIEV3, or try again later.",
   not_configured: "Free gas is not available right now. Add a little QIEV3 to this wallet, then seal.",
+  rate_limited: "Too many requests for free gas from this network right now. Try again later, or add a little QIEV3 to this wallet.",
 };

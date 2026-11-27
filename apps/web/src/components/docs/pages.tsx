@@ -273,7 +273,7 @@ function AssistantDoc() {
     <>
       <P>
         Ask Northeside answers questions about this matchweek in plain English: which game is the closest call, where you could beat the crowd, how
-        your Banker scored, how a team has been playing. Find it on every game page and at <A href="/ask">/ask</A>.
+        your Banker scored, how a team has been playing. Once it is switched on, find it on every game page and at <A href="/ask">/ask</A>; until then /ask says so.
       </P>
       <H2 id="what-it-uses">What it uses</H2>
       <P>Every question is answered from facts the app builds at that moment, from the same data the rest of Northeside shows:</P>
@@ -525,7 +525,7 @@ function Overview() {
   return (
     <>
       <P>
-        Northeside is a free weekly Premier League prediction game on QIE mainnet. Players call the score of every match, seal their picks on-chain
+        Northeside is a free weekly Premier League prediction game on QIE mainnet. Players call the scores of the games they choose, seal their picks on-chain
         from their own wallet before kickoff, and climb tables with friends, leagues and creators. Every pick, result and score can be checked by
         anyone.
       </P>
@@ -568,7 +568,7 @@ function Overview() {
           <><b className="font-medium text-ink">Transactions from real players:</b> every slip is a commit() from the player&apos;s own wallet. No relayer.</>,
           <><b className="font-medium text-ink">On-chain proofs:</b> fixtures, results, reveals and scores as Merkle roots with a challenge window.</>,
           <><b className="font-medium text-ink">QUSDC:</b> sponsor escrow and host payouts by Merkle proof.</>,
-          <><b className="font-medium text-ink">QIE ID:</b> .qie names on tables and profiles; QIE ID verification for one person, one player.</>,
+          <><b className="font-medium text-ink">QIE ID:</b> .qie names on tables and profiles, and verification: one .qie name verifies one account.</>,
           <><b className="font-medium text-ink">QIE Wallet:</b> supported directly, alongside email sign-in for newcomers.</>,
         ]}
       />
@@ -580,7 +580,7 @@ function Overview() {
           ["Odds engine, live centre, head-to-head, levels, badges, recap, invites", "Live"],
           ["Android app and installable web app", "Live"],
           ["QIE ID .qie names", "Live"],
-          ["Verified players (one account per person)", "Live: verify with a .qie name your wallet owns"],
+          ["Verified players (one .qie name, one account)", "Live: verify with a .qie name your wallet owns"],
           ["QIE Pass verification", "In progress: QIE partner API (keys issued); switches on once QIE's request format is confirmed"],
           ["On-chain, non-transferable achievement badges", publicEnv.badges ? "Live on QIE mainnet" : "Built and tested; mainnet contract being deployed"],
         ]}

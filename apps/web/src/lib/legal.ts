@@ -31,7 +31,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "who",
         heading: "Who we are and these terms",
         body: [
-          "Northeside (\"we\", \"us\") runs the website at northeside.netlify.app, its Telegram Mini App and the related smart contracts on QIE mainnet. By signing in or sealing a prediction you agree to these terms, the Privacy notice and the Cookie policy.",
+          "Northeside (\"we\", \"us\") runs the website at northeside.netlify.app (and, once launched, its Telegram Mini App) and the related smart contracts on QIE mainnet. By signing in or sealing a prediction you agree to these terms, the Privacy notice and the Cookie policy.",
           "We may update these terms. The version and date are shown at the top. If a change materially affects you, we will tell you in the app before it applies; continuing to play after that means you accept it.",
         ],
       },
@@ -159,7 +159,7 @@ export const LEGAL: Record<string, LegalDoc> = {
         id: "sharing",
         heading: "Who we share it with",
         body: [
-          "Service providers that host or operate parts of Northeside for us: hosting (Netlify), database (Supabase), error monitoring (Sentry: technical error details, no email or name), football data providers (fixtures and results only, no personal data), and, if you use them, Privy for email sign-in, QIE Pass for verification, Fortytwo (an AI inference network running the Qwen model, with zero data retention) to answer questions you ask the Ask Northeside assistant (your question, the conversation and the game facts behind the answer, including your own picks; never your email, name or wallet) and, only with your consent, PostHog for product analytics.",
+          "Service providers that host or operate parts of Northeside for us: hosting (Netlify), database (Supabase), error monitoring if enabled (Sentry: technical error details, no email or name), football data providers (fixtures and results only, no personal data), and, if you use them, Privy for email sign-in, QIE Pass for verification, Fortytwo (an AI inference network running the Qwen model, with zero data retention) to answer questions you ask the Ask Northeside assistant (your question, the conversation and the game facts behind the answer, including your own picks; never your email, name or wallet) and, only with your consent, PostHog for product analytics.",
           "Sponsors receive reports with hashed identifiers and counts only, never your email or name. We do not sell personal data.",
         ],
       },
