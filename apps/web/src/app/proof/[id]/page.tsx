@@ -1,4 +1,4 @@
-import { rulesOverride, rulesVersion } from "@northeside/scoring";
+import { matchweekRulesVersion, rulesOverride, rulesVersion } from "@northeside/scoring";
 import { proofData } from "@northeside/core";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -176,7 +176,7 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-mono text-[12px] break-all">{c.player}</span>
                   <span className="text-[13px] text-muted">
-                    v{c.version} · {tx(c.txHash)}
+                    seal #{c.version} · {tx(c.txHash)}
                   </span>
                 </div>
                 <Hash v={c.commitment} />
@@ -222,7 +222,14 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
         <Block title="Check a commitment yourself">
           <div className="grid gap-8 md:grid-cols-[1fr_1.4fr]">
             <p className="text-[15px] leading-6 text-muted">Paste a payload. Your browser checks it against the chain.</p>
-            <VerifyWidget onChain={onChain} rpcUrl={ctx.chain.rpcUrls.default.http[0]!} contract={ctx.deployment.matchweeks} />
+            <VerifyWidget
+              onChain={onChain}
+              rpcUrl={ctx.chain.rpcUrls.default.http[0]!}
+              contract={ctx.deployment.matchweeks}
+              matchweekId={m.id}
+              fixtureCount={data.fixtures.length}
+              versions={{ rules: m.scoringRulesHash ? matchweekRulesVersion(ctx.deployment.chainId, { id: m.id, scoringRulesHash: m.scoringRulesHash }) : 0, fullV2Counts: override !== null }}
+            />
           </div>
         </Block>
       ) : null}
@@ -248,6 +255,34 @@ export default async function ProofPage({ params, searchParams }: { params: Prom
           </div>
         </Block>
       ) : null}
+
+      {data.nsdRoot ? (
+        <Block title="$NSD rewards">
+          <div className="space-y-3 text-[15px]">
+            <p>
+              Root <Hash v={data.nsdRoot.root} /> · {nsdAmount(data.nsdRoot.total)} NSD · {data.nsdRoot.status} · {tx(data.nsdRoot.txHash)} ·{" "}
+              <ExtLink href={data.nsdRoot.reportUri}>report</ExtLink>
+            </p>
+            <ul className="divide-y divide-line rounded-[var(--radius-card)] border border-line bg-white text-[14px]">
+              {data.nsdLeaves.map((l) => (
+                <li key={l.wallet} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+                  <span className="font-mono text-[12px]">{l.wallet}</span>
+                  <span>
+                    #{l.rank} · {l.points} pts · {nsdAmount(l.amount)} NSD · {l.claimTx ? <>claimed {tx(l.claimTx)}</> : "unclaimed"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Block>
+      ) : null}
     </Container>
   );
+}
+
+/** 18-decimal base units as "1,234.5" (string arithmetic, never a float). */
+function nsdAmount(baseUnits: string) {
+  const [whole, frac = ""] = formatUnits(BigInt(baseUnits), 18).split(".");
+  const f = frac.slice(0, 2).replace(/0+$/, "");
+  return `${BigInt(whole!).toLocaleString("en-GB")}${f ? `.${f}` : ""}`;
 }

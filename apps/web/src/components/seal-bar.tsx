@@ -122,16 +122,23 @@ function SealBar(props: {
       }
       // 1. Gas: a brand-new wallet gets a small drip once.
       setStep("Checking gas…");
+      // Enough for one commit at today's gas price, not just "more than zero" (audit 27 Nov, FE-4).
+      const needed = COMMIT_GAS * (await publicClient.getGasPrice());
       let balance = await publicClient.getBalance({ address: wallet });
-      if (balance === 0n) {
+      if (balance < needed) {
+        if (balance > 0n) throw new Error(NO_GAS_TOPUP);
         setStep("Sending you free gas…");
-        await api("/api/v1/drip", { method: "POST", json: { deviceId: deviceId() } });
+        const drip = await api<{ status: string }>("/api/v1/drip", { method: "POST", json: { deviceId: deviceId() } }).catch((e: { code?: string }) => {
+          throw new Error(DRIP_REFUSED[e.code ?? ""] ?? NO_GAS_TOPUP);
+        });
+        // One free top-up per account: a wallet that already had it gets no more.
+        if (drip.status === "already") throw new Error("Your free gas was already sent and has been used. Add a little QIEV3 to this wallet to seal.");
         track("drip_sent");
-        for (let i = 0; i < 30 && balance === 0n; i++) {
+        for (let i = 0; i < 30 && balance < needed; i++) {
           await new Promise((r) => setTimeout(r, 2000));
           balance = await publicClient.getBalance({ address: wallet });
         }
-        if (balance === 0n) throw new Error("Gas is on its way; try sealing again in a minute");
+        if (balance < needed) throw new Error("Your free gas is on its way; try sealing again in a minute.");
       }
 
       // 2. Payload and random salt, built and kept in this browser before anything is sent.
@@ -197,10 +204,10 @@ function SealBar(props: {
   const partial = props.version === 3;
   const ready = partial ? props.picked >= 1 && props.half === 0 && !props.bankerSkipped : props.complete;
   const hint = partial
-    ? props.picked === 0
-      ? "Pick at least one game to seal"
-      : props.half > 0
-        ? `Finish or skip ${props.half} half-filled game${props.half === 1 ? "" : "s"}`
+    ? props.half > 0
+      ? `Finish or skip ${props.half} half-filled game${props.half === 1 ? "" : "s"}`
+      : props.picked === 0
+        ? "Pick at least one game to seal"
         : props.bankerSkipped
           ? "Your Banker is on a game you have not picked"
           : props.picked < props.total
@@ -258,3 +265,15 @@ function goToFirstEmpty(picks: Picks, partial = false) {
   el.classList.add("bg-accent/20");
   setTimeout(() => el.classList.remove("bg-accent/20"), 1400);
 }
+
+const NO_GAS_TOPUP = "This wallet doesn't have enough QIEV3 to seal, and free gas is only for new, empty wallets. Add a little QIEV3, then seal.";
+/** What each drip refusal means for the player (codes from /api/v1/drip). */
+const DRIP_REFUSED: Record<string, string> = {
+  email_unverified: "Free gas is for accounts signed in with a verified email. Add a little QIEV3 to this wallet, then seal.",
+  disposable_email: "Free gas needs a permanent email address. Add a little QIEV3 to this wallet, then seal.",
+  already_dripped: "Free gas was already sent to this account or device. Add a little QIEV3 to this wallet, then seal.",
+  has_balance: NO_GAS_TOPUP,
+  daily_cap: "Free gas is paused for today. Add a little QIEV3, or try again tomorrow.",
+  drip_empty: "Free gas is temporarily unavailable. Add a little QIEV3, or try again later.",
+  not_configured: "Free gas is not available right now. Add a little QIEV3 to this wallet, then seal.",
+};

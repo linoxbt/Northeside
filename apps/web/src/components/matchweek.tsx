@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Hex } from "viem";
 import { AdultGate, SignInPanel } from "./sign-in";
-import { Button, Card, ExtLink, Pill } from "./ui";
+import { Button, Card, ExtLink, LoadError, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { short, txUrl } from "@/lib/client/env";
 import { readDraft, readLocalSeal, readPending, reconcilePending, syncSeal, uploadPayload, uploadWindowOpen, writeDraft, type Picks } from "@/lib/client/local-seal";
@@ -22,7 +22,7 @@ export { txError } from "@/lib/client/tx-errors";
 const SealBar = dynamic(() => import("./seal-bar").then((m) => m.SealBarWithWallet), {
   ssr: false,
   loading: () => (
-    <div className="sticky bottom-3 z-10">
+    <div className="sticky bottom-[calc(76px+env(safe-area-inset-bottom))] z-10 lg:static">
       <Card className="flex h-[76px] items-center justify-center !rounded-[22px] text-[14px] text-muted">Preparing your wallet…</Card>
     </div>
   ),
@@ -440,7 +440,15 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
         </div>
       </header>
 
-      {!user ? <SignInPanel /> : <AdultGate />}
+      {/* A failed session read is an error with a retry, not "signed out" (audit 27 Nov, FE-5). */}
+      {session.isError ? (
+        <LoadError what="your account" onRetry={() => void session.refetch()} />
+      ) : !user ? (
+        session.isLoading ? null : <SignInPanel />
+      ) : (
+        <AdultGate />
+      )}
+      {user && mine.isError ? <LoadError what="your seal for this matchweek" onRetry={() => void mine.refetch()} /> : null}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         {/* Match board */}
@@ -492,7 +500,8 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                       return (
                         <li key={f.index} id={`game-${f.index}`} className={`scroll-mt-24 px-3 py-2 transition-colors duration-700 sm:px-4 ${isBanker ? "bg-accent/5" : ""}`}>
                           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_228px_auto]">
-                            <div className="flex min-w-0 items-center gap-2.5">
+                            {/* Phones: teams get their own full-width row, so names are never squeezed to "N. C." (audit 27 Nov, FE-2). */}
+                            <div className="col-span-2 flex min-w-0 items-center gap-2.5 md:col-span-1">
                               <span className="w-10 shrink-0 font-mono text-[11px] leading-4 text-muted">
                                 {state === "scheduled" ? (
                                   fmtTime(f.kickoff, mounted)
@@ -551,7 +560,7 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
                                   </button>
                                 ) : null}
                             </div>
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="col-span-2 flex items-center justify-end gap-1.5 md:col-span-1">
                               <Stepper compact label={`${f.home} goals`} value={h} disabled={!editable} onChange={(v) => update("home", f.index, v)} />
                               <span className="text-[13px] text-muted">:</span>
                               <Stepper compact label={`${f.away} goals`} value={a} disabled={!editable} onChange={(v) => update("away", f.index, v)} />
@@ -669,7 +678,9 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
             </Card>
           ) : null}
 
-          {user && user.adultConfirmed && open ? (
+          {/* Sealing waits until we know whether this wallet already sealed: otherwise a failed read
+              would offer "Seal" (not "Re-seal") to someone who has (audit 27 Nov, FE-5). */}
+          {user && user.adultConfirmed && user.termsAccepted !== false && open && mine.isSuccess ? (
             <SealBar
               mwId={mw.id}
               fixturesRoot={mw.fixturesRoot as Hex}
@@ -942,7 +953,7 @@ function Receipt({
       <div className="flex items-center justify-between">
         <h2 className="text-[20px] tracking-[-0.02em]">Sealed receipt</h2>
         <Pill tone={missing ? "warn" : p.txStatus === "confirmed" ? "good" : p.txStatus === "failed" ? "bad" : "warn"}>
-          {missing ? "Picks not received" : p.txStatus === "confirmed" ? `Sealed · v${p.version}` : p.txStatus === "failed" ? "Failed, seal again" : "Confirming…"}
+          {missing ? "Picks not received" : p.txStatus === "confirmed" ? `Sealed · seal #${p.version}` : p.txStatus === "failed" ? "Failed, seal again" : "Confirming…"}
         </Pill>
       </div>
       {missing ? (
@@ -1006,7 +1017,7 @@ function Receipt({
       </dl>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={download}>Export my sealed picks</Button>
-        {finalized && wallet ? (
+        {finalized && wallet && p.points !== null && p.points !== undefined ? (
           <>
             <a className="inline-flex min-h-11 items-center rounded-full border border-line px-5 text-[15px] font-medium" href={`https://wa.me/?text=${encodeURIComponent(`I scored ${p.points} on Northeside matchweek ${mwId}. ${location.origin}`)}`} target="_blank" rel="noreferrer">
               Share on WhatsApp

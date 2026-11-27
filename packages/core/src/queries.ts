@@ -190,6 +190,8 @@ export async function proofData(ctx: CoreContext, id: number) {
     .where(and(eq(schema.rewardRoots.matchweekId, id), eq(schema.rewardRoots.status, "confirmed")));
   const leaves = await ctx.db.select().from(schema.rewardLeaves).where(eq(schema.rewardLeaves.matchweekId, id));
 
+  const [nsdRoot] = await ctx.db.select().from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, id));
+  const nsdLeaves = nsdRoot ? await ctx.db.select().from(schema.nsdLeaves).where(eq(schema.nsdLeaves.matchweekId, id)).orderBy(asc(schema.nsdLeaves.rank)) : [];
   return {
     matchweek: {
       id: mw.id,
@@ -227,6 +229,9 @@ export async function proofData(ctx: CoreContext, id: number) {
     reveals,
     rewardRoots: roots.map((r) => ({ campaignId: r.campaignId, root: r.root, total: r.total, reportUri: r.reportUri, txHash: r.txHash })),
     rewardLeaves: leaves.map((l) => ({ campaignId: l.campaignId, host: l.host, amount: l.amount, countablePlayers: l.countablePlayers, claimTx: l.claimTx })),
+    // FR-27: $NSD reward root and every leaf, so anyone can check who was paid and claim status.
+    nsdRoot: nsdRoot ? { root: nsdRoot.root, total: String(nsdRoot.total), reportUri: nsdRoot.reportUri, txHash: nsdRoot.txHash, status: nsdRoot.status } : null,
+    nsdLeaves: nsdLeaves.map((l) => ({ wallet: l.wallet, amount: String(l.amount), rank: l.rank, points: l.points, claimTx: l.claimTx })),
   };
 }
 
@@ -236,8 +241,23 @@ export async function stats(ctx: CoreContext) {
   const q = async <T>(query: ReturnType<typeof sql>) => (await db.execute(query)) as unknown as T;
   const rowsOf = <T>(r: unknown): T[] => ((r as { rows?: T[] }).rows ?? (r as T[]));
 
-  const committed = rowsOf<{ mw: number; player: string }>(
+  // Team and test wallets (STATS_EXCLUDED_WALLETS, comma separated) are not players: traction numbers
+  // leave them out and say how many were left out (audit 27 Nov, FE-3).
+  const excluded = new Set(
+    (process.env.STATS_EXCLUDED_WALLETS ?? "")
+      .split(",")
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => /^0x[0-9a-f]{40}$/.test(w)),
+  );
+  const allCommitted = rowsOf<{ mw: number; player: string }>(
     await q(sql`select distinct (args->>'id')::int as mw, lower(args->>'player') as player from chain_events where event_name = 'Committed'`),
+  );
+  const committed = allCommitted.filter((r) => !excluded.has(r.player));
+  const excludedWallets = new Set(allCommitted.filter((r) => excluded.has(r.player)).map((r) => r.player)).size;
+  // A matchweek counts for the returning rate only once it is locked: before that, who "returned" can
+  // still change.
+  const lockedIds = new Set(
+    rowsOf<{ id: number }>(await q(sql`select id from matchweeks where lock_time <= ${ctx.now().toISOString()}::timestamptz`)).map((r) => Number(r.id)),
   );
   const byMw = new Map<number, Set<string>>();
   for (const r of committed) {
@@ -250,10 +270,12 @@ export async function stats(ctx: CoreContext) {
     const players = byMw.get(mw)!;
     const prev = i > 0 ? byMw.get(mws[i - 1]!) : undefined;
     const returning = prev ? [...prev].filter((p) => players.has(p)).length : null;
+    const bothLocked = lockedIds.has(mw) && i > 0 && lockedIds.has(mws[i - 1]!);
     return {
       matchweekId: mw,
       activePlayers: players.size,
-      returningRate: prev && prev.size > 0 ? returning! / prev.size : null,
+      locked: lockedIds.has(mw),
+      returningRate: bothLocked && prev && prev.size > 0 ? returning! / prev.size : null,
     };
   });
 
@@ -292,6 +314,7 @@ export async function stats(ctx: CoreContext) {
 
   return {
     activatedWallets: new Set(committed.map((c) => c.player)).size,
+    excludedWallets,
     weekly,
     verifiedPersons,
     transactions: {

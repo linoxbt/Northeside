@@ -3,7 +3,7 @@
 import { hostRewardsAbi, matchweeksAbi, nsdRewardsAbi, nsdTokenAbi } from "@northeside/chain";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { formatUnits, keccak256, parseUnits, toBytes, type Address, type Hex } from "viem";
+import { formatUnits, getAddress, isAddress, keccak256, parseUnits, toBytes, type Address, type Hex } from "viem";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { useAuthBridge } from "./auth-bridge";
 import { Button, Card, Pill } from "./ui";
@@ -18,7 +18,14 @@ import { txError } from "@/lib/client/tx-errors";
 const ADMIN_ROLE = `0x${"0".repeat(64)}` as Hex;
 const PAUSER_ROLE = keccak256(toBytes("PAUSER_ROLE"));
 const E18 = 10n ** 18n;
-const nsd = (v: bigint) => Number(formatUnits(v, 18)).toLocaleString("en-GB", { maximumFractionDigits: 2 });
+const CHALLENGER_ROLE = keccak256(toBytes("CHALLENGER_ROLE"));
+/** 18-decimal base units as "48,000.5": string arithmetic only, never a float (CLAUDE.md money rule). */
+const nsd = (v: bigint) => {
+  const [whole, frac = ""] = formatUnits(v, 18).split(".");
+  const grouped = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const cents = frac.slice(0, 2).replace(/0+$/, "");
+  return cents ? `${grouped}.${cents}` : grouped;
+};
 
 type State = {
   isAdmin: boolean;
@@ -87,6 +94,7 @@ export function OwnerConsole() {
   const state = useOwnerState(address);
   const [cap, setCap] = useState("60000");
   const [fund, setFund] = useState("48000");
+  const [challenger, setChallenger] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ label: string; hash: string }[]>([]);
@@ -160,7 +168,7 @@ export function OwnerConsole() {
 
       <Card>
         <h2 className="text-[18px] font-medium tracking-[-0.01em]">$NSD reward pool</h2>
-        {state.isLoading ? (
+        {!s && !state.isError ? (
           <p className="mt-3 text-muted">Reading the chain…</p>
         ) : state.isError || !s ? (
           <p className="mt-3 text-bad">Could not read the contracts. Check your connection and reload.</p>
@@ -225,8 +233,8 @@ export function OwnerConsole() {
             {busy?.startsWith("Fund") ? "Sending…" : "Fund pool"}
           </Button>
         </form>
-        {s && fundValue && fundValue > s.adminNsd ? <p className="mt-2 text-[13px] text-bad">More than this wallet holds.</p> : null}
-        {fundValue === null && fund.trim() ? <p className="mt-2 text-[13px] text-bad">Enter a whole number of NSD, e.g. 48000.</p> : null}
+        {address && s && fundValue && fundValue > s.adminNsd ? <p className="mt-2 text-[13px] text-bad">More than this wallet holds.</p> : null}
+        {fundValue === null && fund.trim() ? <p className="mt-2 text-[13px] text-bad">Enter an amount of NSD, e.g. 48000 or 48000.5.</p> : null}
       </Card>
 
       <Card>
@@ -254,6 +262,31 @@ export function OwnerConsole() {
             </Button>
           </>
         )}
+      </Card>
+
+      <Card>
+        <h2 className="text-[18px] font-medium tracking-[-0.01em]">4. Add independent challengers</h2>
+        <p className="mt-1 text-[14px] leading-6 text-muted">
+          A challenger can reject results that Northeside did not publish during the 12-hour window. Today only the admin wallet can. Grant the role
+          to two wallets you control separately from the admin and the server (for example a hardware wallet and a second person), and give each a
+          little QIEV3 for gas.
+        </p>
+        <form
+          className="mt-3 flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isAddress(challenger)) {
+              void send(`Grant challenger role to ${short(challenger)}`, { address: publicEnv.matchweeks, abi: matchweeksAbi, functionName: "grantRole", args: [CHALLENGER_ROLE, getAddress(challenger)] });
+            }
+          }}
+        >
+          <label htmlFor="challenger" className="sr-only">Challenger wallet address</label>
+          <input id="challenger" placeholder="0x…" value={challenger} onChange={(e) => setChallenger(e.target.value.trim())} className="min-h-11 w-full max-w-md rounded-full border border-line bg-white px-4 font-mono text-[14px]" />
+          <Button type="submit" disabled={!isAdmin || !isAddress(challenger) || busy !== null}>
+            {busy?.startsWith("Grant challenger") ? "Granting…" : "Grant challenger role"}
+          </Button>
+        </form>
+        {challenger && !isAddress(challenger) ? <p className="mt-2 text-[13px] text-bad">That is not a wallet address.</p> : null}
       </Card>
 
       {busy ? <p className="text-[14px] text-muted">{busy}: confirm in your wallet, then wait for the block…</p> : null}

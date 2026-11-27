@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "@/lib/terms-version";
 import { ownsQieName } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { eq } from "drizzle-orm";
@@ -17,6 +18,8 @@ const body = z.object({
     .refine((n) => !/\.qie$/i.test(n), "Display names cannot end in .qie; your verified .qie name shows automatically")
     .optional(),
   adultConfirmed: z.literal(true).optional(),
+  /** Accept the current Terms: only the current version is accepted. */
+  acceptTerms: z.literal(TERMS_VERSION).optional(),
   qieId: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,32}\.qie$/, "Format: name.qie").nullable().optional(),
 });
 
@@ -38,6 +41,8 @@ export const POST = route(async (req) => {
     .set({
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.adultConfirmed ? { adultConfirmedAt: new Date() } : {}),
+      // Confirming 18+ accepts the Terms shown next to it, which are the current version.
+      ...(input.adultConfirmed || input.acceptTerms ? { termsVersion: TERMS_VERSION } : {}),
       // Only names verified on QIE ID are stored (ownership checked above); null removes it.
       ...(input.qieId !== undefined ? { qieId: input.qieId, qieIdResolved: input.qieId !== null } : {}),
     })

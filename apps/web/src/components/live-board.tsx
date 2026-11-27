@@ -51,7 +51,13 @@ export function LiveBoard({ mw }: { mw: MatchweekDTO }) {
                     <li key={f.index}>
                       <Link href={`/match/${mw.id}/${f.index}`} prefetch={false} className="grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 hover:bg-subtle/60">
                         <span className="font-mono text-[11px] text-muted">
-                          {s?.state === "live" ? <b className="font-medium text-red-600">LIVE</b> : s?.state === "ht" ? "HT" : s?.state === "ft" ? "FT" : s?.state === "void" ? "VOID" : new Date(f.kickoff).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(mounted ? {} : WAT) })}
+                          {s?.state === "live" ? <b className="font-medium text-red-600">LIVE</b> : s?.state === "ht" ? "HT" : s?.state === "ft" ? "FT" : s?.state === "void" ? "VOID" : (
+                            <>
+                              {/* Upcoming games span several days: show the day too (audit 27 Nov, FE-15). */}
+                              <span className="block">{new Date(f.kickoff).toLocaleDateString("en-GB", { weekday: "short", ...(mounted ? {} : WAT) })}</span>
+                              {new Date(f.kickoff).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", ...(mounted ? {} : WAT) })}
+                            </>
+                          )}
                           {s?.review ? (
                             <span title={s.review.message} className="ml-1 font-semibold uppercase text-warn">
                               · Review

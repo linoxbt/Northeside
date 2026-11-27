@@ -1,9 +1,10 @@
 import { contactText } from "./contact";
 import { nsdRewardsLive } from "./nsd-live";
 
-export const LEGAL_VERSION = nsdRewardsLive
-  ? "1.4 · 26 November 2026 · adds $NSD rewards and .qie name verification"
-  : "1.2 · 17 November 2026";
+import { TERMS_VERSION } from "./terms-version";
+
+export { TERMS_VERSION };
+export const LEGAL_VERSION = `${TERMS_VERSION} · 26 November 2026 · $NSD rewards${nsdRewardsLive ? "" : " (not live yet)"} and .qie name verification`;
 
 export interface LegalSection {
   /** Anchor id, so other pages can link to a section (e.g. /docs/privacy#cookies). */

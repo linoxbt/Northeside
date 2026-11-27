@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from "@/lib/terms-version";
 import { creditInvite, refreshQieId } from "@northeside/core";
 import { schema } from "@northeside/db";
 import { eq, sql } from "drizzle-orm";
@@ -27,6 +28,7 @@ export const GET = route(async () => {
       qieId: user.qieId,
       qieIdResolved: user.qieIdResolved,
       adultConfirmed: user.adultConfirmedAt !== null,
+      termsAccepted: user.termsVersion === TERMS_VERSION,
       emailVerified: user.emailVerified,
       attributedLeagueId: user.attributedLeagueId,
     },

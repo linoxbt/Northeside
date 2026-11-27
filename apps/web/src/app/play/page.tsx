@@ -6,7 +6,7 @@ import { backendConfigured } from "@/lib/server/configured";
 import { getSession } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Play this week", description: "Call every Premier League score this matchweek and seal your picks on QIE before kickoff." };
+export const metadata: Metadata = { title: "Play this week", description: "Call Premier League scores this matchweek, as many games as you like, and seal your picks on QIE before kickoff." };
 
 export default async function PlayPage({ searchParams }: { searchParams: Promise<{ mw?: string }> }) {
   const { mw: mwParam } = await searchParams;

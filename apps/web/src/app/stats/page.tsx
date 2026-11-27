@@ -2,16 +2,17 @@ import { stats } from "@northeside/core";
 import type { Metadata } from "next";
 import { Container, ExtLink, PageHeader } from "@/components/ui";
 import { formatQusdc } from "@/lib/money";
-import { backendConfigured, safely } from "@/lib/server/configured";
+import { backendConfigured, loadOrFail } from "@/lib/server/configured";
 import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Live stats", description: "Northeside traction computed live from QIE events." };
 
 export default async function StatsPage() {
-  const s = await safely(() => stats(getCtx()), {
+  const s = await loadOrFail(() => stats(getCtx()), {
     activatedWallets: 0,
-    weekly: [] as { matchweekId: number; activePlayers: number; returningRate: number | null }[],
+    excludedWallets: 0,
+    weekly: [] as { matchweekId: number; activePlayers: number; locked: boolean; returningRate: number | null }[],
     verifiedPersons: 0,
     transactions: { commits: 0, claims: 0, drips: 0, operator: 0 },
     activeHosts: 0,
@@ -22,19 +23,19 @@ export default async function StatsPage() {
   const live = backendConfigured();
   const explorer = live ? (getCtx().chain.blockExplorers?.default.url ?? "") : "";
   const contracts = live ? getCtx().deployment : null;
-  const latest = s.weekly.at(-1);
+  const latest = s.weekly.filter((w) => w.returningRate !== null).at(-1);
   const maxPlayers = Math.max(1, ...s.weekly.map((w) => w.activePlayers));
   const tiles: [string, string, string][] = [
-    ["Activated wallets", s.activatedWallets.toLocaleString("en-GB"), "sent at least one commit()"],
-    ["Verified persons", s.verifiedPersons.toLocaleString("en-GB"), "QIE Pass, one person counts once"],
-    ["Returning rate", latest?.returningRate != null ? `${Math.round(latest.returningRate * 100)}%` : "—", latest ? `matchweek ${latest.matchweekId} vs the one before` : "after two matchweeks"],
+    ["Activated wallets", s.activatedWallets.toLocaleString("en-GB"), s.excludedWallets ? `sent at least one commit() · ${s.excludedWallets} team test wallets not counted` : "sent at least one commit()"],
+    ["Verified players", s.verifiedPersons.toLocaleString("en-GB"), "verified with a .qie name, one account counts once"],
+    ["Returning rate", latest?.returningRate != null ? `${Math.round(latest.returningRate * 100)}%` : "—", latest ? `matchweek ${latest.matchweekId} vs the one before` : "after two locked matchweeks"],
     ["Active hosts", String(s.activeHosts), "leagues with 5+ sealed players"],
     ["Sponsors", String(s.sponsors), "campaigns funded with real QUSDC"],
     ["QUSDC to hosts", formatQusdc(s.qusdcSettled), "claimed onchain"],
   ];
   return (
     <Container className="pb-24">
-      <PageHeader eyebrow="Live stats" title="Traction you can audit." />
+      <PageHeader eyebrow="Live stats" title="Numbers you can check on-chain." />
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line lg:grid-cols-3">
         {tiles.map(([k, v, hint]) => (
           <div key={k} className="bg-white p-6 sm:p-8">

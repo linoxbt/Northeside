@@ -1,7 +1,8 @@
+import { notFound } from "next/navigation";
 import { MatchweekView } from "./matchweek";
 import { SportsbookShell } from "./sportsbook";
 import { ButtonLink, Card } from "./ui";
-import { loadOrFail, safely } from "@/lib/server/configured";
+import { backendConfigured, loadOrFail, safely } from "@/lib/server/configured";
 import { getById, getCurrent, listMatchweeks, type MatchweekTab } from "@/lib/server/services/matchweeks";
 
 const WAT = { timeZone: "Africa/Lagos" } as const;
@@ -13,6 +14,8 @@ export async function MatchweekScreen({ mwParam, base = "/" }: { mwParam?: strin
     loadOrFail(() => (mwParam && /^\d+$/.test(mwParam) ? getById(Number(mwParam)) : getCurrent()), null),
     safely(() => listMatchweeks(), [] as MatchweekTab[]),
   ]);
+  // An explicit matchweek that does not exist is a 404, not "next matchweek opens soon" (audit 27 Nov, FE-17).
+  if (mwParam && !mw && backendConfigured()) notFound();
   return (
     <SportsbookShell tabs={tabs} activeId={mw?.id ?? null} base={base}>
       {mw && mw.status === "draft" ? (

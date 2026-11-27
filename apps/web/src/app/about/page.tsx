@@ -14,14 +14,15 @@ export const dynamic = "force-dynamic";
 
 const wat = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-GB", { timeZone: "Africa/Lagos", ...opts });
 
+// The two loads are independent, and each gets one retry: a transient database error used to blank
+// the whole page and label the product "Launching" (audit 27 Nov, FE-1).
 async function load() {
-  return safely(
-    async () => {
-      const [mw, s] = await Promise.all([getCurrent(), getStats(getCtx())]);
-      return { mw, s: s as Awaited<ReturnType<typeof getStats>> | null };
-    },
-    { mw: null as PublicMatchweek | null, s: null as Awaited<ReturnType<typeof getStats>> | null },
-  );
+  const retry = async <T,>(fn: () => Promise<T>) => fn().catch(() => new Promise<T>((ok, no) => setTimeout(() => fn().then(ok, no), 300)));
+  const [mw, s] = await Promise.all([
+    safely(() => retry(getCurrent), null as PublicMatchweek | null),
+    safely(() => retry(() => getStats(getCtx())), null as Awaited<ReturnType<typeof getStats>> | null),
+  ]);
+  return { mw, s };
 }
 
 export const metadata = { title: "About", description: "Free Premier League predictions, sealed on QIE. Crowd odds, Banker, head-to-head." };
@@ -38,7 +39,7 @@ export default async function About() {
         <HeroScatter />
         <Container className="relative pb-16 pt-20 text-center sm:pb-24 sm:pt-28">
           <Link href="/docs" className="mx-auto mb-8 inline-flex animate-rise items-center gap-2 rounded-full border border-line bg-white py-1.5 pl-1.5 pr-3.5 text-[13px] text-ink-2 hover:border-line-strong">
-            <span className="whitespace-nowrap rounded-full bg-ink px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{live && mw ? "Live on QIE" : "Launching on QIE"}</span>
+            <span className="whitespace-nowrap rounded-full bg-ink px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{live ? "Live on QIE" : "Launching on QIE"}</span>
             <span className="whitespace-nowrap">Free, every matchweek</span>
             <Chevron />
           </Link>

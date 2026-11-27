@@ -10,6 +10,8 @@ export interface SessionData {
     qieId: string | null;
     qieIdResolved: boolean;
     adultConfirmed: boolean;
+    /** Accepted the current Terms version (a material change asks again). */
+    termsAccepted?: boolean;
     emailVerified: boolean;
     attributedLeagueId: string | null;
   } | null;

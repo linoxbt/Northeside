@@ -43,13 +43,13 @@ export default async function LeaguePage({ params, searchParams }: Props) {
           <Eyebrow className="mb-4">League · hosted by {league.host}</Eyebrow>
           <h1 className="display text-[44px] sm:text-[64px]">{league.name}</h1>
           <p className="mt-5 max-w-lg text-lg leading-7 text-muted">
-            {league.members} {league.members === 1 ? "player" : "players"} calling every Premier League score this season. Free to play, sealed on QIE before kickoff.
+            {league.members} {league.members === 1 ? "player" : "players"} calling Premier League scores this season. Free to play, sealed on QIE before kickoff.
           </p>
           <dl className="mt-10 grid max-w-md grid-cols-3 border-t border-line pt-6">
             {[
               ["Players", String(league.members)],
               ["Entry", "Free"],
-              ["Picks", "Every game"],
+              ["Picks", "Any games you choose, at least one"],
             ].map(([k, v]) => (
               <div key={k}>
                 <dt className="eyebrow">{k}</dt>

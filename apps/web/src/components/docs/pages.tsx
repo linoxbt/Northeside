@@ -35,6 +35,8 @@ function ContractsTable() {
         [<b key="h" className="font-medium text-ink">HostRewards</b>, <Addr key="ha" a={publicEnv.hostRewards} />, "Sponsor campaigns in QUSDC; hosts claim per verified, returning player by Merkle proof"],
         [<b key="i" className="font-medium text-ink">IdentityAdapter</b>, <Addr key="ia" a={publicEnv.identity} />, "Links a wallet to one person (EIP-712 attestation); up to 3 wallets per person"],
         [<b key="q" className="font-medium text-ink">QUSDC</b>, <Addr key="qa" a={publicEnv.qusdc} />, "QIE stablecoin for sponsor payments (6 decimals)"],
+        [<b key="t" className="font-medium text-ink">NorthesideToken ($NSD)</b>, <Addr key="ta" a={publicEnv.nsdToken} />, "Fixed supply of 1,000,000 NSD; no minting, no owner"],
+        [<b key="n" className="font-medium text-ink">NSDRewards</b>, <Addr key="na" a={publicEnv.nsdRewards} />, "The $NSD reward pool: one root per finalized matchweek, claimed by verified players with Merkle proofs after 24 hours"],
         [<b key="b" className="font-medium text-ink">NorthesideBadges</b>, <Addr key="ba" a={publicEnv.badges} />, "Soulbound ERC-1155 achievement badges, minted by players with Merkle proofs"],
         [<b key="r" className="font-medium text-ink">QIE ID registry (QIE)</b>, <Addr key="ra" a={qieIdRegistry} />, "Read only: a wallet's .qie name and a name's owner"],
       ]}
@@ -53,7 +55,7 @@ function HowToPlay() {
       </P>
       <Cards>
         <DocCard href="/" icon="play" title="Make your picks">
-          Open the current matchweek and call every score.
+          Open the current matchweek and call the scores you want: one game or all of them.
         </DocCard>
         <DocCard href="/docs/scoring" icon="target" title="How points work">
           Exact score, right result, Banker and crowd bonus.
@@ -172,10 +174,15 @@ function Scoring() {
         head={["Version", "From", "Hash"]}
         rows={[
           ["v1", "Matchweek 11", <span key="1" className="break-all font-mono text-[12px]">{RULES_V1_HASH}</span>],
-          ["v2 (Banker, crowd bonus)", "Matchweek 12", <span key="2" className="break-all font-mono text-[12px]">{RULES_V2_HASH}</span>],
-          ["v3 (any number of matches)", "Next matchweek opened", <span key="3" className="break-all font-mono text-[12px]">{RULES_V3_HASH}</span>],
+          ["v2 (Banker, crowd bonus)", "Created for matchweeks 12 and 13", <span key="2" className="break-all font-mono text-[12px]">{RULES_V2_HASH}</span>],
+          ["v3 (any number of matches)", "Matchweek 12 onwards", <span key="3" className="break-all font-mono text-[12px]">{RULES_V3_HASH}</span>],
         ]}
       />
+      <P>
+        Matchweeks 12 and 13 were opened on-chain under v2 just before v3 shipped, before anyone had sealed. They are played and scored
+        under v3, and their Proof pages say so; a full slip sealed as v2 in those weeks still counts, because v2 and v3 hash and score it the
+        same way. This is the only exception: every other matchweek uses exactly the rules its on-chain hash names.
+      </P>
     </>
   );
 }
@@ -632,7 +639,7 @@ function Sponsors() {
         ]}
       />
       <H2 id="who">Who counts</H2>
-      <P>A verified person in a host&apos;s league who sealed this matchweek and an earlier one. Payouts start when verification is live.</P>
+      <P>A verified person in a host&apos;s league who sealed this matchweek and an earlier one.</P>
       <Cards>
         {contact ? (
           <DocCard href={contact} icon="megaphone" title="Start a campaign">

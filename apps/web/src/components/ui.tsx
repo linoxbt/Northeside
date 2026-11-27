@@ -110,7 +110,7 @@ export function ExtLink({ href, children }: { href: string; children: ReactNode 
 
 export function VerifiedBadge() {
   return (
-    <span title="Verified human (QIE Pass)" aria-label="Verified human" className="inline-flex size-4 items-center justify-center rounded-full bg-accent align-[-2px] text-[10px] font-bold text-accent-ink">
+    <span title="Verified player: one account per person" aria-label="Verified player" className="inline-flex size-4 items-center justify-center rounded-full bg-accent align-[-2px] text-[10px] font-bold text-accent-ink">
       ✓
     </span>
   );

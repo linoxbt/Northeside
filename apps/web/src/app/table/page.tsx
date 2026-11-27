@@ -74,7 +74,7 @@ export default async function TablePage({ searchParams }: { searchParams: Promis
           <div className="overflow-hidden rounded-[var(--radius-card)] border border-line">
             <Board rows={rows} />
           </div>
-          <p className="mt-4 text-[14px] text-muted">✓ Verified human</p>
+          <p className="mt-4 text-[14px] text-muted">✓ Verified player</p>
         </>
       )}
     </Container>

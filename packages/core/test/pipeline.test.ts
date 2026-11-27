@@ -723,8 +723,8 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       const s = await stats(ctx);
       expect(s.activatedWallets).toBe(3);
       expect(s.weekly).toEqual([
-        { matchweekId: 11, activePlayers: 3, returningRate: null },
-        { matchweekId: 12, activePlayers: 3, returningRate: 1 },
+        { matchweekId: 11, activePlayers: 3, locked: true, returningRate: null },
+        { matchweekId: 12, activePlayers: 3, locked: true, returningRate: 1 },
       ]);
       expect(s.verifiedPersons).toBe(2);
       expect(s.sponsors).toBe(1);

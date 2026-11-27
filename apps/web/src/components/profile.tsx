@@ -12,7 +12,7 @@ import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "w
 import { txError } from "@/lib/client/tx-errors";
 import { useAuthBridge } from "./auth-bridge";
 import { PanelSkeleton, SignInPanel } from "./sign-in";
-import { Button, Card, Pill } from "./ui";
+import { Button, Card, LoadError, Pill } from "./ui";
 import { api, track } from "@/lib/client/api";
 import { chain, publicEnv, short } from "@/lib/client/env";
 import { useSession } from "@/lib/client/session";
@@ -36,7 +36,7 @@ export function Profile() {
   const [err, setErr] = useState<string | null>(null);
   const publicClient = usePublicClient({ chainId: chain.id });
   const { writeContractAsync } = useWriteContract();
-  const { chainId } = useAccount();
+  const { chainId, address } = useAccount();
   const { switchChainAsync } = useSwitchChain();
   const bridge = useAuthBridge();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -53,13 +53,18 @@ export function Profile() {
   const [verifyParam, setVerifyParam] = useState<string | null>(null);
   useEffect(() => setVerifyParam(new URLSearchParams(location.search).get("verify")), []);
 
-  // Back from verification: submit the attestation from the player's own wallet.
+  // Back from verification: submit the attestation from the player's own wallet, once that wallet has
+  // reconnected after the redirect (audit 27 Nov, FE-6). Runs once; the card offers a retry.
+  const [autoConfirmed, setAutoConfirmed] = useState(false);
+  const walletReady = !!address && !!session.data?.wallet && address.toLowerCase() === session.data.wallet.toLowerCase();
   useEffect(() => {
-    if (!user || new URLSearchParams(location.search).get("verify") !== "sign") return;
+    if (!user || autoConfirmed || !walletReady || new URLSearchParams(location.search).get("verify") !== "sign") return;
+    setAutoConfirmed(true);
     void finishVerification();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, walletReady, autoConfirmed]);
 
+  if (session.isError) return <LoadError what="your profile" onRetry={() => void session.refetch()} />;
   if (session.isLoading) return <PanelSkeleton />;
 
   if (!user) return <SignInPanel title="Sign in to see your profile" />;
@@ -123,22 +128,29 @@ export function Profile() {
       <Card className="space-y-3">
         <div className="flex items-center justify-between">
           <h1 className="display text-[36px] sm:text-[44px]">Your profile</h1>
-          {session.data?.verified ? <Pill tone="good">✓ Verified human</Pill> : <Pill>Not verified</Pill>}
+          {session.data?.verified ? <Pill tone="good">✓ Verified player</Pill> : <Pill>Not verified</Pill>}
         </div>
         <p className="text-[15px] leading-6 text-muted">Signed in as {short(session.data!.wallet!)}</p>
         <label className="block text-sm">
           <span className="text-[14px] text-muted">Display name</span>
           <input value={name} maxLength={24} onChange={(e) => setName(e.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[16px] outline-none focus:border-ink" />
         </label>
-        <Button onClick={() => void run(() => api("/api/v1/profile", { method: "POST", json: name.trim().length >= 2 ? { displayName: name.trim() } : {} }), "Saved")}>
+        <Button
+          onClick={() =>
+            void run(async () => {
+              if (name.trim().length < 2) throw new Error("A display name needs at least 2 characters");
+              await api("/api/v1/profile", { method: "POST", json: { displayName: name.trim() } });
+            }, "Saved")
+          }
+        >
           Save
         </Button>
         <div className="space-y-2 border-t border-line pt-4">
-          <p className="text-[14px] text-muted">QIE ID</p>
+          <p className="text-[14px] text-muted">Your .qie name (shown on tables)</p>
           {user.qieId && user.qieIdResolved ? (
             <p className="flex flex-wrap items-center gap-2 text-[16px]">
               <span className="rounded-full bg-accent/15 px-3 py-1 font-medium text-accent-deep">✓ {user.qieId}</span>
-              <span className="text-[13px] text-muted">Verified on QIE ID. Shown on tables instead of your display name.</span>
+              <span className="text-[13px] text-muted">Confirmed in QIE&apos;s name registry. Shown on tables instead of your display name.</span>
             </p>
           ) : qieIdWidgetEnabled() ? (
             <>
@@ -191,19 +203,31 @@ export function Profile() {
       <Card className="space-y-2">
         <h2 className="text-[20px] tracking-[-0.02em]">{byName ? "Verified player (.qie name)" : "Verified human (QIE Pass)"}</h2>
         {session.data?.verified ? (
-          <p className="text-[14px] leading-6 text-ink-2">Verified. This account counts as one person on the table and for $NSD rewards.</p>
+          <p className="text-[14px] leading-6 text-ink-2">
+            Verified. This account counts as one person on the table{process.env.NEXT_PUBLIC_NSD_REWARDS_LIVE === "1" ? " and for $NSD rewards" : ""}.
+          </p>
         ) : session.data?.verificationAvailable ? (
           <>
             {byName ? (
               <p className="text-[14px] leading-6 text-ink-2">
                 Verify with the .qie name your signed-in wallet owns. One .qie name verifies one account, and you confirm it with one
-                transaction from your wallet. No name yet? Get one in QIE Wallet, set it as your wallet&apos;s name, then come back.
+                transaction from your wallet. No name yet? Get one on QIE ID (id.qie.digital), make it your wallet&apos;s name, then come back.
               </p>
             ) : null}
             {verifyNote ? <p role="status" className="rounded-xl bg-subtle px-4 py-3 text-[14px] leading-6 text-ink-2">{verifyNote}</p> : null}
-            <Button variant="ghost" onClick={() => { track("verification_started"); location.href = "/api/v1/identity/start"; }}>
-              {byName ? "Verify with my .qie name" : "Get verified"}
-            </Button>
+            {/* The result of the confirm step shows here, next to the action, not at the page bottom. */}
+            {verifyParam === "sign" && (msg || err) ? (
+              <p role={err ? "alert" : "status"} className={`text-[14px] ${err ? "text-bad" : "text-accent-deep"}`}>{err ?? msg}</p>
+            ) : null}
+            {verifyParam === "sign" ? (
+              <Button onClick={() => void finishVerification()} disabled={!walletReady}>
+                {walletReady ? "Confirm verification" : "Reconnect your wallet to confirm"}
+              </Button>
+            ) : (
+              <Button variant="ghost" onClick={() => { track("verification_started"); location.href = "/api/v1/identity/start"; }}>
+                {byName ? "Verify with my .qie name" : "Get verified"}
+              </Button>
+            )}
           </>
         ) : (
           // Spec 9.4: never offer or claim verification before a real one works on mainnet.
@@ -306,7 +330,12 @@ export function Profile() {
 }
 
 const VERIFY_NOTES: Record<string, string> = {
-  "no-name": "Your signed-in wallet has no .qie name yet, or its name points to another wallet. Set a .qie name for this wallet in QIE Wallet and try again.",
+  sign: "Your .qie name checks out. Confirm with one transaction from your wallet to finish.",
+  "no-name": "Your signed-in wallet has no .qie name yet, or its name points to another wallet. Set a .qie name for this wallet on QIE ID and try again.",
   "name-taken": "That .qie name already verified another Northeside account. Each name verifies one account.",
+  "other-person": "This account is already verified with another name. Your other wallets link to that same verification.",
+  "signed-out": "Sign in again, then verify.",
+  expired: "Verification took too long. Start again.",
+  unavailable: "Verification is not available right now. Try again later.",
   failed: "Verification did not complete. Try again.",
 };

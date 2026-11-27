@@ -64,7 +64,18 @@ curl -fsS -H "Authorization: Bearer $NETLIFY_AUTH_TOKEN" \
 echo "deploy: $(wc -l < "$PUBENV") NEXT_PUBLIC_* values from Netlify"
 set -a; . "$PUBENV"; set +a
 
-npx netlify build --offline --context production --filter @northeside/web
-npx netlify deploy --prod --no-build --skip-functions-cache --filter @northeside/web \
-  --dir apps/web/.netlify/static --message "$(git log -1 --format='%h %s' | cut -c1-120)"
-echo "deploy: $SHA is live"
+# The CLI finds the site through apps/web/.netlify/state.json; NETLIFY_SITE_ID in its environment makes
+# it fail with "Project not found", so it is hidden from the CLI.
+env -u NETLIFY_SITE_ID npx netlify build --offline --context production --filter @northeside/web
+MSG="$(git log -1 --format='%h %s' | cut -c1-120)"
+for attempt in 1 2 3 4 5; do
+  if env -u NETLIFY_SITE_ID npx netlify deploy --prod --no-build --skip-functions-cache --filter @northeside/web \
+    --dir apps/web/.netlify/static --message "$MSG"; then
+    echo "deploy: $SHA is live"
+    exit 0
+  fi
+  echo "deploy: upload attempt $attempt failed; retrying" >&2
+  sleep 8
+done
+echo "deploy: upload failed 5 times" >&2
+exit 1

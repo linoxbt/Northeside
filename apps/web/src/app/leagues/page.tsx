@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ButtonLink, Chevron, Container, PageHeader } from "@/components/ui";
-import { safely } from "@/lib/server/configured";
+import { loadOrFail } from "@/lib/server/configured";
 import { leagueDirectory } from "@/lib/server/services/leagues";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Leagues", description: "Find a Northeside league run by a creator or community you follow, or start your own." };
 
 export default async function LeaguesPage() {
-  const leagues = await safely(() => leagueDirectory(), [] as Awaited<ReturnType<typeof leagueDirectory>>);
+  const leagues = await loadOrFail(() => leagueDirectory(), [] as Awaited<ReturnType<typeof leagueDirectory>>);
   return (
     <>
       <Container className="pb-20">

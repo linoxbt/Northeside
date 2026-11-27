@@ -248,7 +248,7 @@ async function playerSeals(browser, keyIndex, name, picks, invite) {
   check(/inv%3D[a-z2-9]{7}/.test((await dialog.getByRole("link", { name: "WhatsApp" }).getAttribute("href")) ?? ""), `${name}: the seal celebration shares an invite link`);
   await page.screenshot({ path: join(OUT, `${name}-celebration.png`) });
   await dialog.getByRole("button", { name: "Done" }).click();
-  await page.getByText(/Sealed · v1/).waitFor({ timeout: 60_000 });
+  await page.getByText(/Sealed · seal #1/).waitFor({ timeout: 60_000 });
   if (name === "Ada") {
     // Editing after sealing warns that the change is not sealed, and can be undone (audit B7).
     const first = fixtures[0];

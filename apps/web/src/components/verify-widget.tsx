@@ -1,6 +1,6 @@
 "use client";
 
-import { computeCommitment, payloadPredictionsHash, sealedPayloadSchema } from "@northeside/commitments";
+import { computeCommitment, payloadPredictionsHash, sealedPayloadSchema, verifyPayload } from "@northeside/commitments";
 import { useState } from "react";
 import { encodeFunctionData, getAddress, type Address } from "viem";
 import { Button } from "./ui";
@@ -38,7 +38,22 @@ async function readOnChain(rpcUrl: string, contract: Address, matchweekId: numbe
  * Recompute a commitment in the browser from a revealed payload (or your exported file), and compare
  * it with what the QIE chain itself holds, falling back to Northeside's index if the RPC is unreachable.
  */
-export function VerifyWidget({ onChain, rpcUrl, contract }: { onChain: Record<string, string>; rpcUrl: string; contract: Address }) {
+export function VerifyWidget({
+  onChain,
+  rpcUrl,
+  contract,
+  matchweekId,
+  fixtureCount,
+  versions,
+}: {
+  onChain: Record<string, string>;
+  rpcUrl: string;
+  contract: Address;
+  matchweekId: number;
+  fixtureCount: number;
+  /** Payload versions that count in this matchweek: its rules, plus a full v2 slip under the 12/13 override. */
+  versions: { rules: number; fullV2Counts: boolean };
+}) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState<{ ok: boolean; lines: string[] } | null>(null);
@@ -57,7 +72,18 @@ export function VerifyWidget({ onChain, rpcUrl, contract }: { onChain: Record<st
         stored = onChain[p.player.toLowerCase()];
         source = `Northeside's index (chain read failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"})`;
       }
-      const ok = !!stored && stored.toLowerCase() === c;
+      // A matching hash is not enough: the slip must also be well-formed and for this matchweek's rules
+      // (audit 27 Nov, L-2), exactly as the reveal checks it.
+      const shape = verifyPayload(p);
+      const full = p.home.every((x) => x !== 255) && p.away.every((x) => x !== 255);
+      const versionOk = p.v === versions.rules || (versions.fullV2Counts && p.v === 2 && full);
+      const problems = [
+        ...(shape.ok ? [] : [shape.reason]),
+        ...(p.matchweekId !== matchweekId ? [`this payload is for matchweek ${p.matchweekId}, not ${matchweekId}`] : []),
+        ...(p.home.length !== fixtureCount ? [`${p.home.length} picks; this matchweek has ${fixtureCount} games`] : []),
+        ...(versionOk ? [] : [`sealed under rules v${p.v}; this matchweek uses v${versions.rules}`]),
+      ];
+      const ok = !!stored && stored.toLowerCase() === c && problems.length === 0;
       setOut({
         ok,
         lines: [
@@ -65,7 +91,8 @@ export function VerifyWidget({ onChain, rpcUrl, contract }: { onChain: Record<st
           `commitment      = ${c}`,
           `sealed          = ${stored ?? "(no commitment from this player)"}`,
           `source          = ${source}`,
-          ok ? "Match: these picks are exactly what was sealed before lock." : "No match.",
+          ...problems.map((x) => `problem         = ${x}`),
+          ok ? "Match: these picks are exactly what was sealed before lock." : stored && stored.toLowerCase() === c ? "Hash matches, but this slip would not count (see problems)." : "No match.",
         ],
       });
     } catch (e) {

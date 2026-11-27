@@ -1,5 +1,6 @@
 "use client";
 
+import { TERMS_VERSION } from "@/lib/terms-version";
 import { usePathname } from "next/navigation";
 import { useMounted } from "@/lib/client/use-mounted";
 import { useState } from "react";
@@ -67,7 +68,9 @@ export function AdultGate() {
   const [checked, setChecked] = useState(false);
   const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  if (!session.data?.user || session.data.user.adultConfirmed) return null;
+  if (!session.data?.user) return null;
+  if (session.data.user.adultConfirmed && session.data.user.termsAccepted === false) return <TermsUpdate />;
+  if (session.data.user.adultConfirmed) return null;
   return (
     <Card className="space-y-4 border-ink">
       <h2 className="text-[22px] tracking-[-0.03em]">One more step</h2>
@@ -91,6 +94,39 @@ export function AdultGate() {
         }}
       >
         Continue
+      </Button>
+      {err ? <p className="text-sm text-bad">{err}</p> : null}
+    </Card>
+  );
+}
+
+/** The Terms changed materially since this player accepted them: ask again before they seal. */
+function TermsUpdate() {
+  const qc = useQueryClient();
+  const [checked, setChecked] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <Card className="space-y-4 border-ink">
+      <h2 className="text-[22px] tracking-[-0.03em]">Our terms changed</h2>
+      <p className="text-[15px] leading-6 text-ink-2">
+        Version {TERMS_VERSION} covers $NSD rewards and verification with a .qie name. Please read them; you can keep playing once you accept.
+      </p>
+      <label className="flex min-h-11 items-center gap-3 text-sm">
+        <input type="checkbox" className="size-5" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
+        I accept the updated <a href="/docs/terms" className="text-accent-deep underline">terms</a> and <a href="/docs/privacy" className="text-accent-deep underline">privacy notice</a>.
+      </label>
+      <Button
+        disabled={!checked}
+        onClick={async () => {
+          try {
+            await api("/api/v1/profile", { method: "POST", json: { acceptTerms: TERMS_VERSION } });
+            await qc.invalidateQueries({ queryKey: ["session"] });
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : String(e));
+          }
+        }}
+      >
+        Accept and continue
       </Button>
       {err ? <p className="text-sm text-bad">{err}</p> : null}
     </Card>
