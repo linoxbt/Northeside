@@ -7,7 +7,15 @@ import { getCtx } from "@/lib/server/ctx";
 import { walletsOf } from "@/lib/server/services/accounts";
 
 const body = z.object({
-  displayName: z.string().trim().min(2).max(24).regex(/^[\p{L}\p{N} ._-]+$/u, "Letters, numbers, spaces, . _ - only").optional(),
+  displayName: z
+    .string()
+    .trim()
+    .min(2)
+    .max(24)
+    .regex(/^[\p{L}\p{N} ._-]+$/u, "Letters, numbers, spaces, . _ - only")
+    // Only a verified .qie name may look like one (audit 27 Nov, L4).
+    .refine((n) => !/\.qie$/i.test(n), "Display names cannot end in .qie; your verified .qie name shows automatically")
+    .optional(),
   adultConfirmed: z.literal(true).optional(),
   qieId: z.string().trim().toLowerCase().regex(/^[a-z0-9-]{2,32}\.qie$/, "Format: name.qie").nullable().optional(),
 });

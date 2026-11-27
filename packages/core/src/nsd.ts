@@ -186,6 +186,20 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
     if (!forThisWallet) continue; // one transaction can verify several wallets
     linkOf.set(w, { personHash: p.personHash.toLowerCase(), verifiedAt: p.verifiedAt ?? null });
   }
+  // One account is one entry, even if its wallets were linked to different person hashes on-chain
+  // (audit 27 Nov, M4): every wallet of an account counts as that account's first person hash.
+  const owners = await ctx.db.select({ wallet: schema.wallets.address, userId: schema.wallets.userId }).from(schema.wallets).where(inArray(schema.wallets.address, wallets));
+  const canonical = new Map<string, string>();
+  for (const o of owners) {
+    const link = linkOf.get(o.wallet.toLowerCase());
+    if (!link) continue;
+    const seen = canonical.get(o.userId);
+    if (!seen || link.personHash < seen) canonical.set(o.userId, link.personHash);
+  }
+  for (const o of owners) {
+    const link = linkOf.get(o.wallet.toLowerCase());
+    if (link) link.personHash = canonical.get(o.userId)!;
+  }
   const lockRows = await ctx.db
     .select({ id: schema.matchweeks.id, lockTime: schema.matchweeks.lockTime })
     .from(schema.matchweeks)

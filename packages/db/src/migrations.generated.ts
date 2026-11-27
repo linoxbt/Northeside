@@ -41,5 +41,11 @@ export const MIGRATIONS: { tag: string; when: number; hash: string; sql: string 
     "when": 1794852307948,
     "hash": "848a6cebe9292218a066e389741c3bfedebce34f97f4a1cbcc7e6c6492794138",
     "sql": "ALTER TABLE \"users\" ADD COLUMN \"invite_code\" text;--> statement-breakpoint\nALTER TABLE \"users\" ADD COLUMN \"invited_by\" uuid;--> statement-breakpoint\nALTER TABLE \"users\" ADD COLUMN \"invited_at\" timestamp with time zone;--> statement-breakpoint\nCREATE INDEX \"users_invited_by_idx\" ON \"users\" USING btree (\"invited_by\");--> statement-breakpoint\nALTER TABLE \"users\" ADD CONSTRAINT \"users_invite_code_unique\" UNIQUE(\"invite_code\");"
+  },
+  {
+    "tag": "0007_audit_27nov",
+    "when": 1795763159864,
+    "hash": "73e820eb3bc2d0f4174f7e999f7903d78e545619c32b8aa9b8e1589e5398b91b",
+    "sql": "CREATE TABLE \"used_person_hashes\" (\n\t\"person_hash\" text PRIMARY KEY NOT NULL,\n\t\"user_id\" uuid,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);\n--> statement-breakpoint\nALTER TABLE \"users\" ADD COLUMN \"terms_version\" text;--> statement-breakpoint\nALTER TABLE \"used_person_hashes\" ADD CONSTRAINT \"used_person_hashes_user_id_users_id_fk\" FOREIGN KEY (\"user_id\") REFERENCES \"public\".\"users\"(\"id\") ON DELETE set null ON UPDATE no action;--> statement-breakpoint\n-- One person hash per account. Guarded so a database that somehow holds a duplicate keeps migrating\n-- (the app also checks used_person_hashes before linking); the operator is told in the job log.\nDO $$\nBEGIN\n  IF EXISTS (SELECT 1 FROM \"identities\" GROUP BY \"person_hash\" HAVING count(*) > 1) THEN\n    RAISE NOTICE 'identities has duplicate person_hash values: unique index not created';\n  ELSE\n    CREATE UNIQUE INDEX IF NOT EXISTS \"identities_person_hash_unique\" ON \"identities\" USING btree (\"person_hash\");\n  END IF;\nEND $$;--> statement-breakpoint\nINSERT INTO \"used_person_hashes\" (\"person_hash\", \"user_id\") SELECT DISTINCT ON (\"person_hash\") \"person_hash\", \"user_id\" FROM \"identities\" ORDER BY \"person_hash\", \"created_at\" ON CONFLICT DO NOTHING;--> statement-breakpoint\n-- Same as every other table (0001_rls): no policies, so the anon and authenticated roles see nothing.\nALTER TABLE \"used_person_hashes\" ENABLE ROW LEVEL SECURITY;"
   }
 ];

@@ -83,7 +83,9 @@ export function rulesVersion(scoringRulesHash: string | null | undefined): Rules
  * id. The ONLY exception to "rules never change after a matchweek opens": on QIE mainnet, matchweeks
  * 12 and 13 were opened under v2 (every game) just before v3 (any number of games) shipped. Nobody
  * had sealed in either, and the owner decided on 26 Nov 2026 to run both under v3. Their Proof
- * pages say so. Never add a matchweek that already has a sealed slip.
+ * pages say so. Never add a matchweek that already has a sealed slip. An override applies only while
+ * the matchweek's on-chain hash is still the one it replaces, so a later deployment (which creates its
+ * matchweeks under the current rules) can never inherit it, without naming any contract address.
  */
 export const RULES_OVERRIDES: Readonly<Record<number, Readonly<Record<number, { version: RulesVersion; onChain: RulesVersion; decided: string }>>>> = {
   1990: {
@@ -106,4 +108,20 @@ export function rulesOverride(chainId: number, mw: { id: number; scoringRulesHas
 /** The rules a matchweek is played and scored under: its on-chain rules, or a recorded override. */
 export function matchweekRulesVersion(chainId: number, mw: { id: number; scoringRulesHash: string | null | undefined }): RulesVersion {
   return rulesOverride(chainId, mw)?.version ?? rulesVersion(mw.scoringRulesHash);
+}
+
+/**
+ * Whether a sealed payload's rules version counts in this matchweek. Normally it must equal the
+ * matchweek's rules. Under a v2 -> v3 override a full slip sealed as v2 (a stale client) also counts:
+ * v2 and v3 hash a slip the same way and score a full slip the same (audit 27 Nov, M-1).
+ */
+export function acceptsPayloadVersion(
+  chainId: number,
+  mw: { id: number; scoringRulesHash: string | null | undefined },
+  payload: { v: number; home: readonly number[]; away: readonly number[] },
+): boolean {
+  if (payload.v === matchweekRulesVersion(chainId, mw)) return true;
+  const o = rulesOverride(chainId, mw);
+  const full = payload.home.every((x) => x !== 255) && payload.away.every((x) => x !== 255);
+  return o !== null && o.onChain === 2 && o.version === 3 && payload.v === 2 && full;
 }

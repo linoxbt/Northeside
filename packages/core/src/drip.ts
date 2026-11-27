@@ -88,11 +88,14 @@ export async function requestDrip(
   }
 
   const deviceHash = ctx.crypto.hmac(`device:${req.deviceId}`);
+  // One drip per real mailbox: name+1@gmail.com and n.a.m.e@gmail.com are the same inbox (audit L2).
+  // A plain address hashes exactly as before, so earlier drips still count.
+  const emailHash = req.email ? ctx.crypto.hmac(`email:${normalizeEmail(req.email)}`) : req.emailHash;
   if (already) await ctx.db.delete(schema.drips).where(eq(schema.drips.id, already.id));
   const inserted = await ctx.db
     .insert(schema.drips)
     // email_hash survives account deletion, so deleting and signing up again cannot drip twice (audit S5).
-    .values({ userId: req.userId, wallet: wallet.toLowerCase(), deviceHash, emailHash: req.emailHash, amountWei: cfg.amountWei, status: "pending" })
+    .values({ userId: req.userId, wallet: wallet.toLowerCase(), deviceHash, emailHash, amountWei: cfg.amountWei, status: "pending" })
     .onConflictDoNothing()
     .returning();
   if (inserted.length === 0) throw new DripRefused("already_dripped", "Free gas was already sent to this account or device");
@@ -200,4 +203,16 @@ export async function reconcileDrips(ctx: CoreContext) {
   freed += neverSent.length;
   if (freed > 0) await ctx.alert(`gas drip: ${freed} drip(s) were dropped or reverted and can be requested again`);
   return { confirmed, freed };
+}
+
+/** The mailbox an address delivers to: lower case, no +tag, and no dots for Gmail. */
+export function normalizeEmail(email: string): string {
+  const e = email.trim().toLowerCase();
+  const at = e.lastIndexOf("@");
+  if (at < 1) return e;
+  let local = e.slice(0, at).split("+")[0]!;
+  let domain = e.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") local = local.replace(/\./g, "");
+  return `${local}@${domain}`;
 }

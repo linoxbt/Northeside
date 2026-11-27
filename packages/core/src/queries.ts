@@ -1,5 +1,5 @@
 import { schema } from "@northeside/db";
-import { rank } from "@northeside/scoring";
+import { matchweekRulesVersion, rank, rulesOverride } from "@northeside/scoring";
 import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import type { CoreContext } from "./context";
 
@@ -198,6 +198,9 @@ export async function proofData(ctx: CoreContext, id: number) {
       lockTime: mw.lockTime,
       fixturesRoot: mw.fixturesRoot,
       scoringRulesHash: mw.scoringRulesHash,
+      /** The rules the matchweek is played and scored under (an override may differ from the hash). */
+      rulesVersion: mw.scoringRulesHash ? matchweekRulesVersion(ctx.deployment.chainId, mw) : null,
+      rulesOverride: rulesOverride(ctx.deployment.chainId, mw),
       createTx: mw.createTx,
       resultsRoot: mw.resultsRoot,
       evidenceUri: mw.evidenceUri,

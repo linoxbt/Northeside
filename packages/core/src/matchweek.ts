@@ -10,7 +10,7 @@ import {
   buildScoresTree,
   type FixtureLeaf,
 } from "@northeside/merkle";
-import { CURRENT_RULES_HASH, matchweekRulesVersion, scoreEntries, type FixtureResult } from "@northeside/scoring";
+import { CURRENT_RULES_HASH, acceptsPayloadVersion, matchweekRulesVersion, scoreEntries, type FixtureResult } from "@northeside/scoring";
 import { rankPeople } from "./people";
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getAddress, keccak256, toBytes, type Address, type Hex } from "viem";
@@ -297,7 +297,7 @@ export async function revealMatchweek(ctx: CoreContext, id: number) {
         } else if (payload.home.length !== fixtureCount || payload.away.length !== fixtureCount) {
           // One malformed row must not break scoring for everyone (audit B18).
           error = `payload has ${payload.home.length} picks; this matchweek has ${fixtureCount} games`;
-        } else if (payload.v !== matchweekRulesVersion(ctx.deployment.chainId, mw)) {
+        } else if (!acceptsPayloadVersion(ctx.deployment.chainId, mw, payload)) {
           error = `payload v${payload.v} does not match this matchweek's scoring rules v${matchweekRulesVersion(ctx.deployment.chainId, mw)}`;
         }
         return { payload, error };

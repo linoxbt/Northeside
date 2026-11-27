@@ -1,11 +1,12 @@
 import { crowdView } from "@northeside/core";
-import { HttpError, intParam, json, route } from "@/lib/server/api";
+import { HttpError, intParam, json, limitReads, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/v1/matchweeks/:id/crowd: how the crowd is calling each game (aggregate counts only). */
 export const GET = route(async (_req, { params }: { params: Promise<{ id: string }> }) => {
+  await limitReads("crowd", 60); // audit 27 Nov, L1
   const id = intParam((await params).id, "matchweek");
   if (!Number.isInteger(id) || id < 0) throw new HttpError(400, "bad_id", "Bad matchweek id");
   const view = await crowdView(getCtx(), id);

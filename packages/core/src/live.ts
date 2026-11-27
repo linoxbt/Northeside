@@ -1,7 +1,7 @@
 import { sealedPayloadSchema, type SealedPayload } from "@northeside/commitments";
 import { schema } from "@northeside/db";
 import { NO_PICK, breakdown, crowdCounts, pickAt, matchweekRulesVersion, scoreEntries, slipOf, type FixtureBreakdown, type FixtureResult } from "@northeside/scoring";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { CoreContext } from "./context";
 import { payloadAad } from "./matchweek";
 import { firstPerPerson, personEntry, rankPeople } from "./people";
@@ -93,7 +93,25 @@ interface CrowdSnapshot {
  * sealed, then a stored snapshot that is replaced at most every CROWD_SNAPSHOT_EVERY_MS and only
  * once CROWD_SNAPSHOT_MIN_NEW more people have sealed. No exact scores and no time series.
  */
+const crowdCache = new Map<number, { sig: string; at: number; value: { players: number; snapshot: CrowdSnapshot | null } }>();
+
 export async function preLockCrowd(ctx: CoreContext, id: number, fixtureCount: number): Promise<{ players: number; snapshot: CrowdSnapshot | null }> {
+  // Decrypting every sealed payload is the costly part: reuse the last answer while no seal changed
+  // (same count and newest update) for up to a minute (audit 27 Nov, L1). Never stale: any new or
+  // changed seal changes the signature.
+  const [sigRow] = await ctx.db
+    .select({ n: sql<number>`count(*)::int`, u: sql<string>`coalesce(max(${schema.predictions.updatedAt})::text, '')` })
+    .from(schema.predictions)
+    .where(eq(schema.predictions.matchweekId, id));
+  const sig = `${sigRow?.n ?? 0}:${sigRow?.u ?? ""}:${fixtureCount}`;
+  const cached = crowdCache.get(id);
+  if (cached && cached.sig === sig && ctx.now().getTime() - cached.at < 60_000) return cached.value;
+  const value = await computePreLockCrowd(ctx, id, fixtureCount);
+  crowdCache.set(id, { sig, at: ctx.now().getTime(), value });
+  return value;
+}
+
+async function computePreLockCrowd(ctx: CoreContext, id: number, fixtureCount: number): Promise<{ players: number; snapshot: CrowdSnapshot | null }> {
   const people = perPerson(await crowdEntries(ctx, id, false));
   const key = `crowdsnap:${id}`;
   const [row] = await ctx.db.select().from(schema.appSettings).where(eq(schema.appSettings.key, key));

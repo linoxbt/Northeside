@@ -46,6 +46,8 @@ export const users = pgTable(
     qieId: text("qie_id"),
     qieIdResolved: boolean("qie_id_resolved").notNull().default(false),
     adultConfirmedAt: timestamp("adult_confirmed_at", { withTimezone: true }),
+    /** The Terms version the player last accepted; a newer version asks them to accept again. */
+    termsVersion: text("terms_version"),
     /** FR-19: the first host link a player joins through is their attributed league for the season. */
     attributedLeagueId: uuid("attributed_league_id"),
     attributionSource: text("attribution_source"),
@@ -257,6 +259,16 @@ export const identities = pgTable("identities", {
   status: text("status", { enum: ["pending", "verified", "revoked"] }).notNull().default("pending"),
   mode: text("mode", { enum: ["A", "B"] }).notNull().default("B"),
   verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("identities_person_hash_unique").on(t.personHash)]);
+
+/**
+ * Every person hash that ever verified an account. Kept when the account is deleted, so a .qie name
+ * (or QIE Pass person) can verify only one account, ever (audit 27 Nov, M4).
+ */
+export const usedPersonHashes = pgTable("used_person_hashes", {
+  personHash: text("person_hash").primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
 

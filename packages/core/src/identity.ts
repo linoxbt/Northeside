@@ -39,7 +39,11 @@ export function mockPassProvider(chainId: number): PassProvider {
   };
 }
 
-/** The .qie name fallback. The person reference is the name itself, so a name verifies one person. */
+/**
+ * The .qie name fallback. The person reference is the name itself, so a name verifies one person.
+ * An account that is already verified links further wallets to the SAME person (up to 3 on-chain),
+ * whatever names they hold: one account is one person, never two (audit 27 Nov, M4).
+ */
 export function qieNamePassProvider(ctx: CoreContext): PassProvider {
   return {
     name: "qie-name",
@@ -47,17 +51,26 @@ export function qieNamePassProvider(ctx: CoreContext): PassProvider {
       return `${callbackUrl}?state=${encodeURIComponent(state)}`;
     },
     async complete({ userId, wallet }) {
+      const existing = await identityOf(ctx, userId);
+      if (existing) return { personRef: ctx.crypto.decrypt(existing.personRefEnc, `person:${userId}`) };
       const name = await qieNameOf(ctx, wallet);
       if (!name) return { reason: "no_name" };
       const personRef = `qie-name:${name}`;
-      // A name already used by another account cannot verify a second one (a name sold or given
-      // away keeps counting as its first owner's person).
+      // A name that ever verified another account (even a deleted one) cannot verify a second one:
+      // a name sold or given away keeps counting as its first owner's person.
       const ph = personHash(personRef, need(ctx.pepper, "PERSON_PEPPER"));
-      const [taken] = await ctx.db.select({ userId: schema.identities.userId }).from(schema.identities).where(eq(schema.identities.personHash, ph));
-      if (taken && taken.userId !== userId) return { reason: "name_taken" };
+      const [used] = await ctx.db.select().from(schema.usedPersonHashes).where(eq(schema.usedPersonHashes.personHash, ph));
+      if (used && used.userId !== userId) return { reason: "name_taken" };
       return { personRef, label: name };
     },
   };
+}
+
+/** Verification refused for a reason the player can act on. */
+export class IdentityRefused extends Error {
+  constructor(readonly reason: "name_taken" | "other_person") {
+    super(reason === "name_taken" ? "This person already verified another account" : "This account is already verified as another person");
+  }
 }
 
 export function passProviderFromEnv(chainId: number, env: Record<string, string | undefined> = process.env, ctx?: CoreContext): PassProvider | null {
@@ -98,13 +111,24 @@ export async function issueAttestation(ctx: CoreContext, userId: string, wallet:
   const pepper = need(ctx.pepper, "PERSON_PEPPER");
   const ph = personHash(personRef, pepper);
   const w = getAddress(wallet);
-  await ctx.db
-    .insert(schema.identities)
-    .values({ userId, personRefEnc: ctx.crypto.encrypt(personRef, `person:${userId}`), personHash: ph, status: "pending", mode: "B" })
-    .onConflictDoUpdate({
-      target: schema.identities.userId,
-      set: { personRefEnc: ctx.crypto.encrypt(personRef, `person:${userId}`), personHash: ph },
-    });
+  // One account, one person; one person, one account. Checked and claimed in one transaction, with
+  // the unique index on identities.person_hash as the backstop for two accounts racing (audit M4).
+  await ctx.db.transaction(async (tx) => {
+    const [existing] = await tx.select().from(schema.identities).where(eq(schema.identities.userId, userId)).for("update");
+    if (existing && existing.personHash !== ph) throw new IdentityRefused("other_person");
+    await tx.insert(schema.usedPersonHashes).values({ personHash: ph, userId }).onConflictDoNothing();
+    const [used] = await tx.select().from(schema.usedPersonHashes).where(eq(schema.usedPersonHashes.personHash, ph));
+    if (!used || used.userId !== userId) throw new IdentityRefused("name_taken");
+    if (!existing) {
+      await tx
+        .insert(schema.identities)
+        .values({ userId, personRefEnc: ctx.crypto.encrypt(personRef, `person:${userId}`), personHash: ph, status: "pending", mode: "B" })
+        .catch((e: unknown) => {
+          if (String((e as { code?: string }).code) === "23505") throw new IdentityRefused("name_taken");
+          throw e;
+        });
+    }
+  });
 
   const nonce = await ctx.publicClient.readContract({
     address: ctx.deployment.identity,

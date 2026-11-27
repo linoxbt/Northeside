@@ -2,7 +2,7 @@ import "server-only";
 import { matchweeksAbi } from "@northeside/chain";
 import { sealedPayloadSchema, verifyPayload, type SealedPayload } from "@northeside/commitments";
 import { payloadAad } from "@northeside/core";
-import { matchweekRulesVersion } from "@northeside/scoring";
+import { acceptsPayloadVersion, matchweekRulesVersion } from "@northeside/scoring";
 import { schema } from "@northeside/db";
 import { and, eq } from "drizzle-orm";
 import type { Hex } from "viem";
@@ -40,17 +40,25 @@ export function checkPayload(s: Session, raw: unknown, mw: { id: number; fixture
   }
   if (payload.home.length !== fixtureCount) throw new HttpError(400, "wrong_count", `Expected ${fixtureCount} predictions`);
   const version = matchweekRulesVersion(getCtx().deployment.chainId, mw);
-  if (payload.v !== version) throw new HttpError(400, "wrong_version", `This matchweek uses scoring rules v${version}; reload and seal again`);
+  if (!acceptsPayloadVersion(getCtx().deployment.chainId, mw, payload)) throw new HttpError(400, "wrong_version", `This matchweek uses scoring rules v${version}; reload and seal again`);
   return payload;
 }
 
-export async function onChainCommitment(wallet: Hex, matchweekId: number) {
+/**
+ * The wallet's commitment on-chain. With `minBlock` (a commit's receipt block) the read is pinned to a
+ * block at or after it, so a lagging RPC node can never report an older commitment as the latest:
+ * a node that does not have that block yet throws instead (audit 27 Nov, M2).
+ */
+export async function onChainCommitment(wallet: Hex, matchweekId: number, minBlock?: bigint) {
   const ctx = getCtx();
+  const head = minBlock === undefined ? undefined : await ctx.publicClient.getBlockNumber({ cacheTime: 0 });
+  const blockNumber = minBlock === undefined ? undefined : head! > minBlock ? head! : minBlock;
   const [commitment, version] = await ctx.publicClient.readContract({
     address: ctx.deployment.matchweeks,
     abi: matchweeksAbi,
     functionName: "commitmentOf",
     args: [matchweekId, wallet],
+    ...(blockNumber !== undefined ? { blockNumber } : {}),
   });
   return { commitment, version };
 }

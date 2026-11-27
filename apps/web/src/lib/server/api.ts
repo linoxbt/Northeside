@@ -156,7 +156,14 @@ export async function idempotent(key: string | null, userId: string, routeName: 
   if (inserted.length === 0) {
     const [row] = await db.select().from(schema.idempotencyKeys).where(sql`${schema.idempotencyKeys.key} = ${scoped}`);
     if (row?.response) return row.response;
-    throw new HttpError(409, "in_progress", "This request is already being processed");
+    // A run that never finished (the function was killed mid-request) must not block retries until
+    // housekeeping: after 2 minutes one retry takes it over, atomically (audit 27 Nov, M3).
+    const retaken = await db
+      .update(schema.idempotencyKeys)
+      .set({ createdAt: new Date() })
+      .where(sql`${schema.idempotencyKeys.key} = ${scoped} and ${schema.idempotencyKeys.response} is null and ${schema.idempotencyKeys.createdAt} < now() - interval '2 minutes'`)
+      .returning();
+    if (retaken.length === 0) throw new HttpError(409, "in_progress", "This request is already being processed");
   }
   try {
     const result = await fn();

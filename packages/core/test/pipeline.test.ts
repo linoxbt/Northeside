@@ -72,6 +72,7 @@ import {
   fundCampaign,
   importFixtures,
   indexChain,
+  IdentityRefused,
   issueAttestation,
   createMatchweekOnChain,
   fixturesTreeFor,
@@ -887,6 +888,16 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     expect(await pass.complete({ userId: dan.userId, wallet: dan.wallet, query: q })).toMatchObject({ personRef: "qie-name:dan.qie" }); // same account may retry
     // Dan hands the name to Eve: it cannot verify a second account.
     await send("setName", [eve.wallet, "dan.qie"]);
+    expect(await pass.complete({ userId: eve.userId, wallet: eve.wallet, query: q })).toEqual({ reason: "name_taken" });
+    // Audit 27 Nov, M4: one account is one person. Dan's second wallet with another name links to the
+    // same person instead of creating a second one; nobody else can claim Dan's person.
+    const dan2 = acct(generatePrivateKey()).address;
+    await send("setName", [dan2, "dan2.qie"]);
+    expect(await pass.complete({ userId: dan.userId, wallet: dan2, query: q })).toEqual({ personRef: "qie-name:dan.qie" });
+    await expect(issueAttestation(qctx, dan.userId, dan2, "qie-name:dan2.qie")).rejects.toBeInstanceOf(IdentityRefused);
+    await expect(issueAttestation(qctx, eve.userId, eve.wallet, "qie-name:dan.qie")).rejects.toMatchObject({ reason: "name_taken" });
+    // Deleting Dan's account does not free the name.
+    await ctx.db.delete(schema.users).where(eq(schema.users.id, dan.userId));
     expect(await pass.complete({ userId: eve.userId, wallet: eve.wallet, query: q })).toEqual({ reason: "name_taken" });
   });
 

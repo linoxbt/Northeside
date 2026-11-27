@@ -255,6 +255,16 @@ async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
             lt(schema.predictions.version, version + 1),
           ),
         );
+      // A commit from a known player that Northeside has no row for (no draft, upload failed): record
+      // it, so their slip shows "picks missing, upload them" instead of nothing (audit 27 Nov, L6).
+      const [owner] = await db.select({ userId: schema.wallets.userId }).from(schema.wallets).where(eq(schema.wallets.address, lower(a.player)));
+      const [mwRow] = await db.select({ id: schema.matchweeks.id }).from(schema.matchweeks).where(eq(schema.matchweeks.id, num(a.id)));
+      if (owner && mwRow) {
+        await db
+          .insert(schema.predictions)
+          .values({ userId: owner.userId, wallet: lower(a.player), matchweekId: num(a.id), commitment: String(a.commitment), version, txHash, txStatus: "confirmed", sealedAt: at })
+          .onConflictDoNothing();
+      }
       return;
     }
     case "MatchweekCreated": {

@@ -52,14 +52,17 @@ export const POST = route(async (req) => {
 
     // The chain decides which payload is real: a payload whose commitment is on-chain is confirmed
     // (with or without a receipt yet); anything else is kept as pending beside the confirmed one.
-    const onChain = await onChainCommitment(s.wallet, mw.id);
-    const confirmed = onChain.commitment.toLowerCase() === payload.commitment.toLowerCase();
-    if (!confirmed && receipt) throw new HttpError(409, "superseded", "A newer seal exists on-chain; this payload is not the latest");
-    if (!confirmed && new Date() >= mw.lockTime) throw new HttpError(409, "locked", "This matchweek is locked");
+    // Read at or after the commit's own block. If no node can serve that block yet, the answer is
+    // unknown: keep the payload as pending (reveal checks it against the chain at lock) rather than
+    // reject a seal that may well be the latest (audit 27 Nov, M2).
+    const onChain = await onChainCommitment(s.wallet, mw.id, receipt?.blockNumber).catch(() => null);
+    const confirmed = onChain !== null && onChain.commitment.toLowerCase() === payload.commitment.toLowerCase();
+    if (!confirmed && receipt && onChain !== null) throw new HttpError(409, "superseded", "A newer seal exists on-chain; this payload is not the latest");
+    if (!confirmed && ctx.now() >= mw.lockTime) throw new HttpError(409, "locked", "This matchweek is locked");
 
     // After lock the only reason to upload is a payload the server never received. If it already
     // holds this exact commitment, there is nothing to change (and nothing may change: audit B1).
-    if (new Date() >= mw.lockTime) {
+    if (ctx.now() >= mw.lockTime) {
       const [existing] = await ctx.db
         .select({ commitment: schema.predictions.commitment, payloadEnc: schema.predictions.payloadEnc, version: schema.predictions.version })
         .from(schema.predictions)
@@ -80,7 +83,7 @@ export const POST = route(async (req) => {
         commitment: payload.commitment,
         txHash,
         txStatus: "confirmed" as const,
-        version: onChain.version,
+        version: onChain!.version,
         sealedAt: new Date(),
         draft,
         pendingPayloadEnc: null,
@@ -99,7 +102,7 @@ export const POST = route(async (req) => {
           // The first seal time is kept (audit B1): re-sending never moves which wallet counts.
           set: { ...values, userId: s.userId, sealedAt: sql`LEAST(COALESCE(${schema.predictions.sealedAt}, excluded.sealed_at), excluded.sealed_at)` },
         });
-      return { ok: true, txStatus: "confirmed", version: onChain.version, commitment: payload.commitment };
+      return { ok: true, txStatus: "confirmed", version: onChain!.version, commitment: payload.commitment };
     }
 
     // Not on-chain yet: never overwrite a confirmed payload with one whose tx may still revert.

@@ -109,7 +109,15 @@ export const POST = route(async (req) => {
     if (input.invite) await creditInvite(ctx, userId, input.invite).catch(() => false);
   }
   if (!walletRow) {
-    await ctx.db.insert(schema.wallets).values({ address: wallet, userId, kind: input.walletKind }).onConflictDoNothing();
+    // Check and insert under a lock on the account row, so two sign-ins at once cannot both pass the
+    // 3-wallet check (audit 27 Nov, L3).
+    const linkTo = userId;
+    await ctx.db.transaction(async (tx) => {
+      await tx.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, linkTo)).for("update");
+      const linked = await tx.select({ address: schema.wallets.address }).from(schema.wallets).where(eq(schema.wallets.userId, linkTo));
+      if (linked.length >= 3) throw new HttpError(400, "too_many_wallets", "An account can link up to 3 wallets");
+      await tx.insert(schema.wallets).values({ address: wallet, userId: linkTo, kind: input.walletKind }).onConflictDoNothing();
+    });
   }
 
   if (privy) {
