@@ -97,8 +97,11 @@ export async function indexChain(
       batch.push({ log, d, blockTime: blockTimes.get(log.blockNumber)!, blockHash: log.blockHash ?? "" });
     }
 
+    // Alerts raised while projecting are sent after the transaction commits: a network call (up to
+    // 10 s) must not hold a database connection, and a rolled-back batch must not alert (audit N7).
+    const queued: string[] = [];
     await db.transaction(async (tx) => {
-      const txCtx = { ...ctx, db: tx as unknown as CoreContext["db"] };
+      const txCtx: CoreContext = { ...ctx, db: tx as unknown as CoreContext["db"], alert: async (m: string) => void queued.push(m) };
       for (const { log, d, blockTime, blockHash } of batch) {
         const inserted = await tx
           .insert(schema.chainEvents)
@@ -127,6 +130,7 @@ export async function indexChain(
         .values({ key: INDEXER_KEY, lastBlock: end })
         .onConflictDoUpdate({ target: schema.indexerState.key, set: { lastBlock: end, updatedAt: new Date() } });
     });
+    for (const m of queued) await ctx.alert(m);
     cursor = end + 1n;
   }
 
@@ -203,6 +207,8 @@ async function projectNsd(ctx: CoreContext, e: Decoded, txHash: string, at: Date
         return;
       }
       await db.update(schema.nsdRoots).set({ status: "confirmed", txHash }).where(eq(schema.nsdRoots.matchweekId, id));
+      // Every root is reported, not only unexpected ones: a human sees each payout before it opens.
+      await ctx.alert(`$NSD root posted for matchweek ${id}: ${String(a.total)} base units (tx ${txHash}); claims open in 24 hours.`);
       return;
     }
     case "RootVoided":

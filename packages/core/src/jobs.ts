@@ -334,7 +334,10 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
   },
 
   /** Every 10 minutes: alert on any $NSD root on-chain that Northeside did not post (no time limit). */
-  "nsd-watch": async () => watchNsdRoots(getCtx()),
+  "nsd-watch": async () => {
+    const cfg = nsdConfigFromEnv(env);
+    return watchNsdRoots(getCtx(), { weeklyMax: cfg.schedule.poolPerMatchweek, finaleWeek: cfg.season.lastMatchweek });
+  },
 
   /** Every 6 hours: refit the odds model and store expected goals for matchweeks not yet locked. */
   "compute-odds": async () => {

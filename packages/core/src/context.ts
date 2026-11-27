@@ -60,8 +60,8 @@ export interface CoreContext {
   season: number;
   siteUrl: string;
   log: Logger;
-  /** Operator alerts (Telegram). Never throws. */
-  alert(message: string): Promise<void>;
+  /** Operator alerts (Telegram and/or email). Never throws; resolves true when a channel accepted it. */
+  alert(message: string): Promise<boolean | void>;
   now(): Date;
 }
 
@@ -91,7 +91,7 @@ export function telegramAlerter(env: Env, log: Logger) {
     const channels = alertChannels(env);
     if (!channels.telegram && !channels.email) {
       log.warn("operator alert (no alert channel configured)", { message });
-      return;
+      return false;
     }
     const sends: Promise<unknown>[] = [];
     if (channels.telegram) {
@@ -123,9 +123,11 @@ export function telegramAlerter(env: Env, log: Logger) {
         }),
       );
     }
-    for (const r of await Promise.allSettled(sends)) {
+    const results = await Promise.allSettled(sends);
+    for (const r of results) {
       if (r.status === "rejected") log.error("operator alert failed", { error: String(r.reason) });
     }
+    return results.some((r) => r.status === "fulfilled");
   };
 }
 

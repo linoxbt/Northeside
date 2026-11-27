@@ -780,7 +780,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       const [mw11Root] = await ctx.db.select().from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, 11));
       await ctx.db.delete(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, 11));
       const before11 = alerts.length;
-      expect((await watchNsdRoots(ctx)).unexpected).toEqual([{ id: 11, root: mw11Root!.root }]);
+      expect((await watchNsdRoots(ctx)).unexpected).toEqual([{ id: 11, root: mw11Root!.root, reason: "not posted by Northeside" }]);
       await watchNsdRoots(ctx); // one alert per root, not one per run
       expect(alerts.slice(before11)).toEqual([expect.stringMatching(/^URGENT: an \$NSD reward root for matchweek 11 .* Northeside did not post/)]);
       await ctx.db.insert(schema.nsdRoots).values(mw11Root!);
@@ -815,7 +815,7 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
     // alert; a matchweek created on-chain that Northeside never imported does (final review).
     await mine();
     await indexChain(ctx);
-    expect(alerts.filter((m) => m.startsWith("URGENT"))).toEqual([]);
+    expect(alerts.filter((m) => m.startsWith("URGENT")), alerts.join(" | ")).toEqual([]);
     const rogue = await wallet(KEYS.operator).writeContract({
       address: ctx.deployment.matchweeks,
       abi: matchweeksAbi,

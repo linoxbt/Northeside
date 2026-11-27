@@ -291,20 +291,32 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
  * week's root on-chain, with no time limit, and raises one URGENT alert per root Northeside did not
  * post: the admin then has the 24-hour claim delay to voidRoot it.
  */
-export async function watchNsdRoots(ctx: CoreContext) {
+export async function watchNsdRoots(ctx: CoreContext, limits: { weeklyMax?: bigint; finaleWeek?: number } = {}) {
   const address = ctx.deployment.nsdRewards;
   if (!address) return { skipped: "NSD rewards not configured" };
-  const weeks = await ctx.db.select({ id: schema.matchweeks.id }).from(schema.matchweeks).where(eq(schema.matchweeks.status, "finalized"));
+  // Every matchweek Northeside knows, whatever its database status: the chain decides what is
+  // finalized, and a root for a week the database thinks is still open is just as claimable.
+  const weeks = await ctx.db.select({ id: schema.matchweeks.id }).from(schema.matchweeks);
   const ZERO = `0x${"0".repeat(64)}`;
-  const unexpected: { id: number; root: string }[] = [];
+  const unexpected: { id: number; root: string; reason: string }[] = [];
+  const hourBlock = ctx.now().toISOString().slice(0, 13);
   for (const { id } of weeks) {
     const onChain = await ctx.publicClient.readContract({ address, abi: nsdRewardsAbi, functionName: "rootOf", args: [id] });
-    if (onChain.root === ZERO) continue;
+    if (onChain.root === ZERO || onChain.released) continue;
     const [stored] = await ctx.db.select({ root: schema.nsdRoots.root }).from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, id));
-    if (stored && stored.root.toLowerCase() === onChain.root.toLowerCase()) continue;
-    unexpected.push({ id, root: onChain.root });
-    await runJob(ctx, "nsd-watch-alert", `${id}:${onChain.root.toLowerCase()}`, async () => {
-      await ctx.alert(unexpectedRootAlert(id, onChain.root, Number(onChain.postedAt)));
+    // The database is not proof on its own: whoever holds the worker's environment holds both the
+    // operator key and DATABASE_URL, and could write the matching row first (audit 27 Nov, N3). A root
+    // larger than one week's pool (any week but the finale) is suspicious however it was recorded.
+    const tooBig = limits.weeklyMax !== undefined && id !== limits.finaleWeek && BigInt(onChain.allocated) > limits.weeklyMax;
+    const known = !!stored && stored.root.toLowerCase() === onChain.root.toLowerCase();
+    if (known && !tooBig) continue;
+    const reason = !known ? "not posted by Northeside" : `total ${onChain.allocated} is above one week's pool ${limits.weeklyMax}`;
+    unexpected.push({ id, root: onChain.root, reason });
+    // Repeats every hour until the root is voided; an alert no channel accepted fails the run, so it
+    // is retried on the next pass instead of being recorded as sent (audit 27 Nov, N2).
+    await runJob(ctx, "nsd-watch-alert", `${id}:${onChain.root.toLowerCase()}:${hourBlock}`, async () => {
+      const delivered = await ctx.alert(`${unexpectedRootAlert(id, onChain.root, Number(onChain.postedAt))} Reason: ${reason}.`);
+      if (delivered === false) throw new Error("no alert channel accepted the URGENT $NSD alert");
       return { alerted: true };
     });
   }

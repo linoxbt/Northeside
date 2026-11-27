@@ -181,6 +181,12 @@ NETLIFY_AUTH_TOKEN=… NETLIFY_ACCOUNT_ID=68b3430bf002a93c76bf606e NETLIFY_SITE_
 GITHUB_TOKEN=… scripts/deploy-production.sh
 ```
 
+**Rollbacks:** never roll back to a build older than `eedb7ea` (27 Nov 2026). From that build on,
+stored payloads, emails and person references are written in the v2 encryption format, which older
+builds cannot read: a slip stored during the rollback would still be safe, but older builds would
+fail to reveal v2 slips (they are re-checked every pass, so redeploying a current build recovers
+them before results are proposed). Restore a recent deploy instead, or fix forward.
+
 To switch to Git deploys (recommended once `main` holds the release): in Netlify link the GitHub
 repo, production branch `main`, base directory empty, package directory `apps/web`.
 
