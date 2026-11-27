@@ -269,7 +269,7 @@ export async function stats(ctx: CoreContext) {
   );
   const fundedExternal = funded.filter((f) => external.includes(Number(f.id)));
   const settled = rowsOf<{ total: string }>(
-    await q(sql`select coalesce(sum((args->>'amount')::numeric), 0)::text as total from chain_events where event_name = 'Claimed'`),
+    await q(sql`select coalesce(sum((args->>'amount')::numeric), 0)::text as total from chain_events where event_name = 'Claimed' and lower(address) = ${ctx.deployment.hostRewards.toLowerCase()}`),
   )[0]?.total;
 
   const latestMw = mws.at(-1);

@@ -1,7 +1,7 @@
 import { safeEqual, schema } from "@northeside/db";
 import { desc, eq, sql } from "drizzle-orm";
 import { formatEther } from "viem";
-import { automationPaused } from "@northeside/core";
+import { alertChannels, automationPaused } from "@northeside/core";
 import { json, route } from "@/lib/server/api";
 import { getCtx } from "@/lib/server/ctx";
 
@@ -36,10 +36,12 @@ export const GET = route(async (req) => {
   // A monitor can alert on `healthy: false` (indexer stalled, worker not running, alerting missing).
   const workerSeen = lease?.updatedAt ?? null;
   const workerFresh = workerSeen !== null && Date.now() - workerSeen.getTime() < 20 * 60_000;
-  const alerting = { telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_OPERATOR_CHAT_ID), sentry: Boolean(process.env.SENTRY_DSN) };
+  const channels = alertChannels(process.env);
+  // Sentry collects errors; it is not a channel for operator alerts, so it does not count here.
+  const alerting = { ...channels, sentry: Boolean(process.env.SENTRY_DSN) };
   // Without an alert channel nobody hears about failures: not healthy (audit M3).
   const body = {
-    healthy: lag !== null && lag < 200n && workerFresh && alerting.telegram,
+    healthy: lag !== null && lag < 200n && workerFresh && (channels.telegram || channels.email),
     automationPaused: await automationPaused(ctx),
     worker: { lastLeaseAt: workerSeen, fresh: workerFresh },
     alerting,

@@ -35,6 +35,7 @@ import {
   oddsFor,
   computeNsdRewards,
   postNsdRoot,
+  watchNsdRoots,
   nsdClaimsFor,
   createChallenge,
   acceptChallenge,
@@ -765,6 +766,24 @@ describe.skipIf(!hasAnvil || !hasArtifacts)("pipeline on a local chain", () => {
       expect(refund.amount).toBe(88_000_000n);
       const after = await pub.readContract({ address: ctx.deployment.qusdc, abi: erc20Abi, functionName: "balanceOf", args: [acct(KEYS.sponsor).address] });
       expect(after - before).toBe(88_000_000n);
+
+      // Audit 27 Nov, S1: the indexer follows NSDRewards. Roots Northeside posted raise nothing and
+      // claims are recorded; a root Northeside did not post raises one URGENT alert.
+      for (let i = 0; i < 8; i++) await mine();
+      await indexChain(ctx);
+      expect(alerts.filter((m) => m.startsWith("URGENT"))).toEqual([]);
+      const [boLeaf] = await ctx.db.select().from(schema.nsdLeaves).where(and(eq(schema.nsdLeaves.matchweekId, 12), eq(schema.nsdLeaves.wallet, acct(KEYS.p2).address.toLowerCase())));
+      expect(boLeaf?.claimTx).toBe(finaleTx);
+      expect(await watchNsdRoots(ctx)).toMatchObject({ unexpected: [] });
+      // Simulate a root posted with a leaked operator key: on-chain, but not in Northeside's records.
+      const [mw11Root] = await ctx.db.select().from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, 11));
+      await ctx.db.delete(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, 11));
+      const before11 = alerts.length;
+      expect((await watchNsdRoots(ctx)).unexpected).toEqual([{ id: 11, root: mw11Root!.root }]);
+      await watchNsdRoots(ctx); // one alert per root, not one per run
+      expect(alerts.slice(before11)).toEqual([expect.stringMatching(/^URGENT: an \$NSD reward root for matchweek 11 .* Northeside did not post/)]);
+      await ctx.db.insert(schema.nsdRoots).values(mw11Root!);
+      alerts.length = before11; // later tests count URGENT alerts from a clean slate
     },
     120_000,
   );

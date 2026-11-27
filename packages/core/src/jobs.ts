@@ -21,7 +21,7 @@ import {
 import { notifyJob } from "./notify";
 import { reportError, runJob } from "./ops";
 import { postRewardRootsForMatchweek } from "./rewards";
-import { nsdConfigFromEnv, postNsdRoot } from "./nsd";
+import { nsdConfigFromEnv, postNsdRoot, watchNsdRoots } from "./nsd";
 import { computeOdds } from "./odds";
 import { postBadgeRoot } from "./badges";
 import { refreshAllQieIds } from "./qieid";
@@ -332,6 +332,9 @@ export function createJobs(getCtx: () => CoreContext, env: Env = process.env, op
       .where(and(eq(schema.matchweeks.status, "finalized"), gte(schema.matchweeks.finalizedAt, new Date(ctx.now().getTime() - 14 * 24 * 3600_000))));
     return each(finalized, async (mw) => ({ id: mw.id, ...(await runJob(ctx, "post-nsd-root", String(mw.id), () => postNsdRoot(ctx, mw.id, cfg))) }));
   },
+
+  /** Every 10 minutes: alert on any $NSD root on-chain that Northeside did not post (no time limit). */
+  "nsd-watch": async () => watchNsdRoots(getCtx()),
 
   /** Every 6 hours: refit the odds model and store expected goals for matchweeks not yet locked. */
   "compute-odds": async () => {

@@ -1,9 +1,10 @@
-import { hostRewardsAbi, identityAbi, matchweeksAbi } from "@northeside/chain";
+import { hostRewardsAbi, identityAbi, matchweeksAbi, nsdRewardsAbi } from "@northeside/chain";
 import { schema } from "@northeside/db";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { createPublicClient, decodeEventLog, getAddress, http, type Abi, type Log, type PublicClient } from "viem";
 import { bigintReplacer, type CoreContext } from "./context";
 import { loadPublication } from "./matchweek";
+import { unexpectedRootAlert } from "./nsd";
 
 const INDEXER_KEY = "main";
 /** Blocks to wait before indexing; override with INDEXER_CONFIRMATIONS. */
@@ -45,7 +46,10 @@ export async function indexChain(
     [deployment.matchweeks.toLowerCase(), matchweeksAbi as Abi],
     [deployment.hostRewards.toLowerCase(), hostRewardsAbi as Abi],
     [deployment.identity.toLowerCase(), identityAbi as Abi],
+    // $NSD rewards: watched so a root Northeside did not post is caught at once (audit 27 Nov, S1).
+    ...(deployment.nsdRewards ? ([[deployment.nsdRewards.toLowerCase(), nsdRewardsAbi as Abi]] as [string, Abi][]) : []),
   ]);
+  const nsdAddress = deployment.nsdRewards?.toLowerCase();
 
   const [state] = await db.select().from(schema.indexerState).where(eq(schema.indexerState.key, INDEXER_KEY));
   await checkForReorg(ctx, publicClient);
@@ -113,7 +117,9 @@ export async function indexChain(
           .returning({ txHash: schema.chainEvents.txHash });
         if (inserted.length > 0) {
           events++;
-          await project(txCtx, d, log.transactionHash!, blockTime);
+          await governance(txCtx, d, log.address, log.transactionHash!);
+          if (log.address.toLowerCase() === nsdAddress) await projectNsd(txCtx, d, log.transactionHash!, blockTime);
+          else await project(txCtx, d, log.transactionHash!, blockTime);
         }
       }
       await tx
@@ -168,6 +174,55 @@ async function checkForReorg(ctx: CoreContext, client: PublicClient) {
 
 const lower = (a: unknown) => String(a).toLowerCase();
 const num = (v: unknown) => Number(v as bigint);
+
+/**
+ * Role and pause changes on any watched contract. None of them happen in normal operation, so each
+ * one is reported: a grant nobody on the team made is a leaked admin key (audit 27 Nov, L-1).
+ */
+async function governance(ctx: CoreContext, e: Decoded, address: string, txHash: string) {
+  const a = e.args;
+  if (e.eventName === "RoleGranted" || e.eventName === "RoleRevoked") {
+    await ctx.alert(`${e.eventName} on ${getAddress(address)}: role ${String(a.role)} ${e.eventName === "RoleGranted" ? "to" : "from"} ${String(a.account)} by ${String(a.sender)} (tx ${txHash}). If nobody on the team did this, treat the admin key as leaked.`);
+  } else if (e.eventName === "Paused" || e.eventName === "Unpaused") {
+    await ctx.alert(`${getAddress(address)} ${e.eventName.toLowerCase()} by ${String(a.account)} (tx ${txHash}).`);
+  }
+}
+
+/** $NSD rewards events: keep the read model in step and alert on anything Northeside did not do. */
+async function projectNsd(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {
+  const { db } = ctx;
+  const a = e.args;
+  switch (e.eventName) {
+    case "RootPosted":
+    case "RootReplaced": {
+      const id = num(a.matchweekId);
+      const root = String(a.root);
+      const [stored] = await db.select({ root: schema.nsdRoots.root }).from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, id));
+      if (!stored || stored.root.toLowerCase() !== root.toLowerCase()) {
+        await ctx.alert(`${unexpectedRootAlert(id, root, Math.floor(at.getTime() / 1000))} (tx ${txHash})`);
+        return;
+      }
+      await db.update(schema.nsdRoots).set({ status: "confirmed", txHash }).where(eq(schema.nsdRoots.matchweekId, id));
+      return;
+    }
+    case "RootVoided":
+      await db.update(schema.nsdRoots).set({ status: "voided" }).where(eq(schema.nsdRoots.matchweekId, num(a.matchweekId)));
+      await ctx.alert(`$NSD root for matchweek ${num(a.matchweekId)} was voided on-chain (tx ${txHash}); ${String(a.released)} base units returned to the pool.`);
+      return;
+    case "Claimed":
+      await db
+        .update(schema.nsdLeaves)
+        .set({ claimTx: txHash, claimedAt: at })
+        .where(and(eq(schema.nsdLeaves.matchweekId, num(a.matchweekId)), eq(schema.nsdLeaves.wallet, lower(a.wallet))));
+      return;
+    case "MaxPerMatchweekSet":
+    case "Withdrawn":
+      await ctx.alert(`$NSD rewards ${e.eventName} (tx ${txHash}): ${JSON.stringify(a, bigintReplacer)}`);
+      return;
+    default:
+      return;
+  }
+}
 
 /** Apply one event to the read model. Every write is idempotent. */
 async function project(ctx: CoreContext, e: Decoded, txHash: string, at: Date) {

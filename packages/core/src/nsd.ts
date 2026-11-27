@@ -5,7 +5,7 @@ import { STANDARD_NSD_CURVE, nsdPayouts, rank, validateSchedule, type NsdCurve, 
 import { and, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { getAddress, parseUnits, type Address, type Hex } from "viem";
 import { need, toJson, type CoreContext } from "./context";
-import { audit, confirm, sendWrite } from "./ops";
+import { audit, confirm, runJob, sendWrite } from "./ops";
 
 type Env = Record<string, string | undefined>;
 
@@ -268,6 +268,39 @@ export async function computeNsdRewards(ctx: CoreContext, matchweekId: number, c
     }
   }
   return [...out.values()].sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : a.wallet < b.wallet ? -1 : 1));
+}
+
+/**
+ * Watchdog for the funded $NSD pool (audit 27 Nov, S1). postRoot only checks that a matchweek is
+ * finalized, so whoever holds the operator key can post a root for ANY finalized week that has none
+ * (an old week, or one that paid nobody) and claim it 24 hours later. This re-reads every finalized
+ * week's root on-chain, with no time limit, and raises one URGENT alert per root Northeside did not
+ * post: the admin then has the 24-hour claim delay to voidRoot it.
+ */
+export async function watchNsdRoots(ctx: CoreContext) {
+  const address = ctx.deployment.nsdRewards;
+  if (!address) return { skipped: "NSD rewards not configured" };
+  const weeks = await ctx.db.select({ id: schema.matchweeks.id }).from(schema.matchweeks).where(eq(schema.matchweeks.status, "finalized"));
+  const ZERO = `0x${"0".repeat(64)}`;
+  const unexpected: { id: number; root: string }[] = [];
+  for (const { id } of weeks) {
+    const onChain = await ctx.publicClient.readContract({ address, abi: nsdRewardsAbi, functionName: "rootOf", args: [id] });
+    if (onChain.root === ZERO) continue;
+    const [stored] = await ctx.db.select({ root: schema.nsdRoots.root }).from(schema.nsdRoots).where(eq(schema.nsdRoots.matchweekId, id));
+    if (stored && stored.root.toLowerCase() === onChain.root.toLowerCase()) continue;
+    unexpected.push({ id, root: onChain.root });
+    await runJob(ctx, "nsd-watch-alert", `${id}:${onChain.root.toLowerCase()}`, async () => {
+      await ctx.alert(unexpectedRootAlert(id, onChain.root, Number(onChain.postedAt)));
+      return { alerted: true };
+    });
+  }
+  return { checked: weeks.length, unexpected };
+}
+
+/** The alert for a reward root Northeside did not post. */
+export function unexpectedRootAlert(matchweekId: number, root: string, postedAt?: number) {
+  const claimable = postedAt ? ` Claims open at ${new Date((postedAt + 24 * 3600) * 1000).toISOString()}.` : "";
+  return `URGENT: an $NSD reward root for matchweek ${matchweekId} (${root}) is on-chain that Northeside did not post. The operator key may be leaked.${claimable} Now: void it from the admin wallet (NSDRewards.voidRoot(${matchweekId})), pause NSDRewards with the pauser key, and rotate the server keys (docs/OWNER-ACTIONS.md).`;
 }
 
 function rewardsAddress(ctx: CoreContext): Address {

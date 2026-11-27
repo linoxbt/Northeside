@@ -330,6 +330,7 @@ async function main() {
     PERSON_PEPPER: `0x${randomBytes(32).toString("hex")}`,
     SESSION_SECRET: randomBytes(32).toString("base64"),
     CRON_SECRET: "e2e-cron-secret",
+    WEB_SIGNERS: "1",
     NEXT_PUBLIC_CHAIN_ID: "31337",
     CHAIN_ID: "31337",
     NEXT_PUBLIC_MATCHWEEKS_ADDRESS: dep.matchweeks,

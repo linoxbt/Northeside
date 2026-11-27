@@ -72,22 +72,59 @@ function signer(key: string | undefined, chain: Chain, transport: Transport): Si
   return createWalletClient({ account: privateKeyToAccount(key as `0x${string}`), chain, transport });
 }
 
+/** Which operator alert channels are configured (the status page is unhealthy without one). */
+export function alertChannels(env: Env) {
+  return {
+    telegram: Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_OPERATOR_CHAT_ID),
+    email: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM && env.ALERT_EMAIL_TO),
+  };
+}
+
+/**
+ * Operator alerts, sent to every configured channel: Telegram (TELEGRAM_BOT_TOKEN and
+ * TELEGRAM_OPERATOR_CHAT_ID) and email through Resend (RESEND_API_KEY, EMAIL_FROM, ALERT_EMAIL_TO).
+ * Never throws; with no channel the alert is only logged.
+ */
 export function telegramAlerter(env: Env, log: Logger) {
   return async (message: string) => {
-    const token = env.TELEGRAM_BOT_TOKEN;
-    const chat = env.TELEGRAM_OPERATOR_CHAT_ID;
-    if (!token || !chat) {
-      log.warn("operator alert (Telegram not configured)", { message });
+    const text = `Northeside: ${message}`;
+    const channels = alertChannels(env);
+    if (!channels.telegram && !channels.email) {
+      log.warn("operator alert (no alert channel configured)", { message });
       return;
     }
-    try {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ chat_id: chat, text: `Northeside: ${message}`.slice(0, 4000) }),
-      });
-    } catch (e) {
-      log.error("operator alert failed", { error: String(e) });
+    const sends: Promise<unknown>[] = [];
+    if (channels.telegram) {
+      sends.push(
+        fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ chat_id: env.TELEGRAM_OPERATOR_CHAT_ID, text: text.slice(0, 4000) }),
+          signal: AbortSignal.timeout(10_000),
+        }).then((r) => {
+          if (!r.ok) throw new Error(`telegram ${r.status}`);
+        }),
+      );
+    }
+    if (channels.email) {
+      sends.push(
+        fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            from: env.EMAIL_FROM,
+            to: env.ALERT_EMAIL_TO!.split(",").map((x) => x.trim()).filter(Boolean),
+            subject: `${message.startsWith("URGENT") ? "URGENT " : ""}Northeside alert: ${message.slice(0, 80)}`,
+            text,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        }).then((r) => {
+          if (!r.ok) throw new Error(`resend ${r.status}`);
+        }),
+      );
+    }
+    for (const r of await Promise.allSettled(sends)) {
+      if (r.status === "rejected") log.error("operator alert failed", { error: String(r.reason) });
     }
   };
 }
