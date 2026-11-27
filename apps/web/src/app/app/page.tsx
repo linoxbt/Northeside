@@ -14,7 +14,7 @@ export default function AppPage() {
     <Container className="pb-24 pt-6 sm:pt-10">
       <div className="mx-auto max-w-lg space-y-4">
         <section className="overflow-hidden rounded-3xl bg-ink p-6 text-white">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          { }
           <img src="/icon-192.png" alt="" width={72} height={72} className="rounded-[18px]" />
           <h1 className="mt-4 text-[34px] font-medium leading-tight tracking-[-0.04em]">Northeside on your phone</h1>
           <p className="mt-2 text-[16px] text-white/70">Call the scores, seal them on QIE and follow every game live. Free, 18+.</p>

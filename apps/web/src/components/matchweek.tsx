@@ -331,7 +331,6 @@ export function MatchweekView({ mw }: { mw: MatchweekDTO }) {
   }, [mw.fixtures, mounted]);
 
   const finalized = mw.status === "finalized";
-  const results = mw.fixtures.every((f) => f.status !== "scheduled");
 
   const anyLive = !!live.data?.fixtures.some((x) => x.state === "live" || x.state === "ht");
   const [tab, setTab] = useState<string>("all");

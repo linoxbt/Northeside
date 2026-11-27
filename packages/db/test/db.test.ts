@@ -124,6 +124,34 @@ describe("embedded migrations", () => {
   });
 });
 
+describe("FieldCrypto v2 and rotation (audit 27 Nov, L5)", () => {
+  const k1 = Buffer.alloc(32, 1).toString("base64");
+  const k2 = Buffer.alloc(32, 2).toString("base64");
+  it("writes v2 with a key id and a derived subkey, and still reads v1", async () => {
+    const c = new FieldCrypto(k1);
+    const t = c.encrypt("hello", "aad");
+    expect(t.startsWith("v2.")).toBe(true);
+    expect(t.split(".")).toHaveLength(5);
+    expect(c.decrypt(t, "aad")).toBe("hello");
+    // A v1 ciphertext (base key used directly), as stored before this change.
+    const { createCipheriv } = await import("node:crypto");
+    const iv = Buffer.alloc(12, 3);
+    const ci = createCipheriv("aes-256-gcm", Buffer.from(k1, "base64"), iv);
+    ci.setAAD(Buffer.from("aad"));
+    const ct = Buffer.concat([ci.update("legacy", "utf8"), ci.final()]);
+    const v1 = ["v1", iv.toString("base64url"), ci.getAuthTag().toString("base64url"), ct.toString("base64url")].join(".");
+    expect(c.decrypt(v1, "aad")).toBe("legacy");
+    expect(() => c.decrypt(t, "other-aad")).toThrow();
+  });
+  it("rotates: the new key writes, the previous key still reads", () => {
+    const old = new FieldCrypto(k1).encrypt("kept", "x");
+    const rotated = new FieldCrypto(k2, [k1]);
+    expect(rotated.decrypt(old, "x")).toBe("kept");
+    expect(rotated.encrypt("new", "x").split(".")[1]).not.toBe(old.split(".")[1]);
+    expect(() => new FieldCrypto(k2).decrypt(old, "x")).toThrow(/No key/);
+  });
+});
+
 describe("FieldCrypto", () => {
   const key = Buffer.alloc(32, 7).toString("base64");
   const c = new FieldCrypto(key);

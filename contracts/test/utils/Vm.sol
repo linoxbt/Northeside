@@ -27,6 +27,7 @@ interface Vm {
     function envString(string calldata name) external view returns (string memory);
     function envOr(string calldata name, address defaultValue) external view returns (address);
     function envOr(string calldata name, uint256 defaultValue) external view returns (uint256);
+    function createSelectFork(string calldata urlOrAlias) external returns (uint256);
     function envOr(string calldata name, string calldata defaultValue) external view returns (string memory);
     function envAddress(string calldata name, string calldata delim) external view returns (address[] memory);
     function startBroadcast() external;

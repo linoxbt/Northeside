@@ -3,17 +3,13 @@
 // job in-process: indexer, reveals, results, the weekly on-chain steps, notifications and the drip
 // check (see WORKER_SCHEDULE in packages/core/src/worker.ts). Started every 5 minutes by cron-ops;
 // a database lease stops two runs overlapping.
-import { timingSafeEqual } from "node:crypto";
 import { createContextFromEnv, createJobs, reportError, runWorker, type CoreContext } from "@northeside/core";
+import { safeEqual } from "@northeside/db";
 
 let ctx: CoreContext | undefined;
 const getCtx = () => (ctx ??= createContextFromEnv(process.env));
 
-function authorized(req: Request, secret: string) {
-  const got = Buffer.from(req.headers.get("authorization") ?? "");
-  const want = Buffer.from(`Bearer ${secret}`);
-  return got.length === want.length && timingSafeEqual(got, want);
-}
+const authorized = (req: Request, secret: string) => safeEqual(req.headers.get("authorization") ?? "", `Bearer ${secret}`);
 
 export default async (req: Request) => {
   const secret = process.env.CRON_SECRET;

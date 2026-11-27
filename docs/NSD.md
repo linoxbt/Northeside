@@ -1,6 +1,6 @@
 # $NSD rewards
 
-Status: **built and tested, not deployed**. Launching needs the decisions and checks at the end.
+Status: **deployed on QIE mainnet and switched on** (`contracts/deployments/1990-nsd.json`). Players are verified with a .qie name; paying needs the pool funded and 10 or more verified players who scored in a matchweek.
 
 ## Contracts (Shanghai, OpenZeppelin 5.4.0, not upgradeable)
 

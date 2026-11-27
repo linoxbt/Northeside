@@ -3,26 +3,38 @@
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "build": "pnpm -r --filter ./apps/* build",
     "dev": "pnpm --filter @northeside/web dev",
-    "lint": "pnpm -r lint",
+    "lint": "eslint . && pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --filter \"./packages/*\" --filter \"./ops/*\" test",
     "test:contracts": "pnpm --filter @northeside/contracts test",
     "cli": "pnpm --filter @northeside/cli exec tsx src/index.ts"
   },
   "devDependencies": {
-    "typescript": "5.9.3",
-    "vitest": "4.1.12",
+    "@next/eslint-plugin-next": "16.4.6",
+    "@types/node": "22.20.5",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.14.0",
     "tsx": "4.23.15",
-    "@types/node": "22.20.5"
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.74.0",
+    "vitest": "4.1.12"
   },
   "pnpm": {
     "overrides": {
-      "@solana/kit": "8.6.0"
+      "@solana/kit": "8.6.0",
+      "ws@>=8.0.0 <8.21.0": "8.21.0"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-mrhx-c7xc-m3w5",
+        "GHSA-qr28-fpjm-wq7f"
+      ]
     }
   }
 }

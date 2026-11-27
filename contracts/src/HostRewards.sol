@@ -95,6 +95,10 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
     mapping(uint256 campaignId => mapping(uint32 matchweekId => uint64)) public rootPostedAt;
     mapping(uint256 campaignId => mapping(uint32 matchweekId => uint128)) public allocatedFor;
     mapping(uint256 campaignId => mapping(uint32 matchweekId => uint128)) public claimedFor;
+    /// @notice What each host has claimed per campaign and matchweek: the cap is per host, so a root that
+    ///         splits one host into several leaves still cannot pay more than capPerHost (audit 27 Nov, M-2).
+    mapping(uint256 campaignId => mapping(uint32 matchweekId => mapping(address host => uint128))) public
+        claimedByHost;
     mapping(bytes32 leaf => bool) public leafClaimed;
 
     event CampaignCreated(uint256 indexed id, address indexed sponsor, Terms terms, uint128 budget);
@@ -334,11 +338,14 @@ contract HostRewards is AccessControl, Pausable, ReentrancyGuard {
         uint256 allowed = uint256(countablePlayers) * c.terms.ratePerPlayer;
         if (allowed > c.terms.capPerHost) allowed = c.terms.capPerHost;
         if (amount > allowed) revert OverTerms(amount, allowed);
+        uint128 hostTotal = claimedByHost[id][matchweekId][host] + amount;
+        if (hostTotal > c.terms.capPerHost) revert OverTerms(hostTotal, c.terms.capPerHost);
 
         uint128 claimedForMw = claimedFor[id][matchweekId] + amount;
         if (claimedForMw > allocatedFor[id][matchweekId]) revert OverBudget();
 
         leafClaimed[leaf] = true;
+        claimedByHost[id][matchweekId][host] = hostTotal;
         claimedFor[id][matchweekId] = claimedForMw;
         c.claimed += amount;
         totalLiability -= amount;

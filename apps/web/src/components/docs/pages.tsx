@@ -580,8 +580,9 @@ function Overview() {
           ["Odds engine, live centre, head-to-head, levels, badges, recap, invites", "Live"],
           ["Android app and installable web app", "Live"],
           ["QIE ID .qie names", "Live"],
-          ["QIE Pass verification (one person, one player)", "Awaiting partner access from the QIE ID team; .qie name verification is live meanwhile"],
-          ["On-chain, non-transferable achievement badges", "Built and tested; deployment pending"],
+          ["Verified players (one account per person)", "Live: verify with a .qie name your wallet owns"],
+          ["QIE Pass verification", "In progress: QIE partner API (keys issued); switches on once QIE's request format is confirmed"],
+          ["On-chain, non-transferable achievement badges", publicEnv.badges ? "Live on QIE mainnet" : "Built and tested; mainnet contract being deployed"],
         ]}
       />
       <H2 id="principles">Principles</H2>

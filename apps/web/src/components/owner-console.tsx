@@ -17,7 +17,6 @@ import { txError } from "@/lib/client/tx-errors";
  */
 const ADMIN_ROLE = `0x${"0".repeat(64)}` as Hex;
 const PAUSER_ROLE = keccak256(toBytes("PAUSER_ROLE"));
-const E18 = 10n ** 18n;
 const CHALLENGER_ROLE = keccak256(toBytes("CHALLENGER_ROLE"));
 /** 18-decimal base units as "48,000.5": string arithmetic only, never a float (CLAUDE.md money rule). */
 const nsd = (v: bigint) => {

@@ -12,7 +12,7 @@ export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 let cached: { url: string; db: Db; client: postgres.Sql } | undefined;
 
 /**
- * One pooled client per process. On Vercel, use Supabase's transaction pooler URL (port 6543);
+ * One pooled client per process. On Netlify (serverless), use Supabase's transaction pooler URL (port 6543);
  * prepared statements are off because the pooler does not support them.
  */
 export function getDb(url = process.env.DATABASE_URL): Db {

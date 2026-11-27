@@ -94,7 +94,7 @@ export function AppBanner() {
   return (
     <div className="mx-auto mt-3 w-full max-w-[1240px] px-4 sm:px-6">
       <div className="flex items-center gap-3 rounded-2xl border border-line bg-white px-3 py-2.5">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        { }
         <img src="/icon-192.png" alt="" width={36} height={36} className="rounded-[10px]" />
         <p className="min-w-0 flex-1 text-[14px] leading-5">
           <b className="font-medium">Northeside for Android</b>

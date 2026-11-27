@@ -112,9 +112,7 @@ contract DeployNSDTest is Base {
         _env();
         vm.chainId(1990);
         vm.setEnv("NSD_CONFIRM_MAINNET", "yes");
-        vm.expectRevert(
-            bytes("mainnet: set NSD_CONFIRM_MAINNET to confirm (rewards need identity and legal sign-off)")
-        );
+        vm.expectRevert(bytes("mainnet: set NSD_CONFIRM_MAINNET to confirm (rewards need verified identity)"));
         script.run();
     }
 }

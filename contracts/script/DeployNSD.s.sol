@@ -22,7 +22,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///   NSD_MAX_PER_MATCHWEEK  whole tokens, the most one matchweek's root may allocate
 /// On QIE mainnet (1990) also:
 ///   NSD_CONFIRM_MAINNET    must be exactly "deploy NSD on mainnet". Rewards need verified identity and
-///                          legal review first (CLAUDE.md decision 1), so a mainnet run is never accidental.
+///                          verified identity first (CLAUDE.md decision 1), so a mainnet run is never accidental.
 contract DeployNSD {
     struct Config {
         address admin;
@@ -47,7 +47,7 @@ contract DeployNSD {
             require(
                 keccak256(bytes(vm.envOr("NSD_CONFIRM_MAINNET", string(""))))
                     == keccak256(bytes(MAINNET_CONFIRMATION)),
-                "mainnet: set NSD_CONFIRM_MAINNET to confirm (rewards need identity and legal sign-off)"
+                "mainnet: set NSD_CONFIRM_MAINNET to confirm (rewards need verified identity)"
             );
         }
         Config memory c = configFromEnv();

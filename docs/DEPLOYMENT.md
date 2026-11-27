@@ -131,7 +131,7 @@ If the explorer rejects it, upload Standard JSON input through its web page
 ### 5. Database (Supabase)
 
 **Done:** project `northeside` (ref `lwjcuimxhcttezjwyncc`, eu-west-2 London, free plan) with all
-migrations applied and RLS on all 22 tables. Netlify holds `DATABASE_URL` (transaction pooler,
+migrations applied and RLS on every table. Netlify holds `DATABASE_URL` (transaction pooler,
 port 6543), `DATA_ENCRYPTION_KEY`, `SESSION_SECRET` and `PERSON_PEPPER` as secret variables. The
 database password is not stored anywhere else; reset it in the Supabase dashboard if you need
 direct access, then update `DATABASE_URL` on Netlify. Never rotate `PERSON_PEPPER` after launch.
@@ -198,13 +198,14 @@ repo, production branch `main`, base directory empty, package directory `apps/we
 3. Mini App: BotFather → Bot Settings → Configure Mini App → URL `https://<domain>/tg`.
 4. `TELEGRAM_OPERATOR_CHAT_ID` = your chat id for operator alerts (job failures, challenges, drip).
 
-### 10. QIE Pass
+### 10. Verification (.qie name now, QIE Pass next)
 
-Until QIE publishes how a dApp checks Pass status, leave `QIE_PASS_MODE` unset on mainnet: the
-profile shows "coming soon" instead of a "Get verified" button, marketing pages say payouts start
-once Pass is live, and host payouts count nobody. The adapter and attestation flow are built and tested (Mode B); wiring the real provider is
-one `PassProvider` implementation in `packages/core/src/identity.ts`. Do not claim live QIE Pass
-integration until a real verification has gone through on mainnet.
+Mainnet runs `QIE_PASS_MODE=qie-name` (owner decision, 26 Nov 2026): the signed-in wallet must own a
+.qie name, one name verifies one account for good, and the player confirms with one transaction from
+their own wallet (`packages/core/src/identity.ts`). QIE Pass itself (QIE's partner API,
+`X-Public-Key` / `X-Signature` / `X-Timestamp`, keys in `QIE_ID_PUBLIC_KEY` / `QIE_ID_SECRET_KEY`)
+becomes one more `PassProvider` once its request and signing format is confirmed from the partner
+docs. Do not claim live QIE Pass integration until a real verification has gone through on mainnet.
 
 ## Weekly operations (automated on Netlify)
 

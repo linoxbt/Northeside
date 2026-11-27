@@ -1,0 +1,9 @@
+{
+  "chainId": 1990,
+  "note": "Role holders on the live mainnet contracts (checked with hasRole). Read by test/MainnetFork.t.sol.",
+  "admin": "0x747DF176962e1495355562Fe30b65F276f0B8404",
+  "operator": "0x0dD4c52951E447B04C1F6c8FE61e112d36859798",
+  "results": "0xADAabFbbfA07068F66EA96616469e6B6805C1c8b",
+  "attester": "0x7705339BF84F843240e9F25d403bFF4ad5746ba4",
+  "pauser": "0x2AEa2d7b882775c8a03D1cdeEeCd7D2144A85353"
+}

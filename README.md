@@ -26,7 +26,7 @@ to get paid for the real fans they bring.
 5. **Hosts** (KOLs, communities) create leagues and earn QUSDC from sponsors for every
    **QIE Pass-verified person who keeps coming back**, paid by Merkle proof on-chain.
 
-No stakes and no cash prizes; odds are statistical estimates for fun ([docs/ODDS.md](docs/ODDS.md)). $NSD is deployed on mainnet and rewards are switched on, but pay nobody until the pool is funded and verification is live ([docs/NSD.md](docs/NSD.md), [docs/OWNER-ACTIONS.md](docs/OWNER-ACTIONS.md)).
+No stakes and no cash prizes; odds are statistical estimates for fun ([docs/ODDS.md](docs/ODDS.md)). $NSD is deployed on mainnet with rewards switched on and the pool funded; each matchweek pays once 10 or more verified players (.qie name) scored ([docs/NSD.md](docs/NSD.md), [docs/OWNER-ACTIONS.md](docs/OWNER-ACTIONS.md)).
 
 ## How it uses QIE
 
@@ -41,7 +41,7 @@ No stakes and no cash prizes; odds are statistical estimates for fun ([docs/ODDS
 ## Architecture
 
 ```
- Browser (Next.js PWA / Telegram Mini App)
+ Browser (Next.js PWA; a Telegram Mini App is built but needs the bot configured)
    │  picks + salt stay local; commit(hash) from the player's wallet ──────────────┐
    ▼                                                                               ▼
  Next.js API (Netlify) ── Postgres (Supabase, an index of the chain) ──────────── QIE mainnet
@@ -98,7 +98,7 @@ docs/               commitments, deployment runbook, security, contract audit
 
 ```bash
 pnpm install
-pnpm test:contracts            # forge: 103 tests incl. fuzz, invariants and the deploy script
+pnpm test:contracts            # forge: every test incl. fuzz, invariants and the deploy scripts
 pnpm test                      # vitest: packages + CLI, incl. a two-matchweek pipeline on anvil
 pnpm --filter @northeside/web test   # web unit tests
 cp .env.example .env           # fill in; addresses from contracts/deployments/<chainId>.json
@@ -112,7 +112,7 @@ Requires Node 22, pnpm 10 and Foundry 1.7 (`forge`, `anvil`).
 
 | Layer | What runs |
 | --- | --- |
-| Contracts | 103 forge tests: every revert path and role, lock-time and commitment fuzzing, tampered Merkle leaves, reentrancy, fee-on-transfer rejection, the deploy script's checks, and invariants (`balance == Σ(budget − claimed − refunded)`, `claimed ≤ allocated ≤ budget`, deadlines never shortened) over random fund/post/replace/void/claim/refund/pause sequences |
+| Contracts | Forge tests: every revert path and role, lock-time and commitment fuzzing, tampered Merkle leaves, reentrancy, fee-on-transfer rejection, the deploy script's checks, and invariants (`balance == Σ(budget − claimed − refunded)`, `claimed ≤ allocated ≤ budget`, deadlines never shortened) over random fund/post/replace/void/claim/refund/pause sequences |
 | Packages | Vitest, including golden vectors shared with Solidity, provider cross-checks, payouts and the DB schema on PGlite |
 | Pipeline | `packages/core/test/pipeline.test.ts`: anvil + PGlite, two matchweeks, reveal, results, finalize, a funded campaign, and a host claiming QUSDC with the stored proof |
 | Browser | `apps/web/e2e/run.mjs`: deploys to anvil, runs the production build against Postgres, and drives Chromium with an injected EIP-6963 "QIE Wallet": sign-in, 18+ gate, host creates a league, two players join and seal from their own wallets, unsealed-edit warning, then the automated steps open, propose and finalize, and the table, Proof page, in-browser verifier and player-route bundle size are checked |
@@ -120,7 +120,7 @@ Requires Node 22, pnpm 10 and Foundry 1.7 (`forge`, `anvil`).
 ## Honest status notes
 
 - **Prize vault**: designed, not deployed; waits for a permit (Nigeria's NLRC treats predict-and-win as lottery-related).
-- **QIE Pass**: Mode B (Northeside attests after checking Pass). QIE has not published the dApp interface yet; until it does, verification is off on mainnet, the UI says "coming soon", and host payouts count nobody.
+- **Verification**: live on mainnet with .qie names (one name, one account, for good); Northeside attests (Mode B) and the player confirms from their own wallet. QIE Pass is the next provider, once its partner API format is confirmed.
 - **Contracts v1.1**: the audit's contract fixes (claims enforce rate and cap, pause holds results, results 2 h after lock, pausable identity, admin-only unpause, replaceRoot/voidRoot near expiry) are in the source and tested; mainnet runs v1 (source `7c92418`) until v1.1 is deployed (see docs/OWNER-ACTIONS.md).
 - **Results oracle**: operator-run, from two providers that must agree, with a 12-hour on-chain challenge window. Overrides need a written reason that is published with the evidence.
 - **Legal texts**: Terms and Privacy at version 1.4 (no external legal review; owner decision for the hackathon).

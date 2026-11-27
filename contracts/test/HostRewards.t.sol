@@ -908,6 +908,31 @@ contract HostRewardsTest is HostRewardsFixture {
         rewards.claim(id, 11, hostA, 60 * ONE, 1_000, Merkle.proof(t.leaves, 0));
     }
 
+    /// @dev Audit 27 Nov, M-2: a root that splits one host into several leaves, each within the cap,
+    ///      still cannot pay that host more than capPerHost in a matchweek.
+    function test_claim_capPerHostAcrossSplitLeaves() public {
+        uint256 id = _createFunded(100 * ONE, 0);
+        address[] memory hs = new address[](2);
+        hs[0] = hostA;
+        hs[1] = hostA;
+        uint128[] memory amounts = new uint128[](2);
+        amounts[0] = 30 * ONE; // each leaf alone is within the 50 cap
+        amounts[1] = 30 * ONE;
+        uint32[] memory players = new uint32[](2);
+        players[0] = 40;
+        players[1] = 41; // a different leaf for the same host
+        Tree memory t = _tree(id, 11, hs, amounts, players);
+        vm.prank(operator);
+        rewards.postRoot(id, 11, t.root, t.total, "ipfs://r");
+        vm.warp(block.timestamp + rewards.CLAIM_DELAY());
+        rewards.claim(id, 11, hostA, 30 * ONE, 40, Merkle.proof(t.leaves, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(HostRewards.OverTerms.selector, uint128(60 * ONE), uint256(50 * ONE))
+        );
+        rewards.claim(id, 11, hostA, 30 * ONE, 41, Merkle.proof(t.leaves, 1));
+        assertEq(rewards.claimedByHost(id, 11, hostA), 30 * ONE, "one leaf paid");
+    }
+
     function test_golden_leafHash() public view {
         string memory json = vm.readFile("./test/fixtures/golden-vectors.json");
         assertEq(
