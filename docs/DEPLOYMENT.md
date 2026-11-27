@@ -171,11 +171,14 @@ previews and branch deploys get none, so untrusted pull-request builds cannot re
 the database). `NEXT_PUBLIC_*` values are inlined at build time: change them, then redeploy.
 Functions run on `AWS_LAMBDA_JS_RUNTIME=nodejs22.x`.
 
-Deploys today are made with the Netlify CLI, recording the commit in the deploy message:
+Deploy with `scripts/deploy-production.sh` and nothing else. It refuses a dirty tree or a commit that
+is not on `origin/main`, refuses a commit whose CI has not passed (with `GITHUB_TOKEN` set), runs
+typecheck and the unit tests, takes every `NEXT_PUBLIC_*` value from Netlify's production
+environment (never from your shell), and stamps the deploy with the commit:
 
 ```bash
-netlify build --offline --context production --filter @northeside/web   # NEXT_PUBLIC_* in the shell env
-netlify deploy --prod --no-build --filter @northeside/web --dir apps/web/.netlify/static --message "$(git rev-parse --short HEAD)"
+NETLIFY_AUTH_TOKEN=… NETLIFY_ACCOUNT_ID=68b3430bf002a93c76bf606e NETLIFY_SITE_ID=dc01d660-0c82-4552-ac6a-6608d177d6ef \
+GITHUB_TOKEN=… scripts/deploy-production.sh
 ```
 
 To switch to Git deploys (recommended once `main` holds the release): in Netlify link the GitHub
